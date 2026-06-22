@@ -1,0 +1,3 @@
+[submodule "tools/benchmark/llm/llama.cpp"]
+	path = tools/benchmark/llm/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git
