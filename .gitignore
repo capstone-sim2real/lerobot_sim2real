@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+*.egg-info/
+
+# Build artifacts
+build/
+dist/
+*.so
+*.o
+*.a
+
+# Models & large data
+*.gguf
+*.bin
+*.safetensors
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs
+*.log
