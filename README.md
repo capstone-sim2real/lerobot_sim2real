@@ -132,6 +132,7 @@ tools/benchmark/llm/benches    DGX Spark, Mac M2 Ultra, Nemotron 벤치마크 �
 - [SO-101 세팅 가이드](docs/SO101_세팅가이드.md)
 - [SO-101 원격 조작 가이드](docs/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/SO101_원격카메라.md)
+- [SO-101 블록 쌓기 모방학습 로컬 사용설명서](docs/SO101_블록쌓기_모방학습_로컬_사용설명서.md)
 - [JetBot Vision-Action 착수보고서](docs/JetBot_Vision_Action_착수보고서.pdf)
 
 ## 주의사항
