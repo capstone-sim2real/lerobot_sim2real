@@ -35,7 +35,7 @@ SO-101 로봇팔, Jetson/JetBot 기반 vision-action 실험, 그리고 온디바
 
 ```bash
 git clone --recurse-submodules <REPOSITORY_URL>
-cd capstone-sim2real
+cd lerobot_sim2real
 ```
 
 이미 clone한 뒤라면:
@@ -46,12 +46,73 @@ git submodule update --init --recursive
 
 대용량 모델 파일, 빌드 산출물, 실행 로그는 원칙적으로 저장소에 포함하지 않습니다.
 
+## 팀원 초기세팅
+
+이 프로젝트는 LeRobot을 저장소 안에 복사하지 않고, `~/lerobot`에 별도 clone해서 사용합니다. 팀원 간 환경 차이를 줄이기 위해 LeRobot commit을 고정하고 `uv.lock` 기준으로 가상환경을 맞춥니다.
+
+처음 세팅 순서:
+
+```bash
+git clone --recurse-submodules <REPOSITORY_URL> ~/lerobot_sim2real
+cd ~/lerobot_sim2real
+```
+
+먼저 `uv`가 없다면 설치합니다. 설치 후 `uv --version`이 보여야 합니다.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+uv --version
+```
+
+SO-101 USB serial을 일반 사용자로 열 수 있도록 `dialout` 그룹에 현재 사용자를 추가합니다. 이 명령 뒤에는 로그아웃 후 다시 로그인해야 적용됩니다.
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+다시 로그인한 뒤 `id` 출력에 `dialout`이 있는지 확인합니다.
+
+```bash
+id
+```
+
+그다음 프로젝트에서 LeRobot 환경을 준비합니다. 이 스크립트는 `~/lerobot`을 준비하고 `~/lerobot/.venv`를 만듭니다.
+
+```bash
+cd ~/lerobot_sim2real
+./scripts/setup_lerobot_env.sh
+```
+
+좌표 기준 키보드 조작까지 쓸 팀원은 kinematics 의존성도 같이 설치합니다.
+
+```bash
+INSTALL_KINEMATICS=1 ./scripts/setup_lerobot_env.sh
+```
+
+기본 고정 버전:
+
+```text
+LeRobot commit: 8a74e0ac6d01706d67fddfed682a09d694d9c8c0
+LeRobot path:   ~/lerobot
+Python env:     ~/lerobot/.venv
+```
+
+세팅 확인:
+
+```bash
+./scripts/so101_scan_motors.sh
+```
+
+정상이라면 각 팔에서 모터 ID 1-6이 보입니다.
+
 ## SO-101 빠른 실행
 
 기본 작업 위치는 아래 경로를 기준으로 합니다.
 
 ```text
-프로젝트: ~/capstone-sim2real
+프로젝트: ~/lerobot_sim2real
 LeRobot:  ~/lerobot
 ```
 
@@ -64,7 +125,7 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 모터 응답 확인:
 
 ```bash
-cd ~/capstone-sim2real
+cd ~/lerobot_sim2real
 ./scripts/so101_scan_motors.sh
 ```
 
@@ -90,7 +151,7 @@ cd ~/capstone-sim2real
 리더 팔 없이 SSH 또는 Tailscale SSH로 Jetson에 접속해서 SO-101 follower를 키보드로 조작할 수 있습니다.
 
 ```bash
-cd ~/capstone-sim2real
+cd ~/lerobot_sim2real
 ./scripts/so101_keyboard_control.sh
 ```
 
