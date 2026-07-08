@@ -43,22 +43,26 @@ cd ~/lerobot_sim2real
 캘리브레이션 초기화 및 재실행:
 
 ```bash
-./scripts/so101_reset_calibration.sh
-./scripts/so101_calibrate_leader.sh
-./scripts/so101_calibrate_follower.sh
+./scripts/so101_calibrate.sh all
 ```
 
 리더-팔로워 텔레오퍼레이션:
 
 ```bash
-./scripts/so101_teleop_30.sh
-./scripts/so101_teleop_60.sh
+./scripts/so101_teleop.sh 30
+./scripts/so101_teleop.sh 60
 ```
 
 리더 없이 원격 키보드 조작:
 
 ```bash
 ./scripts/so101_keyboard_control.sh --step 1
+```
+
+모방학습 에피소드 1개 기록:
+
+```bash
+./scripts/so101_learn.sh record
 ```
 
 ## Repository Layout
