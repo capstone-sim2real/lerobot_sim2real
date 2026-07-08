@@ -1,0 +1,388 @@
+% !TEX encoding = UTF-8 Unicode
+\documentclass[titlepage]{pnureport}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{pdflscape}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{fancyhdr} % 헤더/푸터 제어용 추가
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc}
+
+% --- 상단 헤더 꼬임 방지 및 페이지 번호 중앙 정렬 ---
+\pagestyle{fancy}
+\fancyhf{} 
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\thepage}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \fancyfoot[C]{\thepage}
+}
+
+\graphicspath{{./}{예시/}}
+
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{boxblue}{RGB}{232,242,255}
+\definecolor{boxgreen}{RGB}{232,248,239}
+\definecolor{boxorange}{RGB}{255,242,225}
+\definecolor{boxgray}{RGB}{245,245,245}
+
+\lstdefinelanguage{mermaid}{}
+\lstset{
+    backgroundcolor=\color{backcolour},
+    basicstyle=\ttfamily\small,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    numbers=none
+}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\ganttbar}{\rule{\linewidth}{1.15em}}
+
+\reporttitle{모방학습 기반 SO-ARM101 로봇팔의\\블록 적재(Pick \& Stack) 시스템}
+\reportteam{Sim2Real}
+\reportauthor{202170116 윤민석\\202055575 이동근\\202045106 김주환}
+\reportadvisor{김종덕}
+\reportdate{2026년 7월 1일}
+
+\begin{document}
+
+\maketitle
+
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{과제 개요}
+
+\section{과제 배경 및 필요성}
+
+본 과제는 테이블 위에 무작위로 배치된 5개의 블록($4cm \times 4cm \times 2cm$)을 SO-ARM101 로봇팔이 카메라 관측을 바탕으로 집어 지정 영역으로 옮기고, 나아가 위로 쌓는(Pick \& Stack) Physical AI 시스템을 설계·구현하는 것을 목표로 한다. 그리퍼(집게)에 장착된 근접 카메라와 어깨 지지대 위의 탑다운(top-down) 카메라를 관측 입력으로 사용한다. 
+
+물체 위치가 무작위이고, 파지 성공 여부가 접촉 위치·그리퍼 정렬·블록 자세에 민감하며, 적재 시 정렬과 안정성까지 요구되는 이러한 문제는 사람이 모든 예외 규칙을 직접 설계하는 방식으로는 안정적으로 다루기 어렵다. 따라서 본 과제에서는 카메라 관측으로부터 행동을 직접 학습하는 \emph{모방학습(Imitation Learning)}을 주 접근으로 채택한다. 리더암(leader arm) 시연 데이터를 수집하고, 행동을 청크 단위로 예측하는 Action Chunking Transformer(ACT)를 학습시켜\cite{zhao2023act} 파지·정렬·적재 동작을 습득한다. 
+
+학습·배포는 오픈소스 프레임워크 Hugging Face LeRobot\cite{lerobot,lerobot-tutorial}와 저비용 오픈소스 로봇팔 SO-ARM100/101\cite{soarm100,lerobot-so101}을 기반으로 한다. 초기에는 소형 ACT를 Jetson Orin Nano\cite{nvidia-jetson-orin}에서 직접 추론하여 온디바이스 자율 동작을 검증하고, 이후 GPU 서버에서 더 큰 정책을 추론하고 Orin Nano는 제어·통신·Action 검증을 담당하는 비동기 추론(asynchronous inference) 분산 구조\cite{lerobot-async}로 확장한다. 시간이 허락하면 시뮬레이션 강화학습 정책을 실제로 전이하는 Sim-to-Real\cite{lerobot-sim2real,maniskill3} 접근으로 배경·카메라 변화에 강건한(robust) 정책을 확보하는 것을 도전 과제로 둔다.
+
+\section{과제 목표}
+
+본 과제의 목표는 카메라 관측으로부터 파지·정렬·적재 행동을 모방학습으로 습득하고, 이를 실제 로봇에서 실시간으로 실행하며, 엣지(Orin Nano)와 GPU 서버로 연산을 분리하는 실용적 추론 구조를 검증하는 것이다. 세부 기술 목표는 다음과 같다.
+
+\begin{longtable}{p{0.26\linewidth}p{0.66\linewidth}}
+\toprule
+목표 구분 & 내용 \\
+\midrule
+\endhead
+Physical AI 검증 & 카메라 관측으로부터 파지·배치·적재 행동을 선택해 실제 로봇 동작으로 연결하는 인지-판단-제어 통합 구조를 검증한다. \\
+모방학습 정책 & 리더암 시연 데이터로 ACT를 학습하여 블록 접근·파지·정렬·배치·적재를 규칙 설계 없이 습득한다. \\
+접촉 기반 파지·적재 & 접촉·정렬·파지력이 중요한 파지 및 적재(stacking) 문제를 실제 경기 환경에서 수행한다. \\
+엣지-서버 추론 구조 & 소형 ACT의 Orin Nano 온디바이스 추론을 검증하고, GPU 서버(임무 컴퓨터) 추론과 Orin(제어 컴퓨터) 실행을 분리하는 비동기 구조로 확장한다. \\
+Sim-to-Real 강건성 & (도전) 시뮬레이션 강화학습 정책을 실제로 전이하고 배경·카메라 각도 변화에 강건한 정책을 확보한다. \\
+경기 수행 & 1차 미션(지정 영역 이동, 3분)과 2차 미션(탑 쌓기, 5분)을 독립적으로 수행하며, 단일 모델로 두 미션을 모두 완수하고 5초 유지 안정성을 확보한다. \\
+\bottomrule
+\end{longtable}
+
+\section{기대효과}
+
+본 과제를 통해 저비용 오픈소스 로봇팔(SO-ARM101)과 학습 프레임워크(LeRobot)를 활용하여, 사람 시연으로부터 매니퓰레이션 정책을 학습하고 실제 로봇으로 배포하는 데이터 수집-학습-배포 파이프라인을 직접 경험할 수 있다. 특히 소형 정책의 엣지 온디바이스 추론과 대형 정책의 서버 추론을 모두 다루면서, 연산 자원과 정책 성능의 절충 및 추론·통신 지연 문제를 비동기 추론으로 완화하는 실용적 설계 경험을 얻는다. 이러한 임무-제어 컴퓨터 분리 구조와 sim-to-real 강건성 확보 경험은 실험실 자동화, 물류 피킹, 조립 자동화 등으로 확장 가능하다.
+
+\chapter{요구사항 분석}
+
+\section{경기 규칙 및 평가 조건 분석}
+
+해결할 문제는 테이블 위에 무작위로 배치된 5개의 블록($4cm \times 4cm \times 2cm$)을 SO-ARM101 로봇팔이 집어 20cm $\times$ 10cm 지정 영역으로 옮기고 쌓는 것이다. 평가는 두 차례의 독립된 실험으로 나뉘어 진행된다. 1차 목표는 3분 내에 5개 블록을 지정 영역 내에 가져다 두는 것이며, 2차 목표는 5분 내에 탑처럼 위로 쌓는 것이다. 블록이 5초 이상 안정적으로 유지될 경우에만 최종 성공으로 인정된다. 작업 공간 바닥은 체스판과 같은 흑백 패턴이거나, 환경에 따라 A3 용지 등을 활용할 수 있다.
+
+이 규칙은 무작위 환경에서의 접촉 기반 파지·정렬·적재 문제로 해석되며, 적재 단계에서는 정렬 오차 누적으로 탑이 무너질 수 있어 안정성(5초 유지)이 핵심 지표가 된다. 본 과제는 서버 통신이 가능하다는 전제 하에 서버 추론·Orin 제어의 분리형 구조를 기본 배포 방식으로 삼되, 서버 연결이 제한될 경우를 대비해 소형 정책의 온디바이스 구성도 함께 확보한다. 특히, 도커(Docker) 컨테이너를 활용하여 평가 서버 컴퓨터에서 즉각적으로 모델을 구동할 수 있도록 환경을 구성한다.
+
+\section{기능 및 비기능 요구사항}
+
+본 시스템은 데이터 수집, 정책 학습, 실제 로봇 배포, 성능 평가가 연결된 구조로 설계한다. 핵심 기능 요구사항은 다음과 같다.
+
+\begin{longtable}{p{0.30\linewidth}p{0.62\linewidth}}
+\toprule
+핵심 요구사항 & 설명 \\
+\midrule
+\endhead
+듀얼 카메라 관측 & 손목 카메라(근접 파지 뷰)와 탑다운 카메라(전역 뷰)를 동기화하여 정책 입력으로 활용한다. \\
+텔레오퍼레이션 데이터 수집 & 리더암으로 팔로워암을 조작하여 파지·배치·적재 시연을 LeRobotDataset 형식으로 기록한다. \\
+ACT 모방학습 & 시연 데이터로 ACT를 학습하여 관측으로부터 행동 청크(관절 목표열)를 예측한다. \\
+단일 모델 기반 태스크 수행 & 1차(배치)와 2차(적재) 태스크를 별도의 모델로 나누지 않고, 단일 ACT 모델이 두 가지 미션을 모두 수행할 수 있도록 범용성을 확보한다. \\
+엣지-서버 추론 & 초기에는 Orin Nano 온디바이스 추론, 확장 단계에서는 GPU 서버 \texttt{policy\_server}와 Orin \texttt{robot\_client}로 액션 청크를 실시간 분산 처리한다. \\
+파지·배치·적재 실행 & 그리퍼를 정렬해 블록을 파지하고 지정 영역 또는 기존 탑 위에 안정적으로 놓는다. \\
+도커(Docker) 기반 평가 환경 & 평가 서버 컴퓨터에서 구동 가능하도록 도커 컨테이너 내에 개발 환경을 구성하고 이미지로 제출한다. \\
+\bottomrule
+\end{longtable}
+
+비기능적으로는 실시간성이 중요하다. 카메라 처리·추론·제어 주기(대략 15\,Hz)를 함께 고려하여 동작 가능한 제어 루프를 구성하고, 온디바이스 단계에서는 해상도 조절·fp16·TensorRT 최적화\cite{nvidia-tensorrt}로, 분리형 단계에서는 비동기 추론으로 대기 지연을 줄인다. 서버 통신 전제 하에 ACT뿐 아니라 경량 SmolVLA(약 2GB)\cite{smolvla} 같은 더 큰 정책도 서버에서 추론할 수 있으나, Orin Nano는 aarch64이므로 JetPack용 PyTorch 설치가 필요하다. 
+
+\chapter{시스템 설계}
+
+\section{전체 시스템 아키텍처}
+
+본 시스템은 데이터 수집, 정책 학습, 추론, 로봇 제어, 평가·튜닝의 다섯 단계로 구성한다. 리더암 텔레오퍼레이션으로 시연 데이터를 수집하고, 워크스테이션 또는 GPU 서버에서 ACT를 학습한 뒤, 초기에는 Orin Nano에서 직접 추론하고 확장 단계에서는 서버 추론과 Orin 제어를 분리하여 적용하며, 평가 결과로 데이터와 정책을 개선하는 반복 구조이다.
+
+\tikzset{
+    base/.style={rectangle, draw=black, thick, align=center, minimum width=2.5cm, minimum height=1cm, font=\sffamily\scriptsize},
+    datablock/.style={base, fill=boxgray},
+    learnblock/.style={base, fill=boxblue},
+    inferblock/.style={base, fill=boxgreen},
+    ctrlblock/.style={base, fill=boxorange},
+    evalblock/.style={base, fill=white, draw=black},
+    groupbox/.style={draw, dashed, inner sep=0.4cm, fill=none},
+    flow/.style={-{Latex[length=3mm]}, thick},
+    feedback/.style={-{Latex[length=3mm]}, dashed, thick}
+}
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[node distance=0.32cm and 1.18cm]
+        \node[datablock] (leader) {Leader Arm\\Teleoperation};
+        \node[datablock,below=of leader] (dualcam) {Wrist + Top-down\\Cameras};
+        \node[datablock,below=of dualcam] (dataset) {LeRobotDataset\\Episodes};
+        \node[below=of dataset,minimum height=0.3cm,inner sep=0pt] (dataspacer) {};
+        \node[learnblock,right=of leader] (acttrain) {ACT / SmolVLA\\Training};
+        \node[learnblock,below=of acttrain] (simrl) {ManiSkill PPO\\Sim2Real (도전)};
+        \node[learnblock,below=of simrl] (export) {Policy\\Export (Docker)};
+        \node[below=of export,minimum height=0.3cm,inner sep=0pt] (learnspacer) {};
+
+        \node[inferblock,right=of acttrain] (ondevice) {On-device ACT\\(Orin Nano)};
+        \node[inferblock,below=of ondevice] (server) {Policy Server\\(GPU, async)};
+        \node[inferblock,below=of server] (actionchunk) {Action Chunk\\joint targets};
+        \node[below=of actionchunk,minimum height=0.3cm,inner sep=0pt] (inferspacer) {};
+
+        \node[ctrlblock,right=of ondevice] (client) {Robot Client\\(Orin Nano)};
+        \node[ctrlblock,below=of client] (follower) {SO-101 Follower\\USB / Feetech};
+        \node[ctrlblock,below=of follower] (safety) {Action Filter \&\\Safety Limits};
+        \node[below=of safety,minimum height=0.3cm,inner sep=0pt] (ctrlspacer) {};
+        \node[evalblock,right=of client] (result) {Success \& Time\\Stack Height};
+        \node[evalblock,below=of result] (stability) {Stability\\5s Hold};
+        \node[evalblock,below=of stability] (robust) {Robustness\\Camera / Background};
+        \node[below=of robust,minimum height=0.5cm,inner sep=0pt] (evalspacer) {};
+
+        \node[groupbox,fit=(leader)(dualcam)(dataset)(dataspacer),
+            label={[anchor=south,font=\sffamily\bfseries\small]north:1. Data Collection}] (g1) {};
+        \node[groupbox,fit=(acttrain)(simrl)(export)(learnspacer),
+            label={[anchor=south,font=\sffamily\bfseries\small]north:2. Policy Learning}] (g2) {};
+        \node[groupbox,fit=(ondevice)(server)(actionchunk)(inferspacer),
+            label={[anchor=south,font=\sffamily\bfseries\small]north:3. Inference}] (g3) {};
+        \node[groupbox,fit=(client)(follower)(safety)(ctrlspacer),
+            label={[anchor=south,font=\sffamily\bfseries\small]north:4. Robot Control}] (g4) {};
+        \node[groupbox,fit=(result)(stability)(robust)(evalspacer),
+            label={[anchor=south,font=\sffamily\bfseries\small]north:5. Evaluation \& Tuning}] (g5) {};
+        \draw[flow] (g1.east) -- (g1.east -| g2.west);
+        \draw[flow] (g2.east) -- (g2.east -| g3.west);
+        \draw[flow] (g3.east) -- (g3.east -| g4.west);
+        \draw[flow] (g4.east) -- (g4.east -| g5.west);
+
+        \draw[feedback] (g5.south) .. controls +(0,-0.95) and +(0,-0.95) ..
+            node[above,font=\sffamily\scriptsize] {Data / policy feedback} (g1.south);
+    \end{tikzpicture}%
+    }
+    \caption{전체 시스템 아키텍처}
+    \label{fig:system-architecture}
+\end{figure}
+
+\section{파이프라인과 임무-제어 컴퓨터 분리}
+
+학습 단계에서는 리더암으로 팔로워암을 조작하며 파지·배치·적재를 시연하고, 손목·탑다운 영상과 관절 상태·행동을 동기화하여 LeRobotDataset으로 저장한다\cite{lerobot-tutorial}. 데이터는 초기 50 에피소드로 시작하여 1차 목표 단계에서 누적 150--250 에피소드 규모로 확장하되, 양을 무작정 늘리기보다 실패 구간을 집중 보강한다.
+
+실행 단계에서는 연산 자원과 실시간성 요구가 다른 두 계층을 분리한다. GPU 서버는 임무 컴퓨터로서 관측을 입력받아 정책 추론하고 액션 청크를 생성하며, Orin Nano는 제어 컴퓨터로서 카메라 스트리밍, 액션 청크 실행, 팔로워암 제어, 한계치 안전 검증을 담당한다. 평가 컴퓨터와의 일치성을 위해 GPU 서버의 인프라는 Docker 컨테이너 및 이미지 환경으로 구축하여 배포의 연속성을 보장한다. 이는 LeRobot 비동기 추론의 \texttt{policy\_server}와 \texttt{robot\_client}로 직접 구현되며 gRPC로 통신한다\cite{lerobot-async}.
+
+\chapter{주요 기술 설계}
+
+\section{듀얼 카메라 인식과 ACT 정책}
+
+ACT 정책의 입력은 손목·탑다운 카메라 영상과 관절 상태로 구성한다. 손목 카메라는 정밀 파지·적재의 근접 뷰를, 탑다운 카메라는 대상 선택과 전역 위치 파악을 담당한다. 탑다운 뷰는 바닥 패턴·카메라 각도에 민감한 반면 손목 뷰는 배경 변화의 영향이 적으므로, 파지·적재의 최종 정렬은 손목 카메라 비중을 높이는 방향으로 설계한다. 단일 모델로 1차(배치) 및 2차(적재) 미션을 모두 수행할 수 있도록 범용적인 모방학습 데이터셋을 구성한다. 
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.0cm and 1.2cm,
+    block/.style={rectangle, rounded corners, draw=black, fill=boxblue, align=center, minimum width=2.7cm, minimum height=0.95cm},
+    aux/.style={rectangle, rounded corners, draw=black, fill=boxgray, align=center, minimum width=2.7cm, minimum height=0.95cm},
+    head/.style={rectangle, rounded corners, draw=black, fill=boxgreen, align=center, minimum width=2.7cm, minimum height=0.95cm},
+    arrow/.style={-{Latex[length=3mm]}, thick}
+]
+\node[block] (wrist) {Wrist Camera\\근접 파지 뷰};
+\node[block, below=of wrist] (top) {Top-down Camera\\전역 뷰};
+\node[block, right=1.3cm of wrist, yshift=-1.0cm] (encoder) {Vision Encoder\\ResNet18};
+\node[aux, below=of encoder] (joint) {Joint State\\관절 상태};
+\node[head, right=of encoder] (act) {ACT Transformer\\(CVAE)};
+\node[head, right=of act] (action) {Action Chunk\\joint targets ($L{\approx}100$)};
+
+\draw[arrow] (wrist) -- (encoder);
+\draw[arrow] (top) -- (encoder);
+\draw[arrow] (encoder) -- (act);
+\draw[arrow] (joint) -- (act);
+\draw[arrow] (act) -- (action);
+\end{tikzpicture}
+\caption{ACT 모방학습 정책 구조}
+\label{fig:policy_structure}
+\end{figure}
+
+\section{SO-101 제어 및 안전}
+
+SO-ARM101은 6개의 Feetech STS3215 서보로 구동되며 USB 시리얼(데이지체인)로 Orin Nano에 직접 연결되므로, 별도 마이크로컨트롤러 없이 LeRobot 팔로워 인터페이스가 관절 목표값을 서보 명령으로 변환한다. 제어 계층의 목적은 정책이 생성한 행동을 안정적으로 추종하되 예상치 못한 상황에서 물리적 하드웨어 파손을 막는 것이다. 
+
+\begin{longtable}{p{0.24\linewidth}p{0.68\linewidth}}
+\toprule
+제어·안전 항목 & 설명 \\
+\midrule
+\endhead
+캘리브레이션 & 각 관절의 0점·가동 범위를 설정하고 리더·팔로워 좌표를 정합한다. \\
+관절 목표 추종 & 정책이 출력한 관절 목표 청크를 일정 제어 주기로 추종한다. \\
+그리퍼 제어 & 파지력과 개폐 속도를 조정하여 안정적 파지와 정확한 놓기를 수행한다. \\
+Action 검증 및 안전 제어 & GPU 서버에서 수신된 관절 목표(Action Chunk)가 로봇팔의 기구학적 한계 각도를 초과하거나 바닥(테이블)과 충돌하는 궤적인지 Orin Nano 계층에서 실행 직전 1차 필터링하여 하드웨어 파손을 방지한다. \\
+비동기 워치독 & 새 액션 청크가 제한 시간 내 도착하지 않으면 정지하여 통신·서버 지연에 대응한다. \\
+비상 정지 & 위험 상황 시 즉시 토크를 차단(torque off)한다. \\
+상태 로깅 & 관절 상태·실행 명령·오류·정지 이벤트를 기록하여 실패 분석과 재현성에 활용한다. \\
+\bottomrule
+\end{longtable}
+
+\chapter{현실적 제약 사항 및 대책}
+
+본 과제는 실제 로봇팔 제어와 학습 기반 정책이 결합되므로 다음과 같은 현실적 제약과 대책을 고려한다.
+
+\begin{longtable}{p{0.30\linewidth}p{0.62\linewidth}}
+\toprule
+제약 사항 & 대책 \\
+\midrule
+\endhead
+파지 불확실성 (정렬 민감) & 손목 카메라 근접 관측 비중을 높이고, 다양한 위치·자세의 파지 시연과 실패 사례를 집중 보강한다. \\
+적재 안정성 (5초 유지) & 1차 목표(지정 영역 배치)를 먼저 안정화한 뒤 2차 목표(쌓기)로 확장하고, 낮은 단수부터 성공률을 확보한다. \\
+환경 강건성 (카메라 각도·바닥 패턴 변화) & 도전 단계에서 시뮬레이션 도메인 랜덤화를 적용하며, 평가 당일 조명 및 바닥 패턴 변화에 대비하기 위해 A3 용지 등 균일한 배경을 추가로 세팅하여 시각적 노이즈를 통제한다. \\
+연산·배포 및 인프라 호환성 & 서버 비동기 추론을 기본으로 하되 온디바이스 구성도 대비한다. 서버 환경은 Docker 컨테이너 및 이미지로 패키징하여 주최측 평가 서버 제출 조건을 충족한다. \\
+데이터 의존성 (분포 밖 성능 저하) & 소규모로 시작해 실패 구간을 반복 보강하고, 데이터셋·설정·결과를 기록하여 재현성을 확보한다. \\
+\bottomrule
+\end{longtable}
+
+\chapter{추진 일정}
+
+\begingroup
+\scriptsize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{2pt}
+\begin{longtable}{@{}p{0.40\linewidth}*{16}{>{\centering\arraybackslash}p{0.030\linewidth}}@{}}
+\toprule
+업무 & \multicolumn{4}{c}{7월} & \multicolumn{4}{c}{8월} & \multicolumn{4}{c}{9월} & \multicolumn{4}{c}{10월} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-13}\cmidrule(lr){14-17}
+ & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 \\
+\midrule
+\endhead
+환경 재구축·듀얼카메라·텔레오퍼레이션 검증 & \ganttbar & \ganttbar & & & & & & & & & & & & & & \\
+Phase 1: 단일 블록 데이터 수집(\textasciitilde50 ep) & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & & \\
+Phase 1: ACT 학습·Orin 온디바이스 배포 & & & & & \ganttbar & \ganttbar & & & & & & & & & & \\
+Phase 2: 데이터 확장(1차 목표, \textasciitilde150--250 ep) & & & & & & \ganttbar & \ganttbar & & & & & & & & & \\
+Phase 2: async 서버-Orin 분리 추론 통합 & & & & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & \\
+Phase 3: 블록 쌓기(2차 목표)·안정성 튜닝 & & & & & & & & & \ganttbar & \ganttbar & \ganttbar & & & & & \\
+Phase 3: (도전) ManiSkill sim2real·강건성 & & & & & & & & & & \ganttbar & \ganttbar & \ganttbar & & & & \\
+최종 통합·테스트·데모·보고서 & & & & & & & & & & & & \ganttbar & \ganttbar & \ganttbar & \ganttbar & \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\chapter{역할 분담}
+
+\begin{longtable}{p{0.22\linewidth}p{0.70\linewidth}}
+\toprule
+이름 & 주요 업무 \\
+\midrule
+\endhead
+윤민석 & Orin Nano 온디바이스 배포, SO-101 제어·캘리브레이션, Tailscale 원격 파이프라인, 비동기 추론 \texttt{robot\_client} 및 Action 검증 안전 로직 \\
+이동근 & 텔레오퍼레이션 데이터 수집, 듀얼 카메라 셋업·동기화, 데이터셋 관리·증강, (도전) ManiSkill sim2real 환경 구축 \\
+김주환 & ACT/SmolVLA 정책 설계·학습, 하이퍼파라미터·학습 로그 분석, 평가 지표 정의, Docker 기반 비동기 추론 \texttt{policy\_server} 환경 구축 \\
+전체 팀원 & 실제 로봇 통합 테스트, 실패 사례 분석·데이터 보강, 강건성 평가, 보고서 및 발표 준비 \\
+\bottomrule
+\end{longtable}
+
+통합 단계에서는 각 모듈을 독립적으로 보지 않고 데이터 수집-학습-배포-평가 흐름 전체를 함께 점검하며, 특히 온디바이스와 분리형 추론 구성의 성능·안정성 차이와 환경 변화에 대한 강건성을 공동으로 검증한다.
+
+\begin{thebibliography}{99}
+
+\bibitem{zhao2023act}
+T. Z. Zhao, V. Kumar, S. Levine, and C. Finn,
+\textit{Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware}, Robotics: Science and Systems (RSS), 2023. arXiv:2304.13705.
+
+\bibitem{lerobot}
+R. Cadene et al.,
+\textit{LeRobot: State-of-the-art Machine Learning for Real-World Robotics in PyTorch}, Hugging Face.
+Available: \url{https://github.com/huggingface/lerobot}
+
+\bibitem{lerobot-tutorial}
+Hugging Face,
+\textit{Imitation Learning on Real-World Robots}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/il_robots}
+
+\bibitem{soarm100}
+The Robot Studio,
+\textit{SO-ARM100 / SO-ARM101: Standard Open Arm}, Open-Source Robot Arm Hardware.
+Available: \url{https://github.com/TheRobotStudio/SO-ARM100}
+
+\bibitem{lerobot-so101}
+Hugging Face,
+\textit{SO-101 Robot Arm Setup and Calibration}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/so101}
+
+\bibitem{lerobot-async}
+Hugging Face,
+\textit{Asynchronous Inference: Decoupling Action Prediction and Execution}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/async}
+
+\bibitem{smolvla}
+M. Shukor et al.,
+\textit{SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics}, 2025. arXiv:2506.01844.
+
+\bibitem{diffusion-policy}
+C. Chi, S. Feng, Y. Du, Z. Xu, E. Cousineau, B. Burchfiel, and S. Song,
+\textit{Diffusion Policy: Visuomotor Policy Learning via Action Diffusion}, Robotics: Science and Systems (RSS), 2023. arXiv:2303.04137.
+
+\bibitem{lerobot-sim2real}
+S. Tao,
+\textit{LeRobot-Sim2Real: Train in Fast Simulation and Deploy Visual Policies Zero-Shot to the Real World}.
+Available: \url{https://github.com/StoneT2000/lerobot-sim2real}
+
+\bibitem{maniskill3}
+S. Tao et al.,
+\textit{ManiSkill3: GPU Parallelized Robotics Simulation and Rendering for Generalizable Embodied AI}, 2024. arXiv:2410.00425.
+
+\bibitem{schulman2017ppo}
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
+\textit{Proximal Policy Optimization Algorithms}, arXiv:1707.06347, 2017.
+
+\bibitem{haarnoja2018sac}
+T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine,
+\textit{Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor},
+Proceedings of the 35th International Conference on Machine Learning (ICML), 2018.
+
+\bibitem{luo2024hilserl}
+J. Luo, C. Xu, J. Wu, and S. Levine,
+\textit{Precise and Dexterous Robotic Manipulation via Human-in-the-Loop Reinforcement Learning}, 2024. arXiv:2410.21845.
+
+\bibitem{tobin2017domain}
+J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,
+\textit{Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World},
+IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), 2017.
+
+\bibitem{nvidia-jetson-orin}
+NVIDIA,
+\textit{Jetson Orin Nano Series Modules Data Sheet}, NVIDIA Embedded Systems Documentation.
+Available: \url{https://developer.nvidia.com/embedded/downloads}
+
+\bibitem{nvidia-tensorrt}
+NVIDIA,
+\textit{NVIDIA TensorRT Documentation}, Deep Learning Inference Optimizer and Runtime.
+Available: \url{https://docs.nvidia.com/deeplearning/tensorrt/}
+
+\end{thebibliography}
+
+\end{document}
