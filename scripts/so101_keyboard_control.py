@@ -268,8 +268,7 @@ def load_kinematics(urdf_path: Path, target_frame: str):
             "좌표 제어에는 LeRobot kinematics 의존성이 필요합니다.\n"
             "설치 예:\n"
             "  cd ~/lerobot\n"
-            "  source .venv/bin/activate\n"
-            "  pip install -e '.[kinematics]'"
+            "  uv sync --extra feetech --extra kinematics"
         ) from exc
 
     try:
@@ -288,8 +287,7 @@ def load_kinematics(urdf_path: Path, target_frame: str):
             "좌표 제어에는 LeRobot kinematics 의존성이 필요합니다.\n"
             "설치 예:\n"
             "  cd ~/lerobot\n"
-            "  source .venv/bin/activate\n"
-            "  pip install -e '.[kinematics]'"
+            "  uv sync --extra feetech --extra kinematics"
         ) from exc
     except ValueError as exc:
         if "Mesh assets/" in str(exc):
