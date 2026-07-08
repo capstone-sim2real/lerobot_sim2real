@@ -97,8 +97,8 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 - [SO-101 문제해결](docs/guide/SO101_문제해결.md)
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
-- [SO-101 데이터 수집 & 데이터셋 관리 가이드 (Orin)](docs/guide/SO101_데이터수집_데이터셋관리_가이드.md)
-- [SO-101 학습 & 배포 가이드 (데스크탑)](docs/guide/SO101_학습_배포_가이드.md)
+- [SO-101 데이터 수집 & 관리 가이드 (Orin)](docs/guide/SO101_데이터수집_관리.md)
+- [SO-101 학습 & 배포 가이드 (데스크탑)](docs/guide/SO101_학습_배포.md)
 - [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
 
 ## Notes
