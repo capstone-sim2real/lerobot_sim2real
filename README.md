@@ -105,8 +105,8 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 
 모방학습 데이터셋은 git이 아니라 HuggingFace Hub(public)에 둡니다. 로그인 없이 바로 받을 수 있습니다. 받는 법과 수집·관리는 [데이터 수집 & 관리 가이드](docs/guide/SO101_데이터수집_관리.md) 참고.
 
-- `142spp/so101_place_v1` — 병합 마스터 (초록+노랑, 51 에피소드, 학습용)
-- `142spp/so101_place_green_v1`, `142spp/so101_place_yellow_v1` — 색별 원본
+- [`142spp/so101_place_v1`](https://huggingface.co/datasets/142spp/so101_place_v1) — 병합 마스터 (초록+노랑, 51 에피소드, 학습용)
+- [`142spp/so101_place_green_v1`](https://huggingface.co/datasets/142spp/so101_place_green_v1), [`142spp/so101_place_yellow_v1`](https://huggingface.co/datasets/142spp/so101_place_yellow_v1) — 색별 원본
 
 ## Notes
 
