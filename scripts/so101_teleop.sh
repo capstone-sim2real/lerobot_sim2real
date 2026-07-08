@@ -12,11 +12,13 @@ LEADER_ID="${SO101_LEADER_ID:-my_leader}"
 FOLLOWER_ID="${SO101_FOLLOWER_ID:-my_follower}"
 
 case "$FPS" in
-  30|60) ;;
   -h|--help|help)
     cat <<'EOF'
 Usage:
-  ./scripts/so101_teleop.sh [30|60]
+  ./scripts/so101_teleop.sh [FPS]
+
+FPS는 양의 정수면 됩니다 (기본 30). 예: 15, 30, 60.
+낮은 fps는 통신 부담이 적고, 높은 fps는 반응이 빠릅니다.
 
 Environment overrides:
   SO101_FPS
@@ -27,9 +29,15 @@ Environment overrides:
 EOF
     exit 0
     ;;
-  *)
-    echo "Unsupported fps: $FPS (expected 30 or 60)" >&2
+  ''|*[!0-9]*)
+    echo "Invalid fps: '$FPS' (양의 정수를 입력하세요. 예: 15, 30, 60)" >&2
     exit 2
+    ;;
+  *)
+    if [ "$FPS" -lt 1 ]; then
+      echo "Invalid fps: '$FPS' (1 이상이어야 합니다)" >&2
+      exit 2
+    fi
     ;;
 esac
 
