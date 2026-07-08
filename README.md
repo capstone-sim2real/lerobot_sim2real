@@ -59,6 +59,12 @@ cd ~/lerobot_sim2real
 ./scripts/so101_keyboard_control.sh --step 1
 ```
 
+브라우저로 카메라 실시간 확인:
+
+```bash
+./scripts/so101_camera_web.sh
+```
+
 모방학습 에피소드 1개 기록:
 
 ```bash
@@ -105,4 +111,5 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 - SO-101 실행 전 로봇팔 전원, 서보 데이지체인 케이블, USB serial 연결을 먼저 확인합니다.
 - `/dev/ttyACM0`, `/dev/ttyACM1`은 재부팅이나 재연결 후 바뀔 수 있으므로 가능하면 `/dev/serial/by-id/...` 경로를 사용합니다.
 - 원격 키보드 조작 전에는 카메라로 팔 주변에 충돌 위험이 없는지 확인합니다.
+- 웹 카메라 서버는 LAN 또는 Tailscale 안에서만 열고, 공인 인터넷에는 직접 노출하지 않습니다.
 - 대용량 모델 파일, 빌드 디렉토리, 캐시, 로그 파일은 저장소에 커밋하지 않습니다.
