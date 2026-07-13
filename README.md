@@ -97,8 +97,16 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 - [SO-101 문제해결](docs/guide/SO101_문제해결.md)
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
-- [SO-101 블록 쌓기 모방학습 로컬 사용설명서](docs/guide/SO101_블록쌓기_모방학습_로컬_사용설명서.md)
+- [SO-101 데이터 수집 & 관리 가이드 (Orin)](docs/guide/SO101_데이터수집_관리.md)
+- [SO-101 학습 & 추론 가이드 (데스크탑)](docs/guide/SO101_학습_추론.md)
 - [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
+
+## Datasets
+
+모방학습 데이터셋은 git이 아니라 HuggingFace Hub(public)에 둡니다. 로그인 없이 바로 받을 수 있습니다. 받는 법과 수집·관리는 [데이터 수집 & 관리 가이드](docs/guide/SO101_데이터수집_관리.md) 참고.
+
+- [`142spp/so101_place_v1`](https://huggingface.co/datasets/142spp/so101_place_v1) — 병합 마스터 (초록+노랑, 51 에피소드, 학습용)
+- [`142spp/so101_place_green_v1`](https://huggingface.co/datasets/142spp/so101_place_green_v1), [`142spp/so101_place_yellow_v1`](https://huggingface.co/datasets/142spp/so101_place_yellow_v1) — 색별 원본
 
 ## Notes
 
