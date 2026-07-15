@@ -1,0 +1,11 @@
+date,tester,policy_checkpoint,mission,condition_variable,condition_value,initial_position_set,rollout_num,grasp_success,placement_success,stack_success,hold_5s_success,overall_success,failure_stage,time_to_complete_s,notes
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,1,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,2,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,3,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,4,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,5,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,6,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,7,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,8,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,9,,,,,,,,
+2026-07-12,김주환,act_my_task_step30000,1차,baseline,baseline,pos_set_A,10,,,,,,,,
