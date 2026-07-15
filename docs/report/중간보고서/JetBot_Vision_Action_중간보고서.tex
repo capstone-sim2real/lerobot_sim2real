@@ -1,0 +1,535 @@
+% !TEX encoding = UTF-8 Unicode
+\documentclass[titlepage]{pnureport}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{pdflscape}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{fancyhdr} % 헤더/푸터 제어용 추가
+\usepackage{subcaption}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc}
+
+% --- 상단 헤더 꼬임 방지 및 페이지 번호 중앙 정렬 ---
+\pagestyle{fancy}
+\fancyhf{} 
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\thepage}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \fancyfoot[C]{\thepage}
+}
+
+% 그림만 배치되는 페이지에서도 그림을 상단부터 배치한다.
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+
+\graphicspath{{./}{figure/}}
+
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{boxblue}{RGB}{232,242,255}
+\definecolor{boxgreen}{RGB}{232,248,239}
+\definecolor{boxorange}{RGB}{255,242,225}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{boxred}{RGB}{255,232,232}
+
+\lstdefinelanguage{mermaid}{}
+\lstset{
+    backgroundcolor=\color{backcolour},
+    basicstyle=\ttfamily\small,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    numbers=none
+}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\ganttbar}{\rule{\linewidth}{1.15em}}
+\newcommand{\ganttdone}{\textcolor{boxgreen!1!green!55!black}{\rule{\linewidth}{1.15em}}}
+
+\reporttitle{[중간보고서] \\모방학습 기반 SO-ARM101 로봇팔의\\블록 이동 및 적재 시스템\\[4pt]\normalsize 분과명: C \quad 졸업과제번호: 25}
+\reportteam{Sim2Real}
+\reportauthor{202170116 윤민석 (0620yms@gmail.com)\\202055575 이동근 (ehdrms3835@gmail.com)\\202045106 김주환 (kjhpooh386@naver.com)}
+\reportadvisor{김종덕}
+\reportdate{2026년 7월 17일}
+
+\begin{document}
+
+\maketitle
+
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+% =====================================================================
+\chapter{과제 목표}
+
+\section{과제 목표 및 미션 정의}
+
+본 과제는 SO-ARM101 로봇팔이 카메라 영상과 관절 상태를 바탕으로 블록을 자율적으로 집고 옮기는 시스템 구현을 목표로 한다. 블록의 색상과 위치 변화에 대응할 수 있도록, 리더암으로 수집한 시연 데이터를 이용해 로봇의 행동을 학습한다\cite{zhao2023act,lerobot}.
+
+수행 미션은 두 가지이다. \textbf{1차 미션}은 블록을 집어 20cm $\times$ 10cm 지정 영역 안에 놓는 pick-and-place 과제이며, \textbf{2차 미션}은 블록을 다른 블록 위에 쌓고 5초 이상 유지하는 과제이다. 두 미션은 연속 동작이 아니라 별도 실험으로 시행하며, 각 미션을 시작할 때 평가자가 5개 블록을 지정 영역 밖에 다시 배치한다. 1차 미션은 지정 영역 내 블록 배치 성능을 평가하고, 2차 미션은 블록 적재 성능과 5초 유지 안정성을 평가한다.
+
+본 과제의 핵심은 미션별로 별도의 신경망을 사용하지 않고, \textbf{하나의 학습 모델을 공유해 1차와 2차 미션을 모두 수행}하는 것이다. 두 미션은 탐색, 접근, 파지, 들어 올리기라는 공통 동작을 가지므로, 이를 하나의 모델에서 학습하면 모델 저장 공간과 실행 자원의 중복을 줄이고 모델 교체 없이 두 미션을 처리할 수 있다. 또한 입력 조건, 출력 행동과 후처리를 함께 설계하는 과정은 향후 새로운 조작 과제가 추가될 때 공통 동작을 재사용하고 지시 조건이나 기하학적 규칙을 확장하기 위한 기반이 된다. 다만 단일 모델 사용 자체가 새로운 과제의 수행을 보장하지는 않으므로, 각 확장 방식의 성능은 실험으로 검증한다.
+
+\section{구현 방향 및 검증 기준}
+
+단일 학습 모델로 두 미션을 수행하기 위한 후보는 \textbf{Task ID 기반 ACT}, \textbf{SmolVLA}, \textbf{하이브리드 ACT--CV/IK}의 세 가지이다. Task ID 기반 ACT는 미션별 식별자를, SmolVLA는 언어 지시를 학습 모델에 입력해 전체 동작을 생성한다. 하이브리드 방식은 하나의 ACT가 두 미션의 공통 구간인 블록 접근, 파지, 들어 올리기까지 수행하고, 이후 배치는 신경망을 사용하지 않는 전통적 컴퓨터 비전(CV)과 역기구학(IK)으로 처리한다. 전자 두 후보는 엔드투엔드 다중 미션 정책을, 하이브리드 후보는 하나의 학습 모델과 규칙 기반 제어기를 결합한 시스템을 검증한다.
+
+학습 및 추론과 로봇 제어는 연산량과 실행 주기가 다르므로 분리한다. 데스크톱은 정책 학습과 액션 청크 추론을, Orin Nano는 카메라 영상과 관절 상태 수집, 액션 실행 및 안전 정지를 담당한다. 이 구조는 고성능 연산 장치와 제어 컴퓨터의 역할을 분리하고, 모델 변경 시에도 로봇 제어 코드를 유지할 수 있게 한다. 현재 데스크톱 CPU에서도 청크 실행 시간 안에 ACT와 SmolVLA 추론이 완료됨을 확인했으며, GPU 적용 후 성능과 큐 고갈 여부를 추가 측정한다.
+
+공식 평가는 평가자가 정한 동일한 무작위 초기 배치를 모든 팀에 적용한다. 1차 미션은 3분 동안 지정 영역에 놓인 블록 수로 평가하며, 경계선에 최대 2cm 걸친 블록, 세로로 선 블록과 일부 겹친 블록도 인정하지만 블록을 쌓는 것은 인정하지 않는다. 2차 미션은 5분 동안 쌓은 블록 수로 평가하고, 적재 상태가 5초 이상 유지되어야 성공으로 판정한다. 두 미션 모두 5개를 완료하면 소요 시간에 따른 보너스를 받는다. 정책 후보 비교 실험에서는 파지 성공률, 실패 단계, 전체 수행 시간과 통신 지연을 추가로 기록한다.
+
+본 중간보고서는 착수보고서 이후의 요구조건 및 설계 변경, 추진 계획, 구성원별 진척도와 중간 결과를 정리한다.
+
+% =====================================================================
+\chapter{요구조건 및 제약 사항 분석에 대한 수정사항}
+
+착수보고서 작성 이후 실제 구현 과정에서 확인된 요구조건과 제약의 수정사항은 다음과 같다.
+
+\section{정책 접근 확장: 세 가지 단일 모델 시스템 비교}
+
+착수보고서에서는 리더암 시연 데이터로 ACT(Action Chunking Transformer)를 학습하는 방법을 제시하였다. 이후 ``단일 모델로 1차와 2차 미션을 모두 수행''하는 요구를 반영하여 Task ID 기반 ACT와 SmolVLA\cite{smolvla}를 후보로 설정하였다. 추가로, 두 미션의 학습 범위를 공통 파지 구간으로 제한하고 과제별 배치를 전통적 CV와 IK로 해결하는 하이브리드 ACT--CV/IK를 세 번째 후보로 추가하였다. 과제 공지에서 ``모델''은 신경망 기반 AI 모델을 의미하며, 신경망은 하나만 사용하되 태스크별 규칙 기반 해법과 AI 모델 및 규칙 기반 해법의 결합은 허용된다고 명시하였다. 따라서 임계값, 기하학 계산과 IK 같은 비학습식 알고리즘은 별도 모델로 보지 않는다. 세 후보의 성공률, 실행 속도, 확장 비용과 환경 의존성을 비교해 최종 방식을 선택한다.
+
+\begingroup
+\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.30\linewidth}p{0.62\linewidth}}
+\toprule
+시스템 후보 & 선정 근거 \\
+\midrule
+\endhead
+Task ID 기반 ACT & 일반 ACT의 영상 및 관절 상태 입력에 1차와 2차 미션을 구분하는 이산 Task ID를 추가한다. 자연어 명령이나 언어 임베딩은 사용하지 않으며, 하나의 가중치로 두 미션을 구분하는 방법을 검증한다. \\
+SmolVLA & 영상 및 관절 상태와 언어 지시를 함께 입력받는다. SO-101 데이터로 사전학습된 \texttt{smolvla\_base}를 파인튜닝하여, 언어 지시에 따른 미션 구분과 향후 지시 확장 가능성을 검증할 수 있다. \\
+\mbox{하이브리드 ACT--CV/IK} & ACT는 접근, 파지, 들어 올리기만 학습하고, 배치 목표는 전통적 CV로 검출한 뒤 IK로 실행한다. 학습 범위를 공통 동작에 집중하고 기하학적으로 표현 가능한 새 과제를 규칙 추가로 확장할 수 있다. 반면 카메라 보정, 색상 임계값과 로봇 기구학 정확도에 의존한다. \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+Task ID 기반 ACT는 각 에피소드에 해당 미션의 Task ID를 제공하고, SmolVLA는 언어 지시를 제공한 전체 시연으로 학습한다. 하이브리드 후보는 접근부터 들어 올리기까지의 공통 구간만 ACT 학습에 사용한다. 동일한 블록 초기 위치와 카메라 조건에서 세 후보의 미션별 성공률, 실행 시간, 추가 학습량과 보정 의존성을 비교한다.
+
+\section{데스크톱 추론과 Orin Nano 제어 분리}
+
+착수보고서에서는 소형 정책을 Jetson Orin Nano에서 직접 추론하고 이후 GPU 서버로 확장하는 구조를 제시하였다. 현재는 정책 학습과 추론을 데스크톱이 담당하고, Orin Nano는 데이터 수집, 로봇 제어와 통신을 담당하도록 역할을 분리하였다. 이는 네트워크 지연을 포함하더라도 데스크톱에서 추론하는 편이 Orin Nano에서 직접 추론하는 것보다 높은 성능을 낼 것이라는 설계 가정에 따른 것이다. 다만 Orin Nano의 직접 추론 성능과 비교한 결과는 아직 없으므로, 현재 구조가 더 우수하다는 결론은 내리지 않는다. 현 단계에서는 데스크톱 추론 시간이 액션 청크 실행 시간보다 짧고 원격 rollout이 가능하다는 점까지만 확인하였다.
+
+\section{데이터 수집상의 제약: 지정구역 색상 간섭}
+
+블록을 옮길 20cm $\times$ 10cm 지정구역을 빨간색 테이프로 표시한 환경에서 정책이 빨간색 경계선 방향으로 이동하는 현상을 관찰하였다. 다만 이 현상이 빨간색 블록과 경계선의 색상 혼동 때문에 발생했는지는 확인되지 않았다. 원인 분석 전까지 빨간색 블록 데이터 수집을 잠정 보류하고, 테이프 색상 변경, 탐색 ROI 제한, 크기와 형상 조건을 결합한 검출을 각각 실측하여 대책을 확정할 예정이다.
+
+% =====================================================================
+\chapter{설계 상세화 및 변경 내역}
+
+\section{갱신된 전체 시스템 아키텍처}
+
+단일 학습 모델 후보를 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK로 확장하고, 데이터 수집부터 추론과 제어까지의 장치별 역할을 반영해 전체 아키텍처를 갱신하였다. 데이터 수집 단계에서는 Orin Nano가 리더암과 팔로워암의 관절 상태 및 두 카메라 영상을 LeRobotDataset으로 기록하고, 데이터셋을 전달받은 데스크톱이 정책을 학습하여 체크포인트를 생성한다. 추론 단계에서는 Orin Nano의 \texttt{robot\_client}가 관측값을 데스크톱의 \texttt{policy\_server}로 전송하고, 반환된 액션 청크를 안전 검사 후 실행한다\cite{lerobot-async}. 하이브리드 후보의 비학습식 CV와 IK도 Orin Nano에서 실행한다.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+    phase/.style={rectangle, draw=black!45, thick, minimum width=15.0cm, minimum height=2.75cm},
+    phasetitle/.style={font=\sffamily\bfseries\small, anchor=north west},
+    host/.style={rectangle, draw=black, fill=white, align=center, minimum width=3.75cm, minimum height=1.35cm, inner sep=3pt, font=\sffamily\scriptsize},
+    dataflow/.style={-{Latex[length=2.5mm]}, thick},
+    flowlabel/.style={font=\sffamily\tiny, align=center, inner sep=1pt}
+]
+\node[phase,fill=boxblue] (offline) at (5.2,1.75) {};
+\node[phase,fill=boxgreen] (online) at (5.2,-1.75) {};
+\node[phasetitle] at ([xshift=0.22cm,yshift=-0.16cm]offline.north west) {Data Collection \& Training};
+\node[phasetitle] at ([xshift=0.22cm,yshift=-0.16cm]online.north west) {Inference \& Control};
+
+\node[host] (collectrobot) at (0,1.58) {\textbf{Robot Hardware}\\Leader Arm, SO-101\\Wrist, Top-down Cameras};
+\node[host] (recorder) at (5.2,1.58) {\textbf{Orin Nano}\\Dataset Recorder\\Teleoperation, H.264};
+\node[host] (trainer) at (10.4,1.58) {\textbf{Desktop Server}\\Dataset Storage\\Policy Training, Checkpoint};
+
+\node[host] (runtimeRobot) at (0,-1.92) {\textbf{Robot Hardware}\\Cameras, Joint State\\SO-101 Follower};
+\node[host] (client) at (5.2,-1.92) {\textbf{Orin Nano}\\\texttt{robot\_client}\\Action Queue, Safety, CV/IK};
+\node[host] (server) at (10.4,-1.92) {\textbf{Desktop Server}\\\texttt{policy\_server}\\Policy Inference (CPU/GPU)};
+
+\draw[dataflow] (collectrobot.east) --
+    node[flowlabel,above,yshift=2pt] {Demo data} (recorder.west);
+\draw[dataflow] (recorder.east) --
+    node[flowlabel,above,yshift=2pt] {Dataset} (trainer.west);
+\draw[dataflow] (trainer.south) --
+    node[flowlabel,right,xshift=2pt] {Checkpoint} (server.north);
+
+\draw[dataflow] ([yshift=0.30cm]runtimeRobot.east) --
+    node[flowlabel,above,yshift=2pt] {Observation} ([yshift=0.30cm]client.west);
+\draw[dataflow] ([yshift=-0.30cm]client.west) --
+    node[flowlabel,below,yshift=-2pt] {Joint targets} ([yshift=-0.30cm]runtimeRobot.east);
+\draw[dataflow] ([yshift=0.30cm]client.east) --
+    node[flowlabel,above,yshift=2pt] {Observation + Task ID} ([yshift=0.30cm]server.west);
+\draw[dataflow] ([yshift=-0.30cm]server.west) --
+    node[flowlabel,below,yshift=-2pt] {Action chunk} ([yshift=-0.30cm]client.east);
+\node[font=\sffamily\scriptsize,inner sep=1pt] at (7.8,-1.92) {gRPC};
+\end{tikzpicture}%
+}
+\caption{데이터 수집 및 학습과 추론 및 제어를 구분한 전체 시스템 아키텍처}
+\label{fig:system-architecture-updated}
+\end{figure}
+
+\section{단일 모델 시스템 후보별 구조}
+
+Task ID 기반 ACT는 기존 ACT\cite{zhao2023act}의 영상 및 관절 상태 입력에 1차와 2차 미션을 구분하는 이산 Task ID를 추가하는 설계 후보이다. Task ID는 각 미션에 부여한 임의의 식별자이며 자연어 명령이나 언어 임베딩은 사용하지 않는다. 기존 ACT의 구조와 액션 청크 제어를 유지하면서, 하나의 가중치가 Task ID에 따라 두 미션의 행동을 구분하도록 학습한다.
+
+SmolVLA는 SmolVLM2 기반의 비전-언어 백본 위에 로봇 행동을 예측하는 action expert가 결합된 구조로, 영상과 관절 상태에 더해 \textbf{언어 명령}을 입력으로 받는다. 사전학습 가중치(\texttt{smolvla\_base})를 파인튜닝하며, 주요 학습 설정은 카메라 2개 매핑(\texttt{camera1/2}), 태스크 언어 지시(\texttt{-{}-task}), 액션 청크 길이 50이다.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.96\textwidth}{!}{%
+\begin{tikzpicture}[
+    input/.style={rectangle, draw=black, fill=boxgray, align=center, minimum width=2.8cm, minimum height=0.85cm, font=\sffamily\scriptsize},
+    backbone/.style={rectangle, draw=black, thick, fill=boxblue, align=center, minimum width=3.0cm, minimum height=1.05cm, font=\sffamily\scriptsize},
+    expert/.style={rectangle, draw=black, thick, fill=boxgreen, align=center, minimum width=3.0cm, minimum height=1.05cm, font=\sffamily\scriptsize},
+    arrow/.style={-{Latex[length=3mm]}, thick}
+]
+\node[input] (wrist) at (0,1.8) {Wrist Camera\\근접 파지 뷰};
+\node[input] (top) at (0,0.6) {Top-down Camera\\전역 뷰};
+\node[input] (lang) at (0,-0.6) {Language Command\\``모아라'' / ``쌓아라''};
+\node[input] (joint) at (0,-1.8) {Joint State\\관절 상태};
+\node[backbone] (encoder) at (4.1,0.6) {VLM Backbone\\SmolVLM2};
+\node[expert] (act) at (8.0,0.0) {Action Expert\\Flow Matching};
+\node[expert] (action) at (12.0,0.0) {Action Chunk\\$50 \times 6$ joint targets};
+
+\draw[arrow] (wrist) -- (encoder);
+\draw[arrow] (top) -- (encoder);
+\draw[arrow] (lang) -- (encoder);
+\draw[arrow] (encoder) -- (act);
+\draw[arrow] (joint.east) -- ++(1.1,0) -| (act.south);
+\draw[arrow] (act) -- (action);
+\end{tikzpicture}
+}
+\caption{SmolVLA 모방학습 정책 구조. 언어 명령에 따라 단일 모델이 이동과 적재 태스크를 구분하도록 학습한다.}
+\label{fig:policy_structure_smolvla}
+\end{figure}
+
+하이브리드 ACT--CV/IK는 학습이 필요한 비정형 접촉 동작과 기하학적으로 표현할 수 있는 배치 동작을 분리한다. ACT는 임의의 초기 위치에서 블록에 접근하여 파지하고 고정 retreat 자세까지 들어 올린다. 제어기는 그리퍼 관절의 닫힘 상태, 순기구학(FK)으로 계산한 말단 높이와 retreat 자세 도달 여부를 함께 확인한 후 CV/IK 단계로 전환한다. 파지가 확인되지 않으면 초기 자세로 복귀하여 ACT를 다시 실행한다. 전환 오검출을 줄이기 위해 모든 관절이 목표 자세의 허용 오차 안에 일정 시간 연속으로 머무는 조건을 사용할 예정이며, 허용 오차와 유지 시간은 실험으로 결정한다.
+
+탑다운 영상에서는 OpenCV의 HSV 색상 임계값, 모폴로지 연산과 윤곽선 검출을 사용하며 신경망 기반 객체 검출기는 사용하지 않는다\cite{opencv}. 화소 좌표는 사전 보정한 homography로 테이블 좌표계로 변환한다. 1차 미션은 20cm $\times$ 10cm 영역 안에 블록 크기와 여유 간격을 고려한 5개 비중첩 배치 슬롯을 정의하고, CV로 점유 상태를 확인하여 빈 슬롯을 목표 $x,y$로 선택한다. 이는 모든 블록을 영역 중심에 놓아 적재되는 것을 방지하기 위한 설계이다. 2차 미션은 기존 탑 상단 블록의 중심을 목표 $x,y$로 사용한다. 기존 적재 블록 수를 $n$, 블록 높이를 $h=2$cm로 두면 2차 미션의 해제 높이는 $z_{\mathrm{release}}(n)=z_{\mathrm{release}}(0)+nh$로 계산한다. IK는 현재 관절 상태에서 안전 상승, 수평 이동, 하강, 그리퍼 해제 웨이포인트를 순차적으로 생성한다.
+
+하이브리드 방식은 정밀한 배치를 명시적으로 제어하고 기하학적으로 표현 가능한 새 과제를 재학습 없이 추가할 수 있다는 장점이 있다. 반면 조명과 배경 변화에 따른 색상 분할 실패, homography 보정 오차, 기구학 모델 오차, ACT와 CV/IK 사이의 전환 실패가 누적될 수 있다. 또한 새 과제가 모두 기하학적 규칙으로 표현된다고 보장할 수 없으므로, 이 후보의 확장성은 Task ID 기반 ACT와 SmolVLA의 학습 기반 확장성과 구분해 평가한다.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.78\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=0.65cm and 1.5cm,
+    terminal/.style={rectangle, rounded corners=4pt, draw=black, thick, fill=white, align=center, minimum width=3.4cm, minimum height=0.85cm, font=\sffamily\scriptsize},
+    policy/.style={rectangle, draw=black, thick, fill=boxblue, align=center, minimum width=3.4cm, minimum height=1.0cm, font=\sffamily\scriptsize},
+    process/.style={rectangle, draw=black, thick, fill=boxgray, align=center, minimum width=3.4cm, minimum height=1.0cm, font=\sffamily\scriptsize},
+    target/.style={rectangle, draw=black, thick, fill=white, align=center, minimum width=3.3cm, minimum height=0.95cm, font=\sffamily\scriptsize},
+    control/.style={rectangle, draw=black, thick, fill=boxgreen, align=center, minimum width=3.4cm, minimum height=1.0cm, font=\sffamily\scriptsize},
+    decision/.style={diamond, draw=black, thick, fill=boxgray, aspect=2.1, align=center, inner sep=1.5pt, font=\sffamily\scriptsize},
+    harrow/.style={-{Latex[length=3mm]}, thick},
+    branch/.style={font=\sffamily\scriptsize, inner sep=1pt}
+]
+\node[terminal] (start) {Start\\Task 선택 및 초기 상태 관측};
+\node[policy,below=of start] (act) {ACT (single neural model)\\접근 $\rightarrow$ 파지 $\rightarrow$ 들기};
+\node[decision,below=of act] (verify) {파지 성공?};
+\node[process,right=of verify] (retry) {Home 자세 복귀\\ACT 재시도};
+\node[process,below=of verify] (cv) {Traditional CV\\HSV, morphology, contour};
+\node[decision,below=of cv] (mission) {Mission?};
+\node[target,below left=0.8cm and 0.9cm of mission] (taskone) {Task 1\\빈 배치 슬롯};
+\node[target,below right=0.8cm and 0.9cm of mission] (tasktwo) {Task 2\\탑 중심과 높이};
+\node[control,below=2.7cm of mission] (ik) {Homography + IK\\이동};
+\node[control,below=of ik] (release) {Place};
+
+\draw[harrow] (start) -- (act);
+\draw[harrow] (act) -- (verify);
+\draw[harrow] (verify) -- node[branch,left] {Yes} (cv);
+\draw[harrow] (verify) -- node[branch,above] {No} (retry);
+\draw[harrow] (retry.north) |- (act.east);
+\draw[harrow] (cv) -- (mission);
+\draw[harrow] (mission) -- node[branch,above left] {Task 1} (taskone);
+\draw[harrow] (mission) -- node[branch,above right] {Task 2} (tasktwo);
+\draw[harrow] (taskone.south) |- (ik.west);
+\draw[harrow] (tasktwo.south) |- (ik.east);
+\draw[harrow] (ik) -- (release);
+\end{tikzpicture}%
+}
+\caption{하이브리드 ACT--CV/IK 제어 흐름. 파지 실패 시 ACT를 재시도하고, 파지 성공 후 미션별 목표를 선택해 CV와 IK로 배치한다.}
+\label{fig:hybrid-act-cv-ik}
+\end{figure}
+
+\section{정량 평가 체계 신규 도입}
+
+착수보고서에는 성능 평가 방법이 정성적 수준(``성공률을 확보한다'')에 머물러 있었다. 실제로 착수 이후에도 성공 여부가 ``집기가 불안정하다'', ``떨림이 있다''와 같은 감각적 관찰로만 판단되어, 데이터 확장이 성능 향상으로 이어지는지 판별할 기준이 없었다. 이를 해결하기 위해 다음의 정량 평가 지표와 측정 프로토콜을 신규 정의하였다.
+
+\begin{longtable}{p{0.22\linewidth}p{0.50\linewidth}p{0.20\linewidth}}
+\toprule
+평가 지표 & 평가 기준 & 적용 범위 \\
+\midrule
+\endhead
+1차 공식 점수 & 3분 내 지정구역에 놓인 블록 수, 5개 완료 시 시간 보너스 & 1차 (이동) \\
+2차 공식 점수 & 5분 내 안정적으로 쌓은 블록 수, 5개 완료 시 시간 보너스 & 2차 (적재) \\
+파지 성공률 & 그리퍼가 블록을 집어 들어올림 & 공통 \\
+안착 성공률 & 블록을 지정구역 안에 쌓지 않고 내려놓음 & 1차 (이동) \\
+적재 성공률 & 기존 블록 위에 무너뜨리지 않고 쌓음 & 2차 (적재) \\
+5초 유지 성공률 & 놓은 뒤 5초간 무너지지 않고 유지 & 2차 (최종 판정) \\
+ACT--CV 전환 성공률 & 블록을 떨어뜨리지 않고 파지 정책에서 규칙 제어로 전환 & 하이브리드 후보 \\
+목표 좌표 오차 & CV가 검출한 목표 중심과 실측 중심 간의 평면거리(cm) & 하이브리드 후보 \\
+IK 배치 오차 & 목표 해제 위치와 실제 블록 중심 간의 거리(cm) & 하이브리드 후보 \\
+\bottomrule
+\end{longtable}
+
+측정 프로토콜은 (1) 조건당 rollout 10회 이상 반복하여 성공 횟수와 전체 횟수 기록, (2) 인접 배치를 포함한 여러 초기 위치 세트를 준비하고 모든 후보에 같은 세트를 적용, (3) 한 번에 하나의 변수만 변경(데이터 양, 카메라 높이, 액션 청크, CV 임계값 등)하여 성능 변화 원인 특정의 세 원칙을 따른다. 파지, 전환, 목표 검출, 배치와 적재를 분리 측정해 실패 단계를 진단하고, 세 후보의 전체 수행 시간, 추가 학습 데이터량, 카메라 보정 의존성도 함께 기록한다. 네트워크와 추론 성능은 평균뿐 아니라 최대 지연과 액션 큐 고갈 여부를 측정한다. 기록 템플릿(\texttt{eval\_log\_template.csv})을 이 항목에 맞게 확장해 공유할 예정이다.
+
+% =====================================================================
+\chapter{갱신된 과제 추진 계획}
+
+착수보고서의 Phase 계획을 실제 진행 상황과 발표 일정에 맞춰 갱신하였다. 주요 변경점은 (1) 정량 rollout 평가를 Phase 2에 편입, (2) 데스크톱 추론과 Orin Nano 제어를 분리한 구조로 변경, (3) Task ID 기반 ACT, SmolVLA와 함께 전통적 CV와 IK를 결합한 하이브리드 후보를 비교 항목에 추가, (4) 강화학습 기반 sim2real을 모방학습 및 하이브리드 기준선 확보 이후의 조건부 도전 과제로 후순위 조정한 점이다. 최종 평가에서는 제공되는 NVIDIA 드라이버 580 기반 서버에 팀별 Docker 이미지를 옮겨 즉시 컨테이너를 실행해야 하므로, Docker 환경 구축과 평가 서버 호환성 검증을 필수 배포 업무로 편성하였다. 9월 말까지 2차 미션과 Docker 평가 환경을 마무리하고 10월 1주 최종 발표에 대비한다.
+
+\begingroup
+\scriptsize
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{2pt}
+\begin{longtable}{@{}p{0.40\linewidth}*{16}{>{\centering\arraybackslash}p{0.030\linewidth}}@{}}
+\toprule
+업무 & \multicolumn{4}{c}{7월} & \multicolumn{4}{c}{8월} & \multicolumn{4}{c}{9월} & \multicolumn{4}{c}{10월} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-13}\cmidrule(lr){14-17}
+ & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 \\
+\midrule
+\endhead
+환경 구축, 듀얼카메라와 텔레오퍼레이션 (완료) & \ganttbar & \ganttbar & & & & & & & & & & & & & & \\
+Phase 1: 색깔별 데이터 수집 및 SmolVLA 첫 학습 (진행 중) & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & & & \\
+Phase 2: 데이터 확장(\textasciitilde300 ep) 및 정량 rollout 평가 & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & \\
+Phase 2: 분리 추론 통합 및 Task ID 기반 ACT/SmolVLA 비교 & & & & \ganttbar & \ganttbar & & & & & & & & & & & \\
+Phase 2: CV 좌표 보정 및 ACT--CV/IK 통합 & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & \\
+Phase 3: 블록 쌓기(2차 미션)와 5초 유지 안정성 튜닝 & & & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & \\
+Phase 3: Docker 평가환경 구축 및 이미지 제출 준비 & & & & & & & \ganttbar & \ganttbar & & & & & & & & \\
+Phase 4: (도전) ManiSkill sim2real 강건성 & & & & & & & & \ganttbar & \ganttbar & & & & & & & \\
+최종 통합, 테스트, 데모와 발표 준비 & & & & & & & & & \ganttbar & \ganttbar & & & & & & \\
+\textbf{최종 발표 (10월 1주)} & & & & & & & & & & \ganttbar & & & & & & \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+% =====================================================================
+\chapter{구성원별 진척도}
+
+\begin{longtable}{p{0.16\linewidth}p{0.56\linewidth}p{0.20\linewidth}}
+\toprule
+이름 & 담당 및 수행 내용 & 진척도 \\
+\midrule
+\endhead
+윤민석 & SO-101 제어와 캘리브레이션, Tailscale 원격 파이프라인, \texttt{robot\_client} 및 Action 검증 안전 로직. 파랑과 기본 블록 데이터 수집, SmolVLA 학습 및 rollout 테스트, 카메라와 테이프 환경 정비, 서버 통신 해결. & 데이터, 학습과 통신 완료 \\
+이동근 & 텔레오퍼레이션 데이터 수집, 듀얼 카메라 셋업과 동기화, 데이터셋 관리와 증강. 초록과 노랑 블록 데이터 수집, ACT 학습 및 청크 옵션 튜닝으로 이동 태스크 성공률 약 60\% 달성, 비동기 추론 gRPC 연결 검증. & 데이터 및 rollout 검증 완료 \\
+김주환 & SmolVLA 정책 설계와 학습, 하이퍼파라미터와 학습 로그 분석, 평가 지표 정의, Docker 기반 \texttt{policy\_server} 배포 절차 검토. 정량 평가 체계 신규 정의 및 기록 템플릿 배포, 캘리브레이션 절차 점검. & 평가 체계 완료 / Docker 및 로그 분석 착수 예정 \\
+전체 팀원 & 실제 로봇 통합 테스트, 실패 사례 분석과 데이터 보강, 보고서 및 발표 준비. & 진행 중 \\
+\bottomrule
+\end{longtable}
+
+공통적으로 데이터 수집--학습--추론 파이프라인이 반복 가능한 형태로 정착되었고 서버 통신도 해결되어 rollout 검증이 가능해졌다. 현재 팀 전체의 최우선 과제는 위치와 색상 다양성을 확대하고 CV 좌표 보정과 IK 배치 제어를 구성한 뒤, 세 후보의 성공률과 운용 비용을 정량 비교하는 것이다.
+
+% =====================================================================
+\chapter{보고 시점까지의 과제 수행 내용 및 중간 결과}
+
+\section{실험 환경 및 하드웨어 셋업}
+
+리더암 텔레오퍼레이션으로 시연 데이터를 수집하고, 팔로워암(SO-ARM101)이 이를 실행하는 환경을 구축하였다. 작업 공간 바닥은 체스판 패턴을 사용하고, 지정구역은 내부 규격 20$\times$10cm, 로봇 끝 기준 25cm 위치 조건에 맞춰 빨간색 테이프로 표시하였다. 탑다운 카메라는 작업 공간을 관측하도록 배치하였다. 공식 평가에서는 5개 블록이 모두 넓은 면을 바닥으로 향한 채 지정구역 밖의 무작위 위치에 놓이고, 서로 맞닿아 배치될 수 있다. 두 미션은 별도로 진행되며 미션마다 블록이 다시 배치된다.
+
+초기 테스트 이후 인식 성능 개선을 위해 실험 환경을 일부 정비하였다. 첫째, 탑다운 카메라의 위치를 기존보다 높여 경기장 전체가 관측되도록 각도를 조정하였다. 둘째, 지정구역 표시 테이프를 내부 규격과 로봇으로부터의 거리 조건에 맞게 다시 부착하였다(그림~\ref{fig:env-improve}). 이러한 정비로 관측 범위 확대와 시각적 기준 정렬을 통한 인식 성능 향상을 기대하고 있다. 다만 카메라와 테이프 배치가 변경되었으므로, 기존 에피소드는 새 환경 기준으로 재수집이 필요하다.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.56\textwidth}
+\centering
+\includegraphics[width=\linewidth]{setup_front.png}
+\caption{리더암, 팔로워암, 탑다운 카메라와 블록 셋업}
+\label{fig:setup}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.40\textwidth}
+\centering
+\includegraphics[width=\linewidth]{blocks5.png}
+\caption{과제 대상 블록 5개(4색+나무)}
+\label{fig:blocks}
+\end{subfigure}
+\caption{실험 환경 및 대상 물체}
+\label{fig:env}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.44\textwidth}
+\centering
+\includegraphics[height=6.2cm]{camera_high.png}
+\caption{경기장 전체 관측을 위한 탑다운 카메라 높이 조정}
+\label{fig:camera-high}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.44\textwidth}
+\centering
+\includegraphics[height=6.2cm]{tape_measure.png}
+\caption{격자 라인 정렬 및 규격 실측을 통한 테이프 재부착}
+\label{fig:tape-measure}
+\end{subfigure}
+\caption{인식 성능 개선을 위한 실험 환경 정비}
+\label{fig:env-improve}
+\end{figure}
+
+
+\section{텔레오퍼레이션 데이터 수집 및 캘리브레이션}
+
+리더암으로 팔로워암을 조작하여 파지와 이동 시연을 녹화하고, 손목 카메라와 탑다운 카메라 영상, 관절 상태와 행동을 동기화하여 LeRobotDataset 형식으로 저장하였다. 데이터셋은 색깔별로 개별 업로드(Hugging Face)하고 학습 시에만 병합하는 방식을 채택하였다. 한편 teleop 초기 테스트에서 팔로워암이 리더암과 다른 각도로 움직이는 문제를 발견하였으며, 원인은 (a) teleop 시작 시 초기 자세 불일치로 인한 급격한 점프 또는 (b) 캘리브레이션 시 관절 가동 범위(특히 어깨)를 끝까지 스윕하지 않아 매핑이 부정확한 것으로 추정하고, 리셋 후 전체 관절 재캘리브레이션 절차를 확보하였다.
+
+후속 공통 파지 데이터는 여러 블록을 동시에 무작위 배치하고, 고정 home 자세에서 접근, 미세 정렬, 파지, 들어 올리기와 고정 retreat 자세까지 동일한 형식으로 수집한다. 접근과 정렬 구간은 의도적으로 감속하고 블록 위에서 1--2초간 수직 자세를 유지한 뒤 파지하여 정렬 상태가 충분히 기록되도록 한다. 수집 대기 시간을 줄이기 위해 에피소드 reset 시간은 약 4초로 설정하고 영상 인코딩은 H.264를 적용할 예정이다.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{teleop_topview.png}
+\caption{리더암 텔레오퍼레이션(상단 시점)}
+\label{fig:teleop}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{calibration.png}
+\caption{캘리브레이션 및 지정구역 배치 확인}
+\label{fig:calib}
+\end{subfigure}
+\caption{데이터 수집 및 캘리브레이션 과정}
+\label{fig:collect}
+\end{figure}
+
+\section{데이터셋 구축 현황}
+
+색깔별 블록 시연 데이터를 순차적으로 수집하여 현재까지 총 112개 에피소드를 확보하였다. 빨간색 블록은 경계선 방향 이동 현상의 원인이 확인될 때까지 수집을 보류하였다. 현재 계획상 약 300개 에피소드를 잠정 목표로 두되, 에피소드 수를 일률적으로 늘리기보다 실패 구간과 초기 위치 다양성을 집중 보강하고 정량 평가 결과에 따라 목표량을 조정한다.
+
+\begin{longtable}{p{0.18\linewidth}p{0.14\linewidth}p{0.14\linewidth}p{0.14\linewidth}p{0.14\linewidth}}
+\toprule
+색상 & 초록 & 노랑 & 파랑 & 기본(default) \\
+\midrule
+\endhead
+에피소드 & 31 & 20 & 31 & 30 \\
+\bottomrule
+\end{longtable}
+
+\section{모델 학습 및 중간 결과}
+
+초록과 노랑 데이터셋(51 에피소드)을 병합하여 \texttt{smolvla\_base}를 파인튜닝(8{,}000 스텝)한 첫 모델을 확보하였고, 이후 파랑과 기본 데이터를 추가하여 재학습을 진행하였다. 학습된 정책을 데스크톱 GPU에서 실행하여 블록 파지와 이동 동작을 확인하였다.
+
+\textbf{SmolVLA 테스트.} 색깔별 데이터로 학습한 SmolVLA 정책을 실제 로봇에서 실행한 결과, 팔로워암이 목표 위치까지는 이동하였으나 파지가 제대로 이루어지지 않았다. 그림~\ref{fig:result}는 팔로워암이 노란 블록에 접근하는 순간이다. 파지 실패의 원인으로는 시연 데이터의 양과 다양성 부족과 함께, 녹화 시 동작 속도가 빨라 접근 정렬이 부정확했던 점을 추정하고 있다. 현 결과는 제한된 초기 rollout에서 관찰한 정성 결과이며, 동일 초기 위치에서 반복한 성공 횟수는 후속 평가에서 기록한다.
+
+\textbf{일반 ACT 선행 테스트.} Task ID 기반 ACT를 구성하기 전에 ACT 기본 정책의 제어 성능을 검증하였다. 블록 위치를 기준 위치에서 $\pm 3$cm 범위로 변화시키며 약 30개 에피소드를 수집하고 학습하였다. 제한된 초기 rollout에서 지정구역 이동 성공률은 튜닝 전 약 15\%, 액션 청크 갱신과 혼합 옵션 조정 후 약 60\%로 관찰되었다. 현재 수치는 시험 횟수와 성공 횟수를 별도로 기록하기 전에 얻은 잠정값이므로 후보 간 정량 비교값으로 사용하지 않는다. 다만 청크 옵션 조정 후 동작 끊김이 줄었고, 한 번에 올바른 파지 자세를 잡지 못한 경우의 복구(recovery) 능력은 여전히 부족했다. 이 결과는 ACT 계열의 액션 청크 제어가 본 시스템에서 동작함을 보이며, Task ID 기반 ACT의 기반이자 하이브리드 ACT--CV/IK의 공통 파지 단계로 활용할 수 있다는 실험적 근거가 된다.
+
+현 단계에서는 위치 변화가 작은 조건에서 일반 ACT가 SmolVLA보다 안정적인 성능을 보였다. 다만 일반 ACT는 아직 두 미션을 전체적으로 구분하는 정책이 아니고, 하이브리드 후보의 CV/IK 배치도 구현 전이므로 이 결과만으로 최종 방식을 판단하지 않는다. 다음 단계에서 동일한 환경으로 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK를 평가하고 미션별 성공률과 실행 시간을 비교한다.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{grasp.png}
+\caption{모방학습 정책으로 팔로워암이 블록에 접근하는 순간(1차 미션 이동 동작). 2차 미션(적재)은 향후 데이터 확장 후 검증 예정이다.}
+\label{fig:result}
+\end{figure}
+
+\section{추론 및 통신 구조 검증}
+
+데스크톱(\texttt{policy\_server})과 로봇(\texttt{robot\_client})을 gRPC로 연결하는 비동기 추론 구조를 검증하였다. Tailscale 기반 원격 환경에서 데스크톱과 Orin Nano 사이의 평균 네트워크 지연은 33ms로 측정되었다. 데스크톱 CPU만 사용한 정책 서버에서 ACT와 SmolVLA의 액션 청크 생성 시간을 측정한 결과는 표~\ref{tab:inference-time}과 같다.
+
+\begin{longtable}{p{0.30\linewidth}p{0.22\linewidth}p{0.38\linewidth}}
+\caption{데스크톱 CPU 추론 및 통신 실측 결과}\label{tab:inference-time}\\
+\toprule
+측정 항목 & 측정값 & 측정 조건 \\
+\midrule
+\endfirsthead
+\toprule
+측정 항목 & 측정값 & 측정 조건 \\
+\midrule
+\endhead
+네트워크 지연 & 33ms & 데스크톱--Orin Nano 원격 연결 \\
+ACT 청크 추론 & 169ms & 데스크톱 CPU, 50 actions \\
+SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
+청크 실행 시간 & 약 1.67초 & 50 actions, 30Hz 제어 \\
+\bottomrule
+\end{longtable}
+
+한 번의 추론으로 생성하는 50개 액션은 30Hz 제어에서 약 1.67초의 동작에 해당한다. ACT의 169ms와 SmolVLA의 879ms는 모두 이 청크 실행 시간보다 짧으므로, 현재 CPU 구성에서도 다음 청크를 실행 전에 생성할 수 있는 연산 성능을 확인하였다. 향후 GPU 옵션을 적용하여 추론 시간을 다시 측정하고, 평균값뿐 아니라 최대 지연, 액션 큐 고갈과 연속 rollout 중 제어 끊김 여부를 함께 검증한다.
+
+\section{미해결 사항 및 다음 우선순위}
+
+\begin{itemize}
+    \item 새 카메라와 테이프 환경 기준으로 에피소드 재수집 및 위치와 색상 다양성 확대 
+    \item 복구(recovery) 시연을 포함한 데이터 보강으로 파지 실패 구간 개선
+    \item 동일 조건에서 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK의 성공률 및 실행 시간 비교
+    \item 탑다운 카메라 homography 보정, HSV 임계값 목표 검출, 1차 미션의 5개 비중첩 배치 슬롯과 IK 배치 오차 검증
+    \item 그리퍼, FK와 retreat 자세를 이용한 파지 확인, 실패 시 ACT 재시도와 전환 조건 검증
+    \item 지정구역 색상 간섭 원인 실측 및 대책 확정 (빨간 블록 데이터 재개 여부 결정)
+    \item GPU 추론 시간, 최대 네트워크 지연과 액션 큐 고갈 여부 측정
+    \item Docker 기반 \texttt{policy\_server} 환경 구축 및 NVIDIA 드라이버 580 평가 서버 호환성 검증
+    \item 2차 미션(적재) 데이터 수집 및 검증
+\end{itemize}
+
+% =====================================================================
+\begin{thebibliography}{99}
+
+\bibitem{zhao2023act}
+T. Z. Zhao, V. Kumar, S. Levine, and C. Finn,
+\textit{Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware}, Robotics: Science and Systems (RSS), 2023. arXiv:2304.13705.
+
+\bibitem{lerobot}
+R. Cadene et al.,
+\textit{LeRobot: State-of-the-art Machine Learning for Real-World Robotics in PyTorch}, Hugging Face.
+Available: \url{https://github.com/huggingface/lerobot}
+
+\bibitem{lerobot-tutorial}
+Hugging Face,
+\textit{Imitation Learning on Real-World Robots}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/il_robots}
+
+\bibitem{soarm100}
+The Robot Studio,
+\textit{SO-ARM100 / SO-ARM101: Standard Open Arm}, Open-Source Robot Arm Hardware.
+Available: \url{https://github.com/TheRobotStudio/SO-ARM100}
+
+\bibitem{lerobot-so101}
+Hugging Face,
+\textit{SO-101 Robot Arm Setup and Calibration}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/so101}
+
+\bibitem{lerobot-async}
+Hugging Face,
+\textit{Asynchronous Inference: Decoupling Action Prediction and Execution}, LeRobot Documentation.
+Available: \url{https://huggingface.co/docs/lerobot/async}
+
+\bibitem{smolvla}
+M. Shukor et al.,
+\textit{SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics}, 2025. arXiv:2506.01844.
+
+\bibitem{opencv}
+OpenCV Team,
+\textit{OpenCV: Open Source Computer Vision Library}, OpenCV Documentation.
+Available: \url{https://docs.opencv.org/4.x/}
+
+\bibitem{lerobot-sim2real}
+S. Tao,
+\textit{LeRobot-Sim2Real: Train in Fast Simulation and Deploy Visual Policies Zero-Shot to the Real World}.
+Available: \url{https://github.com/StoneT2000/lerobot-sim2real}
+
+\bibitem{maniskill3}
+S. Tao et al.,
+\textit{ManiSkill3: GPU Parallelized Robotics Simulation and Rendering for Generalizable Embodied AI}, 2024. arXiv:2410.00425.
+
+\bibitem{nvidia-jetson-orin}
+NVIDIA,
+\textit{Jetson Orin Nano Series Modules Data Sheet}, NVIDIA Embedded Systems Documentation.
+Available: \url{https://developer.nvidia.com/embedded/downloads}
+
+\bibitem{nvidia-tensorrt}
+NVIDIA,
+\textit{NVIDIA TensorRT Documentation}, Deep Learning Inference Optimizer and Runtime.
+Available: \url{https://docs.nvidia.com/deeplearning/tensorrt/}
+
+\end{thebibliography}
+
+\end{document}
