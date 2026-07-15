@@ -354,19 +354,19 @@ Docker 패키징 및 평가 서버 호환성 검증 & & & & & & & \ganttbar & \g
 
 초기 테스트 이후 인식 성능 개선을 위해 실험 환경을 일부 정비하였다. 첫째, 탑다운 카메라의 위치를 기존보다 높여 경기장 전체가 관측되도록 각도를 조정하였다. 둘째, 지정구역 표시 테이프를 내부 규격과 로봇으로부터의 거리 조건에 맞게 다시 부착하였다(그림~\ref{fig:env-improve}). 이러한 정비로 관측 범위 확대와 시각적 기준 정렬을 통한 인식 성능 향상을 기대하고 있다. 다만 카메라와 테이프 배치가 변경되었으므로, 기존 에피소드는 새 환경 기준으로 재수집이 필요하다.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\begin{subfigure}{0.56\textwidth}
+\begin{subfigure}[b]{0.48\textwidth}
 \centering
 \includegraphics[width=\linewidth]{setup_front.png}
-\caption{리더암, 팔로워암, 탑다운 카메라와 블록 셋업}
+\caption{로봇과 카메라 셋업}
 \label{fig:setup}
 \end{subfigure}
 \hfill
-\begin{subfigure}{0.40\textwidth}
+\begin{subfigure}[b]{0.34\textwidth}
 \centering
 \includegraphics[width=\linewidth]{blocks5.png}
-\caption{과제 대상 블록 5개(4색+나무)}
+\caption{과제 대상 블록 5개}
 \label{fig:blocks}
 \end{subfigure}
 \caption{실험 환경 및 대상 물체}
@@ -402,14 +402,14 @@ Docker 패키징 및 평가 서버 호환성 검증 & & & & & & & \ganttbar & \g
 
 \begin{figure}[htbp]
 \centering
-\begin{subfigure}{0.48\textwidth}
+\begin{subfigure}[b]{0.48\textwidth}
 \centering
 \includegraphics[width=\linewidth]{teleop_topview.png}
 \caption{리더암 텔레오퍼레이션(상단 시점)}
 \label{fig:teleop}
 \end{subfigure}
 \hfill
-\begin{subfigure}{0.48\textwidth}
+\begin{subfigure}[b]{0.48\textwidth}
 \centering
 \includegraphics[width=\linewidth]{calibration.png}
 \caption{캘리브레이션 및 지정구역 배치 확인}
@@ -419,6 +419,7 @@ Docker 패키징 및 평가 서버 호환성 검증 & & & & & & & \ganttbar & \g
 \label{fig:collect}
 \end{figure}
 
+\FloatBarrier
 \section{데이터셋 구축 현황}
 
 색깔별 블록 시연 데이터를 순차적으로 수집하여 현재까지 총 112개 에피소드를 확보하였다. 빨간색 블록은 경계선 방향 이동 현상의 원인이 확인될 때까지 수집을 보류하였다. 현재 계획상 약 300개 에피소드를 잠정 목표로 두되, 에피소드 수를 일률적으로 늘리기보다 실패 구간과 초기 위치 다양성을 집중 보강하고 정량 평가 결과에 따라 목표량을 조정한다.
