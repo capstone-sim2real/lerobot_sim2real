@@ -53,7 +53,8 @@
 }
 
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
-\newcommand{\ganttbar}{\rule{\linewidth}{1.15em}}
+\newcommand{\ganttbar}{\textcolor{black!35}{\rule{\linewidth}{1.15em}}}
+\newcommand{\ganttdone}{\rule{\linewidth}{1.15em}}
 \newcommand{\ganttmilestone}{\(\blacktriangle\)}
 
 \reporttitle{[중간보고서] \\모방학습 기반 SO-ARM101 로봇팔의\\블록 이동 및 적재 시스템\\[4pt]\normalsize 분과명: C \quad 졸업과제번호: 25}
@@ -290,39 +291,41 @@ SmolVLA는 SmolVLM2 기반의 비전-언어 백본 위에 로봇 행동을 예�
 % =====================================================================
 \chapter{갱신된 과제 추진 계획}
 
-중간보고서 제출일인 7월 17일 이후에는 세 정책 후보를 구현한 뒤 동일한 초기 위치와 평가 기준으로 비교하고, 선정한 후보를 두 미션에 통합하는 순서로 진행한다. 데이터 수집량은 약 300개와 같은 고정 목표로 두지 않고, 반복 평가에서 확인된 실패 위치와 동작 구간을 중심으로 보강한다. 8월 3주에 후보별 정량 비교를 수행하고 8월 4주에 최종 후보를 선정한 뒤, 9월 2주까지 1차 및 2차 미션 통합, 5초 적재 유지, Docker 평가 서버 호환성 검증을 완료한다. 최종보고서와 최종평가표는 9월 18일까지 제출하고, 이후 모델과 실행 환경을 동결하여 9월 30일 또는 10월 1일 발표심사를 준비한다.
+전체 일정은 환경 구축이 본격화된 7월 1주부터 결과물 업로드까지로 구성한다. 보고 시점인 7월 17일까지 듀얼 카메라와 텔레오퍼레이션 환경, 원격 추론 구조, 초기 ACT 및 SmolVLA 학습을 완료했으며, 이후에는 세 정책 후보를 동일한 초기 위치와 평가 기준으로 비교하고 선정한 후보를 두 미션에 통합한다. 데이터 수집량은 약 300개와 같은 고정 목표로 두지 않고, 반복 평가에서 확인된 실패 위치와 동작 구간을 중심으로 보강한다. 8월 3주에 후보별 정량 비교를 수행하고 8월 4주에 최종 후보를 선정한 뒤, 9월 2주까지 1차 및 2차 미션 통합, 5초 적재 유지, Docker 평가 서버 호환성 검증을 완료한다. 최종보고서와 최종평가표는 9월 18일까지 제출하고, 이후 모델과 실행 환경을 동결하여 9월 30일 또는 10월 1일 발표심사를 준비한다.
 
 강화학습 기반 ManiSkill sim2real은 핵심 미션과 배포 검증을 계획보다 일찍 완료한 경우에만 수행하는 선택 과제로 두며, 아래 핵심 일정에는 포함하지 않는다.
 
 \begingroup
 \scriptsize
-\renewcommand{\arraystretch}{1.2}
+\renewcommand{\arraystretch}{1.0}
 \setlength{\tabcolsep}{2pt}
-\begin{longtable}{@{}p{0.43\linewidth}*{12}{>{\centering\arraybackslash}p{0.038\linewidth}}@{}}
+\begin{longtable}{@{}p{0.41\linewidth}*{16}{>{\centering\arraybackslash}p{0.027\linewidth}}@{}}
 \toprule
-업무 & \multicolumn{2}{c}{7월} & \multicolumn{4}{c}{8월} & \multicolumn{4}{c}{9월} & \multicolumn{2}{c}{10월} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-7}\cmidrule(lr){8-11}\cmidrule(lr){12-13}
- & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 \\
+업무 & \multicolumn{4}{c}{7월} & \multicolumn{4}{c}{8월} & \multicolumn{4}{c}{9월} & \multicolumn{4}{c}{10월} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-13}\cmidrule(lr){14-17}
+ & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 & 1 & 2 & 3 & 4 \\
 \midrule
 \endhead
-기준 성능 기록 및 공통 파지 데이터 보강 & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & \\
-Task ID 기반 ACT 구현 및 다중 미션 학습 & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & \\
-SmolVLA 다중 미션 데이터 구성 및 학습 & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & \\
-CV 좌표 보정, Homography와 IK 구현 및 통합 & \ganttbar & \ganttbar & \ganttbar & \ganttbar & & & & & & & & \\
-세 정책 후보 동일 조건 반복 평가 & & & & & \ganttbar & & & & & & & \\
-최종 정책 후보 선정 & & & & & & \ganttbar & & & & & & \\
-1차 및 2차 미션 통합과 5초 유지 튜닝 & & & & & & \ganttbar & \ganttbar & & & & & \\
-최종 반복 평가 및 실패 데이터 보강 & & & & & & & \ganttbar & \ganttbar & & & & \\
-Docker 패키징 및 평가 서버 호환성 검증 & & & & & \ganttbar & \ganttbar & \ganttbar & \ganttbar & & & & \\
-\textbf{최종보고서 및 최종평가표 제출 (9/18)} & & & & & & & & & \ganttmilestone & & & \\
-모델 동결, 평가 리허설과 발표 준비 & & & & & & & & & \ganttbar & \ganttbar & & \\
-\textbf{졸업과제 발표심사 (9/30 또는 10/1)} & & & & & & & & & & \ganttbar & \ganttbar & \\
-결과물 업로드 (10월 중순) & & & & & & & & & & & & \ganttmilestone \\
+듀얼 카메라, 텔레오퍼레이션과 원격 추론 환경 구축 & \ganttdone & \ganttdone & & & & & & & & & & & & & & \\
+초기 데이터 수집과 ACT, SmolVLA 기준 학습 & & \ganttdone & \ganttdone & & & & & & & & & & & & & \\
+기준 성능 기록 및 공통 파지 데이터 보강 & & & \ganttdone & \ganttbar & \ganttbar & & & & & & & & & & & \\
+Task ID 기반 ACT 구현 및 다중 미션 학습 & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & \\
+SmolVLA 다중 미션 데이터 구성 및 학습 & & & & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & \\
+CV 좌표 보정, Homography와 IK 구현 및 통합 & & & \ganttbar & \ganttbar & \ganttbar & \ganttbar & & & & & & & & & & \\
+세 정책 후보 동일 조건 반복 평가 & & & & & & & \ganttbar & & & & & & & & & \\
+최종 정책 후보 선정 & & & & & & & & \ganttbar & & & & & & & & \\
+1차 및 2차 미션 통합과 5초 유지 튜닝 & & & & & & & & \ganttbar & \ganttbar & & & & & & & \\
+최종 반복 평가 및 실패 데이터 보강 & & & & & & & & & \ganttbar & \ganttbar & & & & & & \\
+Docker 패키징 및 평가 서버 호환성 검증 & & & & & & & \ganttbar & \ganttbar & \ganttbar & \ganttbar & & & & & & \\
+\textbf{최종보고서 및 최종평가표 제출 (9/18)} & & & & & & & & & & & \ganttmilestone & & & & & \\
+모델 동결, 평가 리허설과 발표 준비 & & & & & & & & & & & \ganttbar & \ganttbar & & & & \\
+\textbf{졸업과제 발표심사 (9/30 또는 10/1)} & & & & & & & & & & & & \ganttbar & \ganttbar & & & \\
+결과물 업로드 (10월 중순) & & & & & & & & & & & & & & \ganttmilestone & & \\
+\midrule
+\multicolumn{17}{@{}l}{표시: 검은 막대는 완료, 회색 막대는 이후 계획, 삼각형은 공식 일정} \\
 \bottomrule
 \end{longtable}
 \endgroup
-
-막대는 업무 수행 기간을, 삼각형은 공식 제출 시점을 나타낸다.
 
 % =====================================================================
 \chapter{구성원별 진척도}
