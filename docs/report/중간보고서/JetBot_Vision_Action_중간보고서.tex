@@ -132,7 +132,7 @@ Task ID 기반 ACT는 각 에피소드에 해당 미션의 Task ID를 제공하�
 
 \section{갱신된 전체 시스템 아키텍처}
 
-단일 학습 모델 후보를 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK로 확장하고, 데이터 수집부터 추론과 제어까지의 장치별 역할을 반영해 전체 아키텍처를 갱신하였다. 데이터 수집 단계에서는 Orin Nano가 리더암과 팔로워암의 관절 상태 및 두 카메라 영상을 LeRobotDataset으로 기록하고, 데이터셋을 전달받은 데스크톱이 정책을 학습하여 체크포인트를 생성한다. 추론 단계에서는 Orin Nano의 \texttt{robot\_client}가 관측값을 데스크톱의 \texttt{policy\_server}로 전송하고, 반환된 액션 청크를 안전 검사 후 실행한다\cite{lerobot-async}. 하이브리드 후보의 비학습식 CV와 IK도 Orin Nano에서 실행한다.
+단일 학습 모델 후보를 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK로 확장하고, 데이터 수집부터 추론과 제어까지의 장치별 역할을 반영해 전체 아키텍처를 갱신하였다. 데이터 수집 단계에서는 Orin Nano가 리더암과 팔로워암의 관절 상태 및 두 카메라 영상을 LeRobotDataset으로 기록하고, 데이터셋을 전달받은 데스크톱이 정책을 학습하여 체크포인트를 생성한다. 추론 단계에서는 Orin Nano의 \texttt{robot\_client}가 관측값을 데스크톱의 \texttt{policy\_server}로 전송하고, 반환된 액션 청크를 안전 검사 후 실행한다\cite{lerobot-async,grpc}. 하이브리드 후보의 비학습식 CV와 IK도 Orin Nano에서 실행한다.
 
 \begin{figure}[htbp]
 \centering
@@ -216,7 +216,7 @@ SmolVLA는 SmolVLM2 기반의 비전-언어 백본 위에 로봇 행동을 예�
 
 하이브리드 ACT--CV/IK는 학습이 필요한 비정형 접촉 동작과 기하학적으로 표현할 수 있는 배치 동작을 분리한다. ACT는 임의의 초기 위치에서 블록에 접근하여 파지하고 고정 retreat 자세까지 들어 올린다. 제어기는 그리퍼 관절의 닫힘 상태, 순기구학(FK)으로 계산한 말단 높이와 retreat 자세 도달 여부를 함께 확인한 후 CV/IK 단계로 전환한다. 파지가 확인되지 않으면 초기 자세로 복귀하여 ACT를 다시 실행한다. 전환 오검출을 줄이기 위해 모든 관절이 목표 자세의 허용 오차 안에 일정 시간 연속으로 머무는 조건을 사용할 예정이며, 허용 오차와 유지 시간은 실험으로 결정한다.
 
-탑다운 영상에서는 OpenCV의 HSV 색상 임계값, 모폴로지 연산과 윤곽선 검출을 사용하며 신경망 기반 객체 검출기는 사용하지 않는다\cite{opencv}. 화소 좌표는 사전 보정한 homography로 테이블 좌표계로 변환한다. 1차 미션은 20cm $\times$ 10cm 영역 안에 블록 크기와 여유 간격을 고려한 5개 비중첩 배치 슬롯을 정의하고, CV로 점유 상태를 확인하여 빈 슬롯을 목표 $x,y$로 선택한다. 이는 모든 블록을 영역 중심에 놓아 적재되는 것을 방지하기 위한 설계이다. 2차 미션은 기존 탑 상단 블록의 중심을 목표 $x,y$로 사용한다. 기존 적재 블록 수를 $n$, 블록 높이를 $h=2$cm로 두면 2차 미션의 해제 높이는 $z_{\mathrm{release}}(n)=z_{\mathrm{release}}(0)+nh$로 계산한다. IK는 현재 관절 상태에서 안전 상승, 수평 이동, 하강, 그리퍼 해제 웨이포인트를 순차적으로 생성한다.
+탑다운 영상에서는 OpenCV의 HSV 색상 임계값, 모폴로지 연산과 윤곽선 검출을 사용하며 신경망 기반 객체 검출기는 사용하지 않는다\cite{opencv}. 화소 좌표는 사전 보정한 homography로 테이블 좌표계로 변환한다\cite{opencv-homography}. 1차 미션은 20cm $\times$ 10cm 영역 안에 블록 크기와 여유 간격을 고려한 5개 비중첩 배치 슬롯을 정의하고, CV로 점유 상태를 확인하여 빈 슬롯을 목표 $x,y$로 선택한다. 이는 모든 블록을 영역 중심에 놓아 적재되는 것을 방지하기 위한 설계이다. 2차 미션은 기존 탑 상단 블록의 중심을 목표 $x,y$로 사용한다. 기존 적재 블록 수를 $n$, 블록 높이를 $h=2$cm로 두면 2차 미션의 해제 높이는 $z_{\mathrm{release}}(n)=z_{\mathrm{release}}(0)+nh$로 계산한다. IK는 현재 관절 상태에서 안전 상승, 수평 이동, 하강, 그리퍼 해제 웨이포인트를 순차적으로 생성한다\cite{modern-robotics}.
 
 하이브리드 방식은 정밀한 배치를 명시적으로 제어하고 기하학적으로 표현 가능한 새 과제를 재학습 없이 추가할 수 있다는 장점이 있다. 반면 조명과 배경 변화에 따른 색상 분할 실패, homography 보정 오차, 기구학 모델 오차, ACT와 CV/IK 사이의 전환 실패가 누적될 수 있다. 또한 새 과제가 모두 기하학적 규칙으로 표현된다고 보장할 수 없으므로, 이 후보의 확장성은 Task ID 기반 ACT와 SmolVLA의 학습 기반 확장성과 구분해 평가한다.
 
@@ -452,7 +452,7 @@ Docker 패키징 및 평가 서버 호환성 검증 & & & & & & & \ganttbar & \g
 
 \section{추론 및 통신 구조 검증}
 
-데스크톱(\texttt{policy\_server})과 로봇(\texttt{robot\_client})을 gRPC로 연결하는 비동기 추론 구조를 검증하였다. Tailscale 기반 원격 환경에서 데스크톱과 Orin Nano 사이의 평균 네트워크 지연은 33ms로 측정되었다. 데스크톱 CPU만 사용한 정책 서버에서 ACT와 SmolVLA의 액션 청크 생성 시간을 측정한 결과는 표~\ref{tab:inference-time}과 같다.
+데스크톱(\texttt{policy\_server})과 로봇(\texttt{robot\_client})을 gRPC로 연결하는 비동기 추론 구조를 검증하였다\cite{grpc}. Tailscale 기반 원격 환경에서 데스크톱과 Orin Nano 사이의 평균 네트워크 지연은 33ms로 측정되었다. 데스크톱 CPU만 사용한 정책 서버에서 ACT와 SmolVLA의 액션 청크 생성 시간을 측정한 결과는 표~\ref{tab:inference-time}과 같다.
 
 \begin{longtable}{p{0.30\linewidth}p{0.22\linewidth}p{0.38\linewidth}}
 \caption{데스크톱 CPU 추론 및 통신 실측 결과}\label{tab:inference-time}\\
@@ -530,7 +530,7 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 
 \section{잔여 과제 및 후속 검증 계획}
 
-현재까지 수집, 학습과 원격 추론의 기본 파이프라인을 확보하였으며, 이후에는 환경 변경에 따른 데이터 정비, 정책 후보 비교, 하이브리드 제어 구현과 실행 안정성 검증을 순차적으로 진행한다. 각 과제의 현재 상태와 완료 기준은 표~\ref{tab:next-steps}와 같다.
+현재까지 수집, 학습과 원격 추론의 기본 파이프라인을 확보하였으며, 이후에는 환경 변경에 따른 데이터 정비, 정책 후보 비교, 하이브리드 제어 구현과 배포 가능성 검증을 순차적으로 진행한다. 각 과제의 현재 상태와 완료 기준은 표~\ref{tab:next-steps}와 같다.
 
 \begin{longtable}{@{}p{0.20\linewidth}p{0.39\linewidth}p{0.33\linewidth}@{}}
 \caption{잔여 과제 및 후속 검증 계획}\label{tab:next-steps}\\
@@ -552,7 +552,7 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 \bottomrule
 \end{longtable}
 
-환경과 데이터 정비를 먼저 완료한 뒤 정책 후보 비교와 하이브리드 제어 구현을 병행한다. 이후 비교 결과로 최종 후보를 정하고, 해당 후보에 대해 원격 실행 안정성과 평가 환경 호환성을 검증한다.
+환경과 데이터 정비를 먼저 완료한 뒤 정책 후보 비교와 하이브리드 제어 구현을 병행한다. 이후 비교 결과로 최종 후보를 정하고, 해당 후보에 대해 평가 환경 호환성과 배포 가능성을 확인한다.
 
 % =====================================================================
 \begin{thebibliography}{99}
@@ -566,25 +566,15 @@ R. Cadene et al.,
 \textit{LeRobot: State-of-the-art Machine Learning for Real-World Robotics in PyTorch}, Hugging Face.
 Available: \url{https://github.com/huggingface/lerobot}
 
-\bibitem{lerobot-tutorial}
-Hugging Face,
-\textit{Imitation Learning on Real-World Robots}, LeRobot Documentation.
-Available: \url{https://huggingface.co/docs/lerobot/il_robots}
-
-\bibitem{soarm100}
-The Robot Studio,
-\textit{SO-ARM100 / SO-ARM101: Standard Open Arm}, Open-Source Robot Arm Hardware.
-Available: \url{https://github.com/TheRobotStudio/SO-ARM100}
-
-\bibitem{lerobot-so101}
-Hugging Face,
-\textit{SO-101 Robot Arm Setup and Calibration}, LeRobot Documentation.
-Available: \url{https://huggingface.co/docs/lerobot/so101}
-
 \bibitem{lerobot-async}
 Hugging Face,
 \textit{Asynchronous Inference: Decoupling Action Prediction and Execution}, LeRobot Documentation.
 Available: \url{https://huggingface.co/docs/lerobot/async}
+
+\bibitem{grpc}
+gRPC Authors,
+\textit{Core Concepts, Architecture and Lifecycle}, gRPC Documentation.
+Available: \url{https://grpc.io/docs/what-is-grpc/core-concepts/}
 
 \bibitem{smolvla}
 M. Shukor et al.,
@@ -595,24 +585,15 @@ OpenCV Team,
 \textit{OpenCV: Open Source Computer Vision Library}, OpenCV Documentation.
 Available: \url{https://docs.opencv.org/4.x/}
 
-\bibitem{lerobot-sim2real}
-S. Tao,
-\textit{LeRobot-Sim2Real: Train in Fast Simulation and Deploy Visual Policies Zero-Shot to the Real World}.
-Available: \url{https://github.com/StoneT2000/lerobot-sim2real}
+\bibitem{opencv-homography}
+OpenCV Team,
+\textit{Basic Concepts of the Homography Explained with Code}, OpenCV Documentation.
+Available: \url{https://docs.opencv.org/4.x/d9/dab/tutorial_homography.html}
 
-\bibitem{maniskill3}
-S. Tao et al.,
-\textit{ManiSkill3: GPU Parallelized Robotics Simulation and Rendering for Generalizable Embodied AI}, 2024. arXiv:2410.00425.
-
-\bibitem{nvidia-jetson-orin}
-NVIDIA,
-\textit{Jetson Orin Nano Series Modules Data Sheet}, NVIDIA Embedded Systems Documentation.
-Available: \url{https://developer.nvidia.com/embedded/downloads}
-
-\bibitem{nvidia-tensorrt}
-NVIDIA,
-\textit{NVIDIA TensorRT Documentation}, Deep Learning Inference Optimizer and Runtime.
-Available: \url{https://docs.nvidia.com/deeplearning/tensorrt/}
+\bibitem{modern-robotics}
+K. M. Lynch and F. C. Park,
+\textit{Modern Robotics: Mechanics, Planning, and Control}, Cambridge University Press, 2017.
+Available: \url{https://hades.mech.northwestern.edu/index.php/Modern_Robotics}
 
 \end{thebibliography}
 
