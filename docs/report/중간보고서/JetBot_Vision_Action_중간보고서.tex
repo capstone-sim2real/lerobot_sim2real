@@ -484,8 +484,6 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
     brace/.style   ={decorate, decoration={brace, amplitude=5pt}, black!60, thick}
 ]
 \def\ox{2.0}\def\dx{10.4}
-% --- overlap highlight band (drawn first, behind everything) ---
-\fill[boxorange, opacity=0.6] (\ox-0.1,-5.05) rectangle (\dx+3.9,-6.05);
 % --- actors and lifelines ---
 \node[actor, fill=boxgreen] (orin)    at (\ox,0) {Orin Nano\\\texttt{robot\_client}};
 \node[actor, fill=boxblue]  (desktop) at (\dx,0) {Desktop\\\texttt{policy\_server}};
@@ -498,7 +496,7 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 \node[snum] at (\ox+0.75,-1.5) {1};
 \node[note, anchor=north] at ({(\ox+\dx)/2},-1.72) {gRPC / Tailscale $\cdot$ 측정 네트워크 지연 33 ms};
 % server inference (activation bar)
-\draw[fill=boxblue, draw=black!55] (\dx-0.16,-1.95) rectangle (\dx+0.16,-3.0);
+\draw[fill=boxblue, draw=black!55] (\dx-0.16,-1.55) rectangle (\dx+0.16,-3.0);
 \node[note, anchor=west] at (\dx+0.55,-2.475) {추론 (50-action chunk)\\ACT 169 ms $\cdot$ SmolVLA 879 ms};
 % (2) action chunk -> robot
 \draw[msg] (\dx-0.16,-3.1) -- node[mlabel]{Action chunk (50 actions)} (\ox,-3.1);
@@ -513,8 +511,8 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 % (3) next observation sent before queue depletes
 \draw[msg] (\ox+0.16,-4.55) -- node[mlabel]{Next observation} (\dx-0.16,-4.55);
 \node[snum] at (\ox+0.9,-4.55) {3};
-% server prepares next chunk (inside overlap band)
-\draw[fill=boxblue, draw=black!55] (\dx-0.16,-5.05) rectangle (\dx+0.16,-6.05);
+% server prepares next chunk while the current chunk is executing
+\draw[fill=boxblue, draw=black!55] (\dx-0.16,-4.65) rectangle (\dx+0.16,-6.05);
 \node[note, anchor=west] at (\dx+0.55,-5.55) {다음 청크 준비\\현재 실행과 병렬 추론};
 % (4) next chunk arrives before current chunk depletes
 \draw[msg] (\dx-0.16,-6.15) -- node[mlabel]{Next action chunk} (\ox+0.16,-6.15);
@@ -524,7 +522,7 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 \node[anchor=west, align=left, font=\sffamily\scriptsize, text=black!70] at (\ox+0.5,-7.175) {새 청크를 큐에 적재\\제어 끊김 없이 이어짐};
 \end{tikzpicture}%
 }
-\caption{gRPC 기반 비동기 추론 및 액션 청크 실행 시퀀스. 초기 라운드(①~②)로 첫 청크를 실행한 뒤, 현재 청크를 실행하는 동안(③) 다음 관측을 전송하여 서버가 병렬로 다음 청크를 준비한다(주황 음영). 새 청크는 현재 청크가 고갈되기 전에 도착(④)하므로 제어 끊김 없이 이어진다.}
+\caption{gRPC 기반 비동기 추론 및 액션 청크 실행 시퀀스. 초기 라운드(①~②)로 첫 청크를 실행한 뒤, 현재 청크를 실행하는 동안(③) 다음 관측을 전송하여 서버가 병렬로 다음 청크를 준비한다. 새 청크는 현재 청크가 고갈되기 전에 도착(④)하므로 제어 끊김 없이 이어진다.}
 \label{fig:async-inference-sequence}
 \end{figure}
 
