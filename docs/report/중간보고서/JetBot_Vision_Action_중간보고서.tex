@@ -550,7 +550,7 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 \addlinespace
 하이브리드 CV/IK 검증 & HSV 기반 블록 검출, homography 좌표 변환, 비중첩 배치 슬롯과 IK 이동의 구현 및 ACT 전환 조건 검증이 필요하다. & CV 목표 좌표 오차, IK 배치 오차, ACT에서 CV/IK로의 전환 성공 여부를 측정한다. \\
 \addlinespace
-원격 추론 안정성 및 배포 & gRPC 기반 원격 추론과 CPU 기준 액션 청크 시간을 측정하였다. GPU 적용 성능과 장시간 실행 안정성, Docker 기반 평가 환경 호환성은 추가 확인이 필요하다. & GPU 적용 후 추론 시간, 최대 네트워크 지연, 액션 큐 고갈과 연속 rollout 중 제어 끊김 여부를 점검하고 평가 환경에서 정책 서버를 실행한다. \\
+배포 가능성 검증 & gRPC 기반 원격 추론과 CPU 기준 액션 청크 시간을 측정하고, 현재 청크 실행 중 다음 청크를 준비하는 동작을 확인하였다. & Docker 기반 \texttt{policy\_server}를 평가 환경에서 실행하고 NVIDIA 드라이버 580과의 호환성을 확인한다. \\
 \bottomrule
 \end{longtable}
 
