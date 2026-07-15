@@ -15,7 +15,7 @@
 \usepackage{fancyhdr} % 헤더/푸터 제어용 추가
 \usepackage{subcaption}
 \usepackage{placeins}
-\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc, decorations.pathreplacing}
 
 % --- 상단 헤더 꼬임 방지 및 페이지 번호 중앙 정렬 ---
 \pagestyle{fancy}
@@ -471,21 +471,90 @@ SmolVLA 청크 추론 & 879ms & 데스크톱 CPU, 50 actions \\
 \bottomrule
 \end{longtable}
 
+\begin{figure}[htbp]
+\centering
+\resizebox{0.96\textwidth}{!}{%
+\begin{tikzpicture}[
+    actor/.style   ={rectangle, rounded corners=2pt, draw=black, thick, align=center, minimum width=3.0cm, minimum height=0.9cm, font=\sffamily\small},
+    note/.style    ={rectangle, draw=black!30, fill=black!4, rounded corners=1.5pt, align=left, inner sep=3.5pt, font=\sffamily\scriptsize},
+    msg/.style     ={-{Latex[length=2.4mm]}, thick},
+    lifeline/.style={dashed, black!50, thick},
+    mlabel/.style  ={above, font=\sffamily\scriptsize, inner sep=2.5pt},
+    snum/.style    ={circle, draw=black!75, fill=white, thick, inner sep=0pt, minimum size=3.9mm, font=\sffamily\scriptsize\bfseries},
+    brace/.style   ={decorate, decoration={brace, amplitude=5pt}, black!60, thick}
+]
+\def\ox{2.0}\def\dx{10.4}
+% --- overlap highlight band (drawn first, behind everything) ---
+\fill[boxorange, opacity=0.6] (\ox-0.1,-5.05) rectangle (\dx+3.9,-6.05);
+% --- actors and lifelines ---
+\node[actor, fill=boxgreen] (orin)    at (\ox,0) {Orin Nano\\\texttt{robot\_client}};
+\node[actor, fill=boxblue]  (desktop) at (\dx,0) {Desktop\\\texttt{policy\_server}};
+\draw[lifeline] (orin.south)    -- (\ox,-8.6);
+\draw[lifeline] (desktop.south) -- (\dx,-8.6);
+
+% ============ initial round ============
+% (1) observation -> server
+\draw[msg] (\ox,-1.5) -- node[mlabel]{Observation} (\dx-0.16,-1.5);
+\node[snum] at (\ox+0.75,-1.5) {1};
+\node[note, anchor=north] at ({(\ox+\dx)/2},-1.72) {gRPC / Tailscale $\cdot$ 측정 네트워크 지연 33 ms};
+% server inference (activation bar)
+\draw[fill=boxblue, draw=black!55] (\dx-0.16,-1.95) rectangle (\dx+0.16,-3.0);
+\node[note, anchor=west] at (\dx+0.55,-2.475) {추론 (50-action chunk)\\ACT 169 ms $\cdot$ SmolVLA 879 ms};
+% (2) action chunk -> robot
+\draw[msg] (\dx-0.16,-3.1) -- node[mlabel]{Action chunk (50 actions)} (\ox,-3.1);
+\node[snum] at (\dx-0.75,-3.1) {2};
+
+% robot executes current chunk (long activation bar)
+\draw[fill=boxgreen, draw=black!55] (\ox-0.16,-3.4) rectangle (\ox+0.16,-8.2);
+\draw[brace] (\ox-0.32,-3.4) -- (\ox-0.32,-8.2);
+\node[anchor=east, align=right, font=\sffamily\scriptsize] at (\ox-0.5,-5.8) {현재 청크 실행\\30 Hz $\cdot$ 약 1.67 s};
+
+% ============ overlapped round (executes while server infers) ============
+% (3) next observation sent before queue depletes
+\draw[msg] (\ox+0.16,-4.55) -- node[mlabel]{Next observation} (\dx-0.16,-4.55);
+\node[snum] at (\ox+0.9,-4.55) {3};
+% server prepares next chunk (inside overlap band)
+\draw[fill=boxblue, draw=black!55] (\dx-0.16,-5.05) rectangle (\dx+0.16,-6.05);
+\node[note, anchor=west] at (\dx+0.55,-5.55) {다음 청크 준비\\현재 실행과 병렬 추론};
+% (4) next chunk arrives before current chunk depletes
+\draw[msg] (\dx-0.16,-6.15) -- node[mlabel]{Next action chunk} (\ox+0.16,-6.15);
+\node[snum] at (\dx-0.9,-6.15) {4};
+% queued-ahead brace on robot side
+\draw[decorate, decoration={brace, amplitude=4pt, mirror}, black!45, thick] (\ox+0.32,-6.2) -- (\ox+0.32,-8.15);
+\node[anchor=west, align=left, font=\sffamily\scriptsize, text=black!70] at (\ox+0.5,-7.175) {새 청크를 큐에 적재\\제어 끊김 없이 이어짐};
+\end{tikzpicture}%
+}
+\caption{gRPC 기반 비동기 추론 및 액션 청크 실행 시퀀스. 초기 라운드(①~②)로 첫 청크를 실행한 뒤, 현재 청크를 실행하는 동안(③) 다음 관측을 전송하여 서버가 병렬로 다음 청크를 준비한다(주황 음영). 새 청크는 현재 청크가 고갈되기 전에 도착(④)하므로 제어 끊김 없이 이어진다.}
+\label{fig:async-inference-sequence}
+\end{figure}
+
 한 번의 추론으로 생성하는 50개 액션은 30Hz 제어에서 약 1.67초의 동작에 해당한다. ACT의 169ms와 SmolVLA의 879ms는 모두 이 청크 실행 시간보다 짧으므로, 현재 CPU 구성에서도 다음 청크를 실행 전에 생성할 수 있는 연산 성능을 확인하였다. 향후 GPU 옵션을 적용하여 추론 시간을 다시 측정하고, 평균값뿐 아니라 최대 지연, 액션 큐 고갈과 연속 rollout 중 제어 끊김 여부를 함께 검증한다.
 
-\section{미해결 사항 및 다음 우선순위}
+\section{잔여 과제 및 후속 검증 계획}
 
-\begin{itemize}
-    \item 새 카메라와 테이프 환경 기준으로 에피소드 재수집 및 위치와 색상 다양성 확대 
-    \item 복구(recovery) 시연을 포함한 데이터 보강으로 파지 실패 구간 개선
-    \item 동일 조건에서 Task ID 기반 ACT, SmolVLA, 하이브리드 ACT--CV/IK의 성공률 및 실행 시간 비교
-    \item 탑다운 카메라 homography 보정, HSV 임계값 목표 검출, 1차 미션의 5개 비중첩 배치 슬롯과 IK 배치 오차 검증
-    \item 그리퍼, FK와 retreat 자세를 이용한 파지 확인, 실패 시 ACT 재시도와 전환 조건 검증
-    \item 지정구역 색상 간섭 원인 실측 및 대책 확정 (빨간 블록 데이터 재개 여부 결정)
-    \item GPU 추론 시간, 최대 네트워크 지연과 액션 큐 고갈 여부 측정
-    \item Docker 기반 \texttt{policy\_server} 환경 구축 및 NVIDIA 드라이버 580 평가 서버 호환성 검증
-    \item 2차 미션(적재) 데이터 수집 및 검증
-\end{itemize}
+현재까지 수집, 학습과 원격 추론의 기본 파이프라인을 확보하였으며, 이후에는 환경 변경에 따른 데이터 정비, 정책 후보 비교, 하이브리드 제어 구현과 실행 안정성 검증을 순차적으로 진행한다. 각 과제의 현재 상태와 완료 기준은 표~\ref{tab:next-steps}와 같다.
+
+\begin{longtable}{@{}p{0.20\linewidth}p{0.39\linewidth}p{0.33\linewidth}@{}}
+\caption{잔여 과제 및 후속 검증 계획}\label{tab:next-steps}\\
+\toprule
+과제 & 현재 상태 & 후속 검증 기준 \\
+\midrule
+\endfirsthead
+\toprule
+과제 & 현재 상태 & 후속 검증 기준 \\
+\midrule
+\endhead
+실험 환경과 데이터 정비 & 카메라 높이와 지정구역 테이프 배치가 변경되어 새 환경 기준의 데이터가 필요하다. 색상과 초기 위치 다양성, 느린 접근과 정렬 시연을 보강하고 빨간 블록의 경계선 방향 이동 원인을 확인한다. & 새 환경 기준의 수집 조건을 확정하고, 정책 학습에 사용할 데이터셋을 재구축한다. \\
+\addlinespace
+정책 후보 비교 & 일반 ACT와 SmolVLA의 초기 rollout을 수행하였다. Task ID 기반 ACT와 하이브리드 ACT--CV/IK는 동일 조건 비교가 남아 있다. & 동일 초기 위치에서 반복 rollout을 수행하여 미션별 성공률, 실패 단계, 수행 시간과 추가 데이터 또는 보정 부담을 기록한다. \\
+\addlinespace
+하이브리드 CV/IK 검증 & HSV 기반 블록 검출, homography 좌표 변환, 비중첩 배치 슬롯과 IK 이동의 구현 및 ACT 전환 조건 검증이 필요하다. & CV 목표 좌표 오차, IK 배치 오차, ACT에서 CV/IK로의 전환 성공 여부를 측정한다. \\
+\addlinespace
+원격 추론 안정성 및 배포 & gRPC 기반 원격 추론과 CPU 기준 액션 청크 시간을 측정하였다. GPU 적용 성능과 장시간 실행 안정성, Docker 기반 평가 환경 호환성은 추가 확인이 필요하다. & GPU 적용 후 추론 시간, 최대 네트워크 지연, 액션 큐 고갈과 연속 rollout 중 제어 끊김 여부를 점검하고 평가 환경에서 정책 서버를 실행한다. \\
+\bottomrule
+\end{longtable}
+
+환경과 데이터 정비를 먼저 완료한 뒤 정책 후보 비교와 하이브리드 제어 구현을 병행한다. 이후 비교 결과로 최종 후보를 정하고, 해당 후보에 대해 원격 실행 안정성과 평가 환경 호환성을 검증한다.
 
 % =====================================================================
 \begin{thebibliography}{99}
