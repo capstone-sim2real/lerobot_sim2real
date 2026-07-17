@@ -1,0 +1,14 @@
+# Named joint poses, recorded on the physical arm:
+#
+#   python -m pick_stack.tools.record_pose --name home
+#
+# 필요한 포즈 (기록 순서 권장):
+#   home              시작/복귀 자세 (텔레옵 녹화 컨벤션과 동일해야 함)
+#   retreat           PICK 종료 자세 = 에피소드 END 자세 (블록 든 상태)
+#   zone_approach     zone 상공 경유점 (TRANSPORT 종점)
+#   slot_0 .. slot_4  Task 1 배치 슬롯 (20x10cm zone 안 3+2 배열, 저고도)
+#   tower_approach    Task 2 타워 상공 자세
+#   tower_descent_0..N  하강 키프레임 래더 (_0 최고 높이 → _N 바닥 근접)
+#
+# 주의: 값은 캘리브레이션 종속 — 재캘리브레이션 후에는 전부 재기록.
+poses: {}

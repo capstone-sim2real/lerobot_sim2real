@@ -35,6 +35,23 @@ sensing:
   contact_load_delta: 80.0
   contact_baseline_samples: 5
 
+motion:
+  poses_path: src/pick_stack/configs/poses.yaml
+  fps: 30.0
+  max_step_per_tick: 2.0
+  descent_step_per_tick: 0.6
+  arrival_tol: 3.0
+  move_timeout_s: 10.0
+  gripper_action_wait_s: 0.6
+  home_pose: home
+  retreat_pose: retreat
+  transport_waypoints: [zone_approach]
+  slot_poses: [slot_0, slot_1, slot_2, slot_3, slot_4]
+  tower_approach_pose: tower_approach
+  tower_ladder_prefix: tower_descent
+  contact_backoff_ticks: 1
+  place_settle_s: 0.5
+
 fsm:
   num_blocks: 5
   time_budget_s: 300.0
