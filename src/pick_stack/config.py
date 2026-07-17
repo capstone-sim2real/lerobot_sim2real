@@ -39,6 +39,39 @@ class RobotIOConfig:
 
 
 @dataclass
+class PolicyConfig:
+    """PICK policy served remotely (Orin cannot run inference — AGENTS.md §7).
+
+    The async chain parameters (actions_per_chunk / chunk_size_threshold /
+    aggregate) mirror lerobot's validated robot_client values; tune
+    chunk_size_threshold against inference latency, one variable at a time.
+    """
+
+    server_address: str = "127.0.0.1:8080"
+    policy_type: str = "act"
+    # path on the MACHINE RUNNING policy_server, not on the Orin
+    pretrained_name_or_path: str = ""
+    # must match the recording convention's single_task string
+    task: str = "Pick the nearest block, lift it vertically, and move to the fixed retreat pose."
+    policy_device: str = "cuda"
+    actions_per_chunk: int = 50
+    chunk_size_threshold: float = 0.5
+    aggregate_fn_name: str = "weighted_average"  # or "latest"
+    aggregate_weight: float = 0.5  # weight of the incoming action in weighted_average
+    fps: float = 30.0
+    connect_timeout_s: float = 5.0
+    # PICK termination: episodes are trained to end at the fixed retreat pose,
+    # so K consecutive ticks within tolerance = successful handoff
+    retreat_tol: float = 4.0
+    retreat_hold_ticks: int = 5
+    # gripper excluded: its position depends on what is being held
+    retreat_check_joints: list[str] = field(
+        default_factory=lambda: ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
+    )
+    pick_timeout_s: float = 25.0
+
+
+@dataclass
 class FsmConfig:
     num_blocks: int = 5
     time_budget_s: float = 300.0
@@ -58,6 +91,7 @@ class LoggingConfig:
 @dataclass
 class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
+    policy: PolicyConfig = field(default_factory=PolicyConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
