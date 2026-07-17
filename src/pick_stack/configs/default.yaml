@@ -77,6 +77,23 @@ motion:
   contact_backoff_ticks: 1
   place_settle_s: 0.5
 
+policy:
+  server_address: 127.0.0.1:8080     # Tailscale의 policy_server 주소로 변경
+  policy_type: act
+  pretrained_name_or_path: ""        # policy_server가 도는 머신 기준 경로
+  task: "Pick the nearest block, lift it vertically, and move to the fixed retreat pose."
+  policy_device: cuda
+  actions_per_chunk: 50
+  chunk_size_threshold: 0.5
+  aggregate_fn_name: weighted_average
+  aggregate_weight: 0.5
+  fps: 30.0
+  connect_timeout_s: 5.0
+  retreat_tol: 4.0
+  retreat_hold_ticks: 5
+  retreat_check_joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll]
+  pick_timeout_s: 25.0
+
 fsm:
   num_blocks: 5
   time_budget_s: 300.0
