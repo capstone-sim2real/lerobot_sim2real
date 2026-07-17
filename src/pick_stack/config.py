@@ -39,6 +39,38 @@ class RobotIOConfig:
 
 
 @dataclass
+class SensingConfig:
+    """Grasp verification + contact detection thresholds.
+
+    All load values are lerobot's decoded Present_Load (signed int, sign =
+    direction). Defaults are placeholders — measure real distributions with
+    tools/tune_gripper_load.py before trusting them.
+    """
+
+    # gripper commands (normalized RANGE_0_100). The open width must match
+    # the teleop recording convention (EPISODE.md fixes it per dataset).
+    gripper_open_pos: float = 50.0
+    gripper_close_pos: float = 2.0
+    # grasp check, primary signal: a held 20 mm block stops the gripper well
+    # above the empty-hand closed position
+    gripper_empty_closed_max: float = 6.0
+    # grasp check, secondary signal: sustained |Present_Load| on the gripper
+    gripper_load_min: float = 120.0
+    # position_only | load_only | position_and_load | position_or_load
+    grasp_check_mode: str = "position_and_load"
+    # let the close settle before sampling
+    grasp_settle_s: float = 0.4
+    grasp_samples: int = 5
+    sample_interval_s: float = 0.05
+    # contact detection during stack descent: |load - baseline| spike on any
+    # of these joints. Contact can *reduce* load (surface takes the gravity
+    # torque), hence the absolute delta.
+    contact_joints: list[str] = field(default_factory=lambda: ["shoulder_lift", "elbow_flex"])
+    contact_load_delta: float = 80.0
+    contact_baseline_samples: int = 5
+
+
+@dataclass
 class FsmConfig:
     num_blocks: int = 5
     time_budget_s: float = 300.0
@@ -58,6 +90,7 @@ class LoggingConfig:
 @dataclass
 class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
+    sensing: SensingConfig = field(default_factory=SensingConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
