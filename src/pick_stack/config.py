@@ -39,6 +39,54 @@ class RobotIOConfig:
 
 
 @dataclass
+class PerceptionConfig:
+    """Top-down camera perception. Metric values are in the board frame (mm)
+    defined by the venue calibration JSON (tools/calibrate_homography.py)."""
+
+    # venue calibration produced by tools/calibrate_homography.py
+    calibration_path: str = "src/pick_stack/configs/calib/venue_default.json"
+    top_camera_key: str = "top"
+    # chessboard square edge length on the physical board — measure it!
+    square_mm: float = 25.0
+    # minimal inner-corner grid to search for; CALIB_CB_LARGER extends it,
+    # so partial board views (tight framing) still calibrate
+    min_pattern: list[int] = field(default_factory=lambda: [5, 5])
+    # rectified top-down view scale used by the detector
+    rectified_mm_per_px: float = 1.0
+    # colour -> list of HSV bands [h_lo, s_lo, v_lo, h_hi, s_hi, v_hi]
+    # (OpenCV hue 0-179; red wraps around, hence two bands).
+    # NOTE: tuned on synthetic fixtures only — re-tune on real frames with
+    # tools/view_detect.py before trusting them.
+    hsv_ranges: dict[str, list[list[int]]] = field(
+        default_factory=lambda: {
+            "red": [[0, 90, 60, 8, 255, 255], [172, 90, 60, 179, 255, 255]],
+            "yellow": [[26, 90, 80, 34, 255, 255]],
+            "green": [[40, 60, 50, 85, 255, 255]],
+            "blue": [[95, 90, 50, 130, 255, 255]],
+            "wood": [[10, 40, 80, 25, 180, 255]],
+        }
+    )
+    # block top face is 40x40 mm = 1600 mm^2; allow perspective/mask slack
+    area_mm2_min: float = 900.0
+    area_mm2_max: float = 2600.0
+    # geometry filters that reject tape: elongated / hollow / sparse shapes
+    aspect_ratio_max: float = 1.6
+    solidity_min: float = 0.85
+    fill_min: float = 0.65
+    morph_kernel_px: int = 5
+
+
+@dataclass
+class SelectConfig:
+    # deterministic rule; must match the teleop demonstration convention
+    rule: str = "nearest_first"
+    # blocks within this margin of the zone polygon count as "already placed"
+    zone_margin_mm: float = 20.0
+    # quantization cell for stable target ids across re-detections
+    target_cell_mm: float = 40.0
+
+
+@dataclass
 class FsmConfig:
     num_blocks: int = 5
     time_budget_s: float = 300.0
@@ -58,6 +106,8 @@ class LoggingConfig:
 @dataclass
 class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
+    perception: PerceptionConfig = field(default_factory=PerceptionConfig)
+    select: SelectConfig = field(default_factory=SelectConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 

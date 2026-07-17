@@ -21,6 +21,31 @@ robot:
       fps: 30
       fourcc: MJPG
 
+perception:
+  calibration_path: src/pick_stack/configs/calib/venue_default.json
+  top_camera_key: top
+  square_mm: 25.0        # 실제 체스판 한 칸 길이 실측 후 수정
+  min_pattern: [5, 5]
+  rectified_mm_per_px: 1.0
+  # 합성 픽스처 기준값 — 실프레임으로 tools/view_detect.py 돌려서 재튜닝 필수
+  hsv_ranges:
+    red: [[0, 90, 60, 8, 255, 255], [172, 90, 60, 179, 255, 255]]
+    yellow: [[26, 90, 80, 34, 255, 255]]
+    green: [[40, 60, 50, 85, 255, 255]]
+    blue: [[95, 90, 50, 130, 255, 255]]
+    wood: [[10, 40, 80, 25, 180, 255]]
+  area_mm2_min: 900.0
+  area_mm2_max: 2600.0
+  aspect_ratio_max: 1.6
+  solidity_min: 0.85
+  fill_min: 0.65
+  morph_kernel_px: 5
+
+select:
+  rule: nearest_first
+  zone_margin_mm: 20.0
+  target_cell_mm: 40.0
+
 fsm:
   num_blocks: 5
   time_budget_s: 300.0
