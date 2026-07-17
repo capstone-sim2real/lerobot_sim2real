@@ -60,6 +60,10 @@ class BaseRobotIO(abc.ABC):
     def read_loads(self) -> dict[str, int]:
         """Raw Present_Load per joint (unnormalized; sign encodes direction)."""
 
+    @abc.abstractmethod
+    def set_torque(self, enabled: bool) -> None:
+        """Enable/disable holding torque on all joints (pose recording uses off)."""
+
 
 class So101RobotIO(BaseRobotIO):
     """Real SO-101 follower behind the BaseRobotIO interface."""
@@ -115,6 +119,12 @@ class So101RobotIO(BaseRobotIO):
     def read_loads(self) -> dict[str, int]:
         return self.robot.bus.sync_read("Present_Load", normalize=False)
 
+    def set_torque(self, enabled: bool) -> None:
+        if enabled:
+            self.robot.bus.enable_torque()
+        else:
+            self.robot.bus.disable_torque()
+
 
 class MockRobotIO(BaseRobotIO):
     """In-memory stand-in for tests: joints teleport to commanded positions."""
@@ -126,6 +136,7 @@ class MockRobotIO(BaseRobotIO):
         self.loads: dict[str, int] = {name: 0 for name in JOINT_NAMES}
         self.frames: dict[str, Any] = {}
         self.sent_actions: list[dict[str, float]] = []
+        self.torque_enabled = True
         self._connected = False
 
     def connect(self) -> None:
@@ -153,3 +164,6 @@ class MockRobotIO(BaseRobotIO):
 
     def read_loads(self) -> dict[str, int]:
         return dict(self.loads)
+
+    def set_torque(self, enabled: bool) -> None:
+        self.torque_enabled = enabled

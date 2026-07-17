@@ -1,0 +1,75 @@
+import pytest
+
+from pick_stack.config import MotionConfig
+from pick_stack.control import MockRobotIO, TrajectoryPlayer, interpolate
+from pick_stack.control.robot_io import JOINT_NAMES
+
+
+def full_pose(value=0.0):
+    return {j: value for j in JOINT_NAMES}
+
+
+def fast_cfg(**kwargs):
+    # fps=0 -> no sleeps in tests
+    return MotionConfig(**{"fps": 0.0, "gripper_action_wait_s": 0.0, "place_settle_s": 0.0, **kwargs})
+
+
+def test_interpolate_caps_step_size():
+    start = {"shoulder_pan": 0.0, "elbow_flex": 0.0}
+    goal = {"shoulder_pan": 10.0, "elbow_flex": -5.0}
+    steps = interpolate(start, goal, max_step=2.0)
+    assert len(steps) == 5
+    assert steps[-1] == goal
+    previous = start
+    for step in steps:
+        for joint in goal:
+            assert abs(step[joint] - previous[joint]) <= 2.0 + 1e-9
+        previous = step
+
+
+def test_interpolate_noop_and_validation():
+    assert interpolate(full_pose(1.0), {j: 1.0 for j in JOINT_NAMES}, 2.0) == []
+    with pytest.raises(ValueError, match="max_step"):
+        interpolate(full_pose(), full_pose(1.0), 0.0)
+
+
+def test_interpolate_only_commands_goal_joints():
+    steps = interpolate({"shoulder_pan": 0.0, "gripper": 50.0}, {"shoulder_pan": 4.0}, 2.0)
+    assert all(set(step) == {"shoulder_pan"} for step in steps)
+
+
+def test_move_to_reaches_goal_through_bounded_steps():
+    robot = MockRobotIO()
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg(max_step_per_tick=2.0))
+    goal = {**full_pose(0.0), "shoulder_pan": 9.0}
+    final = player.move_to(goal)
+    assert final["shoulder_pan"] == pytest.approx(9.0)
+    # 9.0 / 2.0 -> 5 interpolation ticks, each within the cap
+    assert len(robot.sent_actions) == 5
+    assert abs(robot.sent_actions[0]["shoulder_pan"]) <= 2.0 + 1e-9
+
+
+def test_move_to_timeout_when_arm_stuck():
+    class StuckRobot(MockRobotIO):
+        def send_joints(self, positions):
+            self.sent_actions.append(dict(positions))
+            return dict(positions)  # joints never move
+
+    robot = StuckRobot()
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg(move_timeout_s=0.05, arrival_tol=0.5))
+    with pytest.raises(TimeoutError, match="did not reach"):
+        player.move_to({**full_pose(0.0), "shoulder_pan": 20.0})
+
+
+def test_follow_visits_waypoints_in_order():
+    robot = MockRobotIO()
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg())
+    w1 = {**full_pose(0.0), "shoulder_pan": 4.0}
+    w2 = {**full_pose(0.0), "shoulder_pan": 4.0, "elbow_flex": -6.0}
+    final = player.follow([w1, w2])
+    assert final["elbow_flex"] == pytest.approx(-6.0)
+    pans = [a.get("shoulder_pan") for a in robot.sent_actions if "shoulder_pan" in a]
+    assert pans == sorted(pans)  # monotonic approach, no jumps

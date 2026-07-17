@@ -87,6 +87,71 @@ class SelectConfig:
 
 
 @dataclass
+class SensingConfig:
+    """Grasp verification + contact detection thresholds.
+
+    All load values are lerobot's decoded Present_Load (signed int, sign =
+    direction). Defaults are placeholders — measure real distributions with
+    tools/tune_gripper_load.py before trusting them.
+    """
+
+    # gripper commands (normalized RANGE_0_100). The open width must match
+    # the teleop recording convention (EPISODE.md fixes it per dataset).
+    gripper_open_pos: float = 50.0
+    gripper_close_pos: float = 2.0
+    # grasp check, primary signal: a held 20 mm block stops the gripper well
+    # above the empty-hand closed position
+    gripper_empty_closed_max: float = 6.0
+    # grasp check, secondary signal: sustained |Present_Load| on the gripper
+    gripper_load_min: float = 120.0
+    # position_only | load_only | position_and_load | position_or_load
+    grasp_check_mode: str = "position_and_load"
+    # let the close settle before sampling
+    grasp_settle_s: float = 0.4
+    grasp_samples: int = 5
+    sample_interval_s: float = 0.05
+    # contact detection during stack descent: |load - baseline| spike on any
+    # of these joints. Contact can *reduce* load (surface takes the gravity
+    # torque), hence the absolute delta.
+    contact_joints: list[str] = field(default_factory=lambda: ["shoulder_lift", "elbow_flex"])
+    contact_load_delta: float = 80.0
+    contact_baseline_samples: int = 5
+
+
+@dataclass
+class MotionConfig:
+    """Scripted motion (TRANSPORT / PLACE / STACK). All joint values are in
+    the robot's action units (normalized; gripper 0-100) — poses recorded
+    with tools/record_pose.py are stored in the same units, so they become
+    invalid after recalibration and must be re-recorded."""
+
+    poses_path: str = "src/pick_stack/configs/poses.yaml"
+    fps: float = 30.0
+    # per-tick joint delta cap for interpolation (action units); the robot's
+    # own max_relative_target clamp stays on as a second net
+    max_step_per_tick: float = 2.0
+    # slower cap while descending onto the tower (contact must be gentle)
+    descent_step_per_tick: float = 0.6
+    # a move counts as arrived when every joint is within this tolerance
+    arrival_tol: float = 3.0
+    move_timeout_s: float = 10.0
+    # pause after open/close commands before moving on
+    gripper_action_wait_s: float = 0.6
+    # pose names (must exist in poses.yaml)
+    home_pose: str = "home"
+    retreat_pose: str = "retreat"
+    transport_waypoints: list[str] = field(default_factory=lambda: ["zone_approach"])
+    # Task 1: slot i is used for the (i+1)-th placed block
+    slot_poses: list[str] = field(default_factory=lambda: ["slot_0", "slot_1", "slot_2", "slot_3", "slot_4"])
+    # Task 2: approach above the tower, then descend along the ladder
+    tower_approach_pose: str = "tower_approach"
+    tower_ladder_prefix: str = "tower_descent"
+    # ticks to reverse after contact before releasing (0 = release in place)
+    contact_backoff_ticks: int = 1
+    place_settle_s: float = 0.5
+
+
+@dataclass
 class FsmConfig:
     num_blocks: int = 5
     time_budget_s: float = 300.0
@@ -108,6 +173,8 @@ class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
     perception: PerceptionConfig = field(default_factory=PerceptionConfig)
     select: SelectConfig = field(default_factory=SelectConfig)
+    sensing: SensingConfig = field(default_factory=SensingConfig)
+    motion: MotionConfig = field(default_factory=MotionConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
