@@ -11,6 +11,7 @@ def test_defaults_without_yaml():
     cfg = load_config()
     assert cfg.fsm.num_blocks == 5
     assert cfg.fsm.time_budget_s == 300.0
+    assert cfg.robot.disable_torque_on_disconnect is False
     assert set(cfg.robot.cameras) == {"top", "wrist"}
 
 
