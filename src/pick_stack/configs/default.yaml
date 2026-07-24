@@ -1,0 +1,32 @@
+# pick_stack default configuration.
+# Every key mirrors a dataclass field in pick_stack/config.py — unknown keys
+# are rejected at load time. Override at runtime with --set key.path=value.
+
+robot:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
+  id: my_follower
+  max_relative_target: 10.0
+  disable_torque_on_disconnect: false
+  cameras:
+    top:
+      index_or_path: /dev/video0
+      width: 640
+      height: 480
+      fps: 30
+      fourcc: MJPG
+    wrist:
+      index_or_path: /dev/video2
+      width: 640
+      height: 480
+      fps: 30
+      fourcc: MJPG
+
+fsm:
+  num_blocks: 5
+  time_budget_s: 300.0
+  max_retries_per_block: 2
+  reserve_time_s: 10.0
+
+logging:
+  log_dir: logs/pick_stack
+  save_transitions: true

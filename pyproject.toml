@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pick-stack"
+version = "0.1.0"
+description = "SO-101 pick & stack hybrid FSM (ACT pick + rule-based transport/place)"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pick_stack = ["configs/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

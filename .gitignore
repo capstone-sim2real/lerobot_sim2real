@@ -27,3 +27,7 @@ dist/
 
 # Logs
 *.log
+logs/pick_stack/
+
+# Test caches
+.pytest_cache/
