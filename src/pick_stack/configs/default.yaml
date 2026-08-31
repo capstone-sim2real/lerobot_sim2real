@@ -6,7 +6,7 @@ robot:
   port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
   id: my_follower
   max_relative_target: 10.0
-  disable_torque_on_disconnect: true
+  disable_torque_on_disconnect: false
   cameras:
     top:
       index_or_path: /dev/video0

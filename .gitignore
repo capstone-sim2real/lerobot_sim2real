@@ -31,3 +31,6 @@ logs/pick_stack/
 
 # Test caches
 .pytest_cache/
+
+# Docker build staging (model checkpoints)
+models/

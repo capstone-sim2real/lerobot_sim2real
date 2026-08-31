@@ -27,7 +27,9 @@ class RobotIOConfig:
     port: str = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00"
     id: str = "my_follower"
     max_relative_target: float = 10.0
-    disable_torque_on_disconnect: bool = True
+    # Keep the arm holding its safe pose after a normal task shutdown.
+    # Releasing torque must be an explicit manual operation.
+    disable_torque_on_disconnect: bool = False
     # name -> OpenCVCameraConfig kwargs; physical top camera must map to key
     # "top" and wrist camera to key "wrist" (dataset convention, EPISODE.md).
     cameras: dict[str, dict[str, Any]] = field(
