@@ -34,7 +34,7 @@ class RobotIOConfig:
     # "top" and wrist camera to key "wrist" (dataset convention, EPISODE.md).
     cameras: dict[str, dict[str, Any]] = field(
         default_factory=lambda: {
-            "top": {"index_or_path": "/dev/video0", "width": 640, "height": 480, "fps": 30, "fourcc": "MJPG"},
+            "top": {"index_or_path": "/dev/video0", "width": 1280, "height": 720, "fps": 30, "fourcc": "MJPG"},
             "wrist": {"index_or_path": "/dev/video2", "width": 640, "height": 480, "fps": 30, "fourcc": "MJPG"},
         }
     )
@@ -97,15 +97,19 @@ class SensingConfig:
     tools/tune_gripper_load.py before trusting them.
     """
 
-    # gripper commands (normalized RANGE_0_100). The open width must match
-    # the teleop recording convention (EPISODE.md fixes it per dataset).
-    gripper_open_pos: float = 50.0
+    # gripper commands (normalized RANGE_0_100; measured mechanical range on
+    # the team's arm is 0..77.69, tools/so101_gripper_probe.sh). Only the
+    # FSM's own open/close bookkeeping reads this — the ACT/teleop path
+    # commands the gripper itself and never reads these fields.
+    gripper_open_pos: float = 70.0
     gripper_close_pos: float = 2.0
-    # grasp check, primary signal: a held 20 mm block stops the gripper well
-    # above the empty-hand closed position
-    gripper_empty_closed_max: float = 6.0
+    # grasp check thresholds, measured 2026-08-31 (tune_gripper_load.py,
+    # --mode grasp, 6 trials): held pos=44.1..44.3 load=500(saturated);
+    # empty pos=3.4 load=39..41. Values below sit at the midpoint of each
+    # measured pair for margin on both sides.
+    gripper_empty_closed_max: float = 20.0
     # grasp check, secondary signal: sustained |Present_Load| on the gripper
-    gripper_load_min: float = 120.0
+    gripper_load_min: float = 200.0
     # position_only | load_only | position_and_load | position_or_load
     grasp_check_mode: str = "position_and_load"
     # let the close settle before sampling

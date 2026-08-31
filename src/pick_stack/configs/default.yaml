@@ -10,8 +10,8 @@ robot:
   cameras:
     top:
       index_or_path: /dev/video0
-      width: 640
-      height: 480
+      width: 1280
+      height: 720
       fps: 30
       fourcc: MJPG
     wrist:
@@ -47,11 +47,13 @@ select:
   target_cell_mm: 40.0
 
 sensing:
-  # 실측 전 가정값 — tools/tune_gripper_load.py로 분포 찍고 재설정 필수
-  gripper_open_pos: 50.0     # 텔레옵 녹화 컨벤션의 open width와 일치시킬 것
+  # 실측 완료 (2026-08-31, tune_gripper_load.py --mode grasp, 6 trials):
+  #   잡힘: pos=44.1~44.3  load=500(포화)   빈손: pos=3.4  load=39~41
+  # 두 분포가 완전히 분리되어 있어 아래 값은 그 중간으로 넉넉하게 잡음.
+  gripper_open_pos: 70.0     # 실측: 기계 범위 0~77.69, 70이면 40mm 블록이 여유 있게 들어감
   gripper_close_pos: 2.0
-  gripper_empty_closed_max: 6.0
-  gripper_load_min: 120.0
+  gripper_empty_closed_max: 20.0
+  gripper_load_min: 200.0
   grasp_check_mode: position_and_load
   grasp_settle_s: 0.4
   grasp_samples: 5
