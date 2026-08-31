@@ -1,1 +1,10 @@
 name,image,u_px,v_px,x_m,y_m,z_m,notes
+P1,p1_top.jpg,453.37,578.82,0.080694,0.107757,0.004972,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P2,p2_top.jpg,577.52,522.10,0.103341,0.001084,0.004533,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P3,p3_top.jpg,718.82,593.74,0.057646,-0.109220,0.003695,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P4,p4_top.jpg,380.74,472.09,0.163597,0.146408,0.003677,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P5,p5_top.jpg,563.28,406.78,0.214873,0.007123,0.007481,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P6,p6_top.jpg,794.07,465.66,0.137713,-0.170956,0.003428,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P7,p7_top.jpg,316.66,384.11,0.233606,0.201980,0.006554,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P8,p8_top.jpg,564.84,298.29,0.302587,0.007771,0.003127,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P9,p9_top.jpg,838.24,372.05,0.231821,-0.191028,0.005821,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection

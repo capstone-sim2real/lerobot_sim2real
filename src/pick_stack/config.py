@@ -158,6 +158,35 @@ class MotionConfig:
 
 
 @dataclass
+class IkConfig:
+    """Cartesian IK for the CV+IK pick path (AGENTS.md §7).
+
+    Placo's IK is seed-sensitive: a bad seed converges to hundreds of mm of
+    error, so ``TopDownIK`` pre-builds a lookup table of top-down joint
+    configurations (via forward kinematics, cached to disk) and seeds every
+    solve from the nearest entry.
+    """
+
+    urdf_path: str = "third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+    target_frame: str = "gripper_frame_link"
+    # seed table: joint sweep step and range (degrees) per lift/elbow/wrist_flex
+    seed_step_deg: float = 3.0
+    seed_range_deg: float = 100.0
+    # a seed config counts as "top-down" when its approach axis is within
+    # this many degrees of straight down
+    seed_tilt_max_deg: float = 3.0
+    seed_cache_path: str = "src/pick_stack/configs/calib/ik_seed_table.npz"
+    # pan-offset retries to absorb the gripper's lateral offset from the pan
+    # axis (AGENTS.md §7 measured ~27mm)
+    pan_offset_candidates_deg: list[float] = field(default_factory=lambda: [0.0, 6.0, -6.0, 12.0, -12.0])
+    ik_iters: int = 8
+    # reject a solve whose achieved pose misses the target by more than this
+    # (signals the target is outside the top-down-reachable workspace)
+    max_position_error_mm: float = 15.0
+    max_tilt_error_deg: float = 6.0
+
+
+@dataclass
 class PolicyConfig:
     """PICK policy served remotely (Orin cannot run inference — AGENTS.md §7).
 
@@ -214,6 +243,7 @@ class AppConfig:
     select: SelectConfig = field(default_factory=SelectConfig)
     sensing: SensingConfig = field(default_factory=SensingConfig)
     motion: MotionConfig = field(default_factory=MotionConfig)
+    ik: IkConfig = field(default_factory=IkConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)

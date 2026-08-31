@@ -29,6 +29,9 @@ dist/
 *.log
 logs/pick_stack/
 
+# Regenerable IK seed table (control/ik.py rebuilds it in ~13s from the URDF)
+src/pick_stack/configs/calib/ik_seed_table.npz
+
 # Test caches
 .pytest_cache/
 
