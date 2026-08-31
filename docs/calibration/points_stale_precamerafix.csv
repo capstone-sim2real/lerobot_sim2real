@@ -1,0 +1,5 @@
+name,image,u_px,v_px,x_m,y_m,z_m,notes
+P1,p1_top_stable.jpg,,,0.093181,0.120804,-0.039560,FK at gripper_frame_link; capture after camera mount was stabilized
+P3,p3_top.jpg,,,0.390634,0.208497,-0.029820,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P7,p7_top.jpg,,,0.040946,-0.148840,-0.040067,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P9,p9_top.jpg,,,0.328460,-0.243129,-0.048356,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection

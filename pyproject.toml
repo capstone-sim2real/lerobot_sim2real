@@ -9,12 +9,13 @@ description = "SO-101 pick & stack hybrid FSM (ACT pick + rule-based transport/p
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml>=6.0",
+    "numpy>=2.0.0,<2.3.0",
+    "opencv-python-headless>=4.9.0,<4.14.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "numpy",
 ]
 
 [tool.setuptools.packages.find]
