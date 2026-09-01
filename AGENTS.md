@@ -1,6 +1,6 @@
 # AGENTS.md — SO-101 Pick & Stack 설계 규칙
 
-이 문서는 `src/pick_stack/` 코드가 주석에서 참조하는 설계 규칙의 원본이다
+이 문서는 `src/` 코드가 주석에서 참조하는 설계 규칙의 원본이다
 (`AGENTS.md §3`, `§4`, `§5`, `§9`, `§11` 등). 코드를 수정하는 에이전트는
 먼저 이 문서를 읽고, 여기 규칙과 충돌하는 변경을 하지 않는다.
 
@@ -32,10 +32,10 @@
 ~/lerobot/.venv        공용 venv (placo 설치됨)
 ```
 
-`src/pick_stack/`가 본체다. LeRobot은 서브모듈이 아니라 별도 위치의 설치본이며,
+`src/`가 본체다. LeRobot은 서브모듈이 아니라 별도 위치의 설치본이며,
 `scripts/so101_env.sh`가 venv를 활성화한다.
 
-**`import pick_stack`는 lerobot·placo·torch 없이도 성공해야 한다.** 하드웨어
+**`import config`는 lerobot·placo·torch 없이도 성공해야 한다.** 하드웨어
 의존 모듈은 전부 함수 안에서 lazy import 한다. CI/단위 테스트가 이에 의존한다.
 
 ## §3 태스크 흐름 (FSM)
@@ -121,7 +121,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
 
 ## §7 역기구학 (IK)
 
-측정으로 확인된 SO-101 기구학 특성 (`so101_new_calib.urdf`, `gripper_frame_link`):
+측정으로 확인된 SO-101 기구학 특성 (`third_party/so101/so101.urdf`, `gripper_frame_link`):
 
 - **`z_g`(회전행렬 3번째 열)가 접근축이다.** 탑다운 파지 = `z_g ≈ (0,0,-1)`.
 - **`shoulder_pan` 부호는 atan2와 반대다.** 양의 pan → 음의 y.
@@ -230,7 +230,7 @@ PYTHONPATH=src uv run --no-project --python 3.12 \
 ## §14 에이전트 작업 규칙
 
 1. **기존 보고서와 모방학습 코드는 수정·삭제하지 않는다.**
-   `src/pick_stack/policy/*`, `src/pick_stack/fsm/handlers.py`, `docs/report/*`는
+   `src/policy/*`, `src/fsm/handlers.py`, `docs/report/*`는
    읽기 전용으로 취급한다. CV+IK 작업은 전부 **추가(additive)** 로 한다.
 2. 기존 함수를 먼저 찾아 재사용한다. 특히 `calibrate_from_pairs()`,
    `interpolate()`, `TrajectoryPlayer`, `check_grasp()`, `ContactMonitor`,

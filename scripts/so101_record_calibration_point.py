@@ -23,7 +23,7 @@ from lerobot.robots.so_follower.so_follower import SOFollower
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_URDF = PROJECT_ROOT / "third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+DEFAULT_URDF = PROJECT_ROOT / "third_party/so101/so101.urdf"
 ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
 # Joint angles are recorded alongside the FK position because the position
 # alone cannot be re-analysed later: gripper_frame_link sits ~8mm off the

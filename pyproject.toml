@@ -21,8 +21,8 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-pick_stack = ["configs/*.yaml"]
+[tool.setuptools]
+py-modules = ["config"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

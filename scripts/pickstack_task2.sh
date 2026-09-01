@@ -10,4 +10,4 @@ source "$SCRIPT_DIR/so101_env.sh"
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 cd "$REPO_ROOT"
-exec python -m pick_stack.runners.run_task --task 2 "$@"
+exec python -m runners.run_task --task 2 "$@"

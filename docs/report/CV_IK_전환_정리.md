@@ -242,19 +242,19 @@ IK 모델 내 수렴 오차        0.00 mm          25점 중 23점
 
 ```bash
 # 카메라 마운트 드리프트 검사
-python -m pick_stack.tools.camera_drift_check --watch 600
+python -m tools.camera_drift_check --watch 600
 
 # 캘리브레이션 점 기록 (손목 각도 실시간 확인용 프로브 병행)
 ./scripts/so101_fk_probe.sh
 ./scripts/so101_calib_point.sh P1
 
 # 픽셀 자동 검출 및 homography 적합 (잔차·LOO 출력)
-python -m pick_stack.tools.auto_pick_pixels --color green
-python -m pick_stack.tools.calibrate_base_frame --out <출력경로>
+python -m tools.auto_pick_pixels --color green
+python -m tools.calibrate_base_frame --out <출력경로>
 
 # 그리퍼 파지 임계값 측정
-python -m pick_stack.tools.tune_gripper_load --mode grasp --csv <출력경로>
+python -m tools.tune_gripper_load --mode grasp --csv <출력경로>
 
 # 전체 파이프라인 시험 (계획만 출력하려면 --dry-run)
-python -m pick_stack.tools.demo_pick_and_place --color green --to P8
+python -m tools.demo_pick_and_place --color green --to P8
 ```

@@ -65,10 +65,17 @@ cd ~/lerobot_sim2real
 ./scripts/so101_camera_web.sh
 ```
 
+에이전트 검토용으로 프레임을 주기 저장하려면 다음처럼 실행합니다.
+
+```bash
+SO101_CAMERA_SAVE_DIR=logs/camera SO101_CAMERA_SAVE_INTERVAL_S=2 \
+  ./scripts/so101_camera_web.sh
+```
+
 색으로 블록을 찾아 집어서 지정 좌표로 옮기기 (카메라 서버를 먼저 띄워둔 채로):
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_place \
+PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
   --color green --to P13
 ```
 
@@ -89,7 +96,6 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_plac
 │   └── report/                착수보고서 등 제출 문서
 ├── scripts/                   SO-101 실행 래퍼 스크립트
 ├── third_party/               외부 참고 자산
-└── tools/benchmark/llm/       llama.cpp 기반 LLM 벤치마크
 ```
 
 LeRobot은 저장소 안에 복사하지 않고 별도 위치에 둡니다.

@@ -1,0 +1,129 @@
+# pick_stack default configuration.
+# Every key mirrors a dataclass field in pick_stack/config.py — unknown keys
+# are rejected at load time. Override at runtime with --set key.path=value.
+
+robot:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
+  id: my_follower
+  max_relative_target: 10.0
+  disable_torque_on_disconnect: false
+  cameras: {}
+
+perception:
+  calibration_path: src/configs/calib/venue_lab.json
+  snapshot_url: http://127.0.0.1:8090/snapshot/shoulder.jpg
+  square_mm: 25.0        # 실제 체스판 한 칸 길이 실측 후 수정
+  min_pattern: [5, 5]
+  rectified_mm_per_px: 1.0
+  # 합성 픽스처 기준값 — 실프레임으로 tools/view_detect.py 돌려서 재튜닝 필수
+  hsv_ranges:
+    red: [[0, 90, 60, 8, 255, 255], [172, 90, 60, 179, 255, 255]]
+    yellow: [[26, 90, 80, 34, 255, 255]]
+    green: [[40, 60, 50, 85, 255, 255]]
+    blue: [[95, 90, 50, 130, 255, 255]]
+    wood: [[10, 40, 80, 25, 180, 255]]
+  area_mm2_min: 900.0
+  area_mm2_max: 2600.0
+  aspect_ratio_max: 1.6
+  solidity_min: 0.85
+  fill_min: 0.65
+  morph_kernel_px: 5
+
+select:
+  rule: nearest_first
+  zone_margin_mm: 20.0
+  target_cell_mm: 40.0
+
+sensing:
+  # 실측 완료 (2026-08-31, tune_gripper_load.py --mode grasp, 6 trials):
+  #   잡힘: pos=44.1~44.3  load=500(포화)   빈손: pos=3.4  load=39~41
+  # 두 분포가 완전히 분리되어 있어 아래 값은 그 중간으로 넉넉하게 잡음.
+  # 명령 가능한 범위는 0~100(서보 캘리브레이션에 기록된 구간의 정규화 값).
+  # 기구 자체는 100 너머로도 더 벌어지지만 그 구간은 기록 밖이라 명령하지 않는다.
+  # 95는 실제 블록을 넣어보고 충분하다고 확인한 값이며 100까지 5 남긴다.
+  gripper_open_pos: 95.0
+  gripper_close_pos: 2.0
+  gripper_empty_closed_max: 20.0
+  gripper_load_min: 200.0
+  grasp_check_mode: position_and_load
+  grasp_settle_s: 0.4
+  grasp_samples: 5
+  sample_interval_s: 0.05
+  contact_joints: [shoulder_lift, elbow_flex]
+  contact_load_delta: 80.0
+  contact_baseline_samples: 5
+
+motion:
+  poses_path: src/configs/poses.yaml
+  fps: 30.0
+  max_step_per_tick: 2.0
+  descent_step_per_tick: 0.6
+  arrival_tol: 3.0
+  transit_arrival_tol: 8.0
+  hover_clearance_mm: 120.0
+  hover_min_clearance_mm: 40.0
+  hover_search_step_mm: 5.0
+  transit_apex_radius_mm: 195.0
+  move_timeout_s: 10.0
+  gripper_action_wait_s: 0.6
+  home_pose: home
+  retreat_pose: retreat
+  transport_waypoints: [zone_approach]
+  slot_poses: [slot_0, slot_1, slot_2, slot_3, slot_4]
+  tower_approach_pose: tower_approach
+  tower_ladder_prefix: tower_descent
+  contact_backoff_ticks: 1
+  place_settle_s: 0.5
+  # grasp point bias in the gripper's own frame (radial = away from the base,
+  # tangential = the gripper's own left) -- see MotionConfig
+  grasp_radial_offset_mm: 12.0
+  grasp_tangential_offset_mm: 0.0
+  left_half_y_mm: 0.0
+  left_half_radial_offset_mm: 10.0
+  left_half_tangential_offset_mm: 10.0
+  # (radial, tangential) mm: front-left, front-right, back-left, back-right
+  grasp_retry_offsets_mm: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
+  blocked_descent_offsets_mm: [10.0, -10.0]
+  descent_blocked_tol: 4.0
+  descent_settle_s: 5.0
+
+ik:
+  urdf_path: third_party/so101/so101.urdf
+  target_frame: gripper_frame_link
+  seed_step_deg: 3.0
+  seed_range_deg: 100.0
+  seed_tilt_max_deg: 3.0
+  seed_cache_path: src/configs/calib/ik_seed_table.npz
+  pan_offset_candidates_deg: [0.0, 6.0, -6.0, 12.0, -12.0]
+  ik_iters: 8
+  # 실측 캘리브레이션 오차(AGENTS.md §6: RMS~10mm, 최악 ~30mm)보다 넉넉하게 잡음 —
+  # 이 한계는 "IK가 못 풀었다"를 걸러내는 것이지, 파지 정확도 자체를 보장하지 않음.
+  max_position_error_mm: 15.0
+  max_tilt_error_deg: 6.0
+
+policy:
+  server_address: 127.0.0.1:8080     # Tailscale의 policy_server 주소로 변경
+  policy_type: act
+  pretrained_name_or_path: ""        # policy_server가 도는 머신 기준 경로
+  task: "Pick the nearest block, lift it vertically, and move to the fixed retreat pose."
+  policy_device: cuda
+  actions_per_chunk: 50
+  chunk_size_threshold: 0.5
+  aggregate_fn_name: weighted_average
+  aggregate_weight: 0.5
+  fps: 30.0
+  connect_timeout_s: 5.0
+  retreat_tol: 4.0
+  retreat_hold_ticks: 5
+  retreat_check_joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll]
+  pick_timeout_s: 25.0
+
+fsm:
+  num_blocks: 5
+  time_budget_s: 300.0
+  max_retries_per_block: 2
+  reserve_time_s: 10.0
+
+logging:
+  log_dir: logs/pick_stack
+  save_transitions: true

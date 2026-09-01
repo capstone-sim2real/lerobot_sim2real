@@ -19,7 +19,7 @@ from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
 from lerobot.robots.so_follower.so_follower import SOFollower
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_URDF = PROJECT_ROOT / "third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+DEFAULT_URDF = PROJECT_ROOT / "third_party/so101/so101.urdf"
 MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
 PORT = os.environ.get(
     "SO101_FOLLOWER_PORT",

@@ -28,8 +28,8 @@ DEFAULT_ID = "my_follower"
 DEFAULT_TARGET_FRAME = "gripper_frame_link"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_URDF_CANDIDATES = [
-    Path("third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"),
-    Path("~/third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"),
+    Path("third_party/so101/so101.urdf"),
+    Path("~/third_party/so101/so101.urdf"),
 ]
 
 MOTORS = [
