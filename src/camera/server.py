@@ -415,7 +415,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
           addDetailRow(block, 'C', pointText(detection.center_mm));
           addDetailRow(block, 'B', pointText(detection.biased_center_mm));
           addDetailRow(block, 'T', detection.target_label ? `T → ${{detection.target_label}}` : 'no reachable target');
-          addDetailRow(block, 'retry', `${{detection.candidates_mm.length - 1}} points');
+          addDetailRow(block, 'retry', `${{detection.candidates_mm.length - 1}} points`);
           panel.append(block);
         }});
       }} catch (_error) {{
