@@ -17,6 +17,7 @@ FOURCC="${SO101_CAMERA_FOURCC:-MJPG}"
 JPEG_QUALITY="${SO101_CAMERA_JPEG_QUALITY:-80}"
 SAVE_DIR="${SO101_CAMERA_SAVE_DIR:-}"
 SAVE_INTERVAL_S="${SO101_CAMERA_SAVE_INTERVAL_S:-0}"
+OVERLAY_CONFIG="${SO101_CAMERA_OVERLAY_CONFIG:-}"
 
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -33,6 +34,9 @@ camera_args=(
 )
 if [[ -n "$SAVE_DIR" ]]; then
   camera_args+=(--save-dir "$SAVE_DIR" --save-interval-s "$SAVE_INTERVAL_S")
+fi
+if [[ -n "$OVERLAY_CONFIG" ]]; then
+  camera_args+=(--overlay-config "$OVERLAY_CONFIG")
 fi
 
 exec python -m camera.server "${camera_args[@]}" "$@"

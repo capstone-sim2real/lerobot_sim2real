@@ -7,7 +7,7 @@ import pytest
 from config import AppConfig, MotionConfig, SensingConfig
 from control import MockRobotIO, TrajectoryPlayer, check_grasp, interpolate
 from control import grasp as grasp_mod
-from control.grasp import GraspAttempt, GraspOutcome, GraspPlan, biased_grasp_xy, highest_reachable_hover, plan_grasp_attempts, run_grasp_attempts
+from control.grasp import GraspAttempt, GraspOutcome, GraspPlan, biased_grasp_xy, grasp_candidate_points, highest_reachable_hover, plan_grasp_attempts, run_grasp_attempts
 from control.ik import IkResult, gripper_frame_offset
 
 
@@ -24,6 +24,9 @@ def test_gripper_frame_bias_and_candidate_order():
     assert math.hypot(left[0] - 200.0, left[1] - 80.0) > math.hypot(right[0] - 200.0, right[1] + 80.0)
     plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, 80.0)
     assert [a.label for a in plan.attempts] == ["centre", "front-left", "front-right", "back-left", "back-right"]
+    assert [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, -80.0)] == [
+        "centre", "front-left", "front-right", "back-left", "back-right"
+    ]
 
 
 def _attempt(label):

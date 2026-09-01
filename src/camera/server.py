@@ -209,9 +209,10 @@ class CameraStream:
 
 
 class CameraServer(ThreadingHTTPServer):
-    def __init__(self, server_address: tuple[str, int], cameras: dict[str, CameraStream]) -> None:
+    def __init__(self, server_address: tuple[str, int], cameras: dict[str, CameraStream], overlay: Any | None = None) -> None:
         super().__init__(server_address, CameraRequestHandler)
         self.cameras = cameras
+        self.overlay = overlay
 
 
 class CameraRequestHandler(BaseHTTPRequestHandler):
@@ -227,6 +228,12 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             return
         if path.startswith("/snapshot/") and path.endswith(".jpg"):
             self._send_snapshot(path.removeprefix("/snapshot/").removesuffix(".jpg"))
+            return
+        if path.startswith("/overlay/") and path.endswith(".jpg"):
+            self._send_overlay(path.removeprefix("/overlay/").removesuffix(".jpg"))
+            return
+        if path.startswith("/detections/") and path.endswith(".json"):
+            self._send_detections(path.removeprefix("/detections/").removesuffix(".json"))
             return
         if path.startswith("/video/") and path.endswith(".mjpg"):
             self._send_stream(path.removeprefix("/video/").removesuffix(".mjpg"))
@@ -250,6 +257,18 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             """
             for name, camera in self.server.cameras.items()
         )
+        overlay_tiles = "\n".join(
+            f"""
+            <section class="camera">
+              <header>
+                <h2>{html.escape(name)} detection plan</h2>
+                <code>C=detected centre · B=biased centre · FL/FR/BL/BR=retry points (mm)</code>
+              </header>
+              <img class="overlay" data-camera="{html.escape(name)}" src="/overlay/{html.escape(name)}.jpg" alt="{html.escape(name)} detection overlay">
+            </section>
+            """
+            for name in self.server.cameras
+        ) if self.server.overlay is not None else ""
         body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -325,7 +344,13 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
   </div>
   <main>
     {camera_tiles}
+    {overlay_tiles}
   </main>
+  <script>
+    setInterval(() => document.querySelectorAll('img.overlay').forEach((image) => {{
+      image.src = `/overlay/${{image.dataset.camera}}.jpg?t=${{Date.now()}}`;
+    }}), 750);
+  </script>
 </body>
 </html>
 """
@@ -341,6 +366,30 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, f"unknown camera: {name}")
             return
         self._send_bytes(camera.latest_jpeg(), "image/jpeg")
+
+    def _get_overlay(self, name: str) -> tuple[bytes, list[dict[str, object]]] | None:
+        if self.server.overlay is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "overlay is disabled")
+            return None
+        camera = self.server.cameras.get(name)
+        if camera is None:
+            self.send_error(HTTPStatus.NOT_FOUND, f"unknown camera: {name}")
+            return None
+        try:
+            return self.server.overlay.render(camera.latest_jpeg())
+        except Exception as exc:
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, f"overlay failed: {exc}")
+            return None
+
+    def _send_overlay(self, name: str) -> None:
+        rendered = self._get_overlay(name)
+        if rendered is not None:
+            self._send_bytes(rendered[0], "image/jpeg")
+
+    def _send_detections(self, name: str) -> None:
+        rendered = self._get_overlay(name)
+        if rendered is not None:
+            self._send_json({"camera": name, "detections": rendered[1]})
 
     def _send_stream(self, name: str) -> None:
         camera = self.server.cameras.get(name)
@@ -420,6 +469,11 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Seconds between saved frames per camera. Default: 0 (disabled).",
     )
+    parser.add_argument(
+        "--overlay-config",
+        default="",
+        help="Enable detection/grasp-plan overlay using this project YAML config.",
+    )
     args = parser.parse_args()
     if bool(args.save_dir) != (args.save_interval_s > 0):
         parser.error("--save-dir and a positive --save-interval-s must be supplied together")
@@ -428,6 +482,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    overlay = None
+    if args.overlay_config:
+        from camera.overlay import OverlayRenderer
+
+        overlay = OverlayRenderer(args.overlay_config)
     recorder = FrameRecorder(args.save_dir, args.save_interval_s) if args.save_dir else None
     cameras = {
         "shoulder": CameraStream(
@@ -456,7 +515,7 @@ def main() -> int:
     for camera in cameras.values():
         camera.start()
 
-    server = CameraServer((args.host, args.port), cameras)
+    server = CameraServer((args.host, args.port), cameras, overlay)
 
     def shutdown(_signum: int, _frame: Any) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -468,6 +527,8 @@ def main() -> int:
     for address in local_addresses():
         print(f"  http://{address}:{args.port}")
     print("Routes: /, /health, /snapshot/<camera>.jpg, /video/<camera>.mjpg")
+    if overlay is not None:
+        print("Overlay: /overlay/<camera>.jpg, /detections/<camera>.json")
     if recorder is not None:
         print(f"Saving one JPEG per camera every {recorder.interval_s:g}s under {args.save_dir}")
 

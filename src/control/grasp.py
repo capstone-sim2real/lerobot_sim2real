@@ -101,6 +101,26 @@ def biased_grasp_xy(cfg: MotionConfig, x_mm: float, y_mm: float) -> tuple[float,
     return gripper_frame_offset(x_mm, y_mm, radial, tangential)
 
 
+def grasp_candidate_points(cfg: MotionConfig, x_mm: float, y_mm: float) -> list[tuple[str, tuple[float, float]]]:
+    """Return the board-frame points shown and tried for one detected block.
+
+    The first point is the biased centre; the rest are the configured retry
+    offsets.  Keeping this independent of IK lets the camera overlay show
+    the exact plan without solving kinematics for every browser refresh.
+    """
+    base_xy = biased_grasp_xy(cfg, x_mm, y_mm)
+    points = [("centre", base_xy)]
+    for i, offset in enumerate(cfg.grasp_retry_offsets_mm):
+        label = _RETRY_LABELS[i] if i < len(_RETRY_LABELS) else f"retry-{i}"
+        points.append(
+            (
+                label,
+                gripper_frame_offset(base_xy[0], base_xy[1], float(offset[0]), float(offset[1])),
+            )
+        )
+    return points
+
+
 def _solve_attempt(
     ik: TopDownIK,
     cfg: AppConfig,
@@ -143,9 +163,9 @@ def plan_grasp_attempts(
     many IK solves to land on the same height.
     """
     base_xy = biased_grasp_xy(cfg.motion, x_mm, y_mm)
+    candidate_points = grasp_candidate_points(cfg.motion, x_mm, y_mm)
     attempts = [_solve_attempt(ik, cfg, "centre", base_xy, (0.0, 0.0), grasp_z, hover_z)]
-    for i, offset in enumerate(cfg.motion.grasp_retry_offsets_mm):
-        label = _RETRY_LABELS[i] if i < len(_RETRY_LABELS) else f"retry-{i}"
+    for (label, _xy), offset in zip(candidate_points[1:], cfg.motion.grasp_retry_offsets_mm, strict=True):
         attempts.append(
             _solve_attempt(ik, cfg, label, base_xy, (float(offset[0]), float(offset[1])), grasp_z, hover_z)
         )
