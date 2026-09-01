@@ -250,12 +250,18 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     def _send_html(self) -> None:
         camera_tiles = "\n".join(
             f"""
-            <section class="camera-view">
-              <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
-              <div class="camera-info">
-                <span>{html.escape(name)} · {html.escape(camera.device)}</span>
-                {"<span>C: detected centre · B: biased centre · FL/FR/BL/BR: retry points · T: first IK-reachable goal (mm)</span>" if self.server.overlay is not None else ""}
+            <section class="camera-layout">
+              <div class="camera-view">
+                <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
+                <div class="camera-info">{html.escape(name)} · {html.escape(camera.device)}</div>
               </div>
+              {"""<aside class="legend" aria-label="overlay legend">
+                <div><b>C</b><span>detected centre</span></div>
+                <div><b>B</b><span>bias-corrected centre</span></div>
+                <div><b>FL / FR</b><span>front retry points</span></div>
+                <div><b>BL / BR</b><span>back retry points</span></div>
+                <div><b>T</b><span>first IK-reachable target</span></div>
+              </aside>""" if self.server.overlay is not None else ""}
             </section>
             """
             for name, camera in self.server.cameras.items()
@@ -288,30 +294,43 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       align-items: center;
       justify-content: flex-end;
     }}
-    .camera-view {{
-      width: 100%;
+    .camera-layout {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 210px;
+      gap: 20px;
+      align-items: start;
     }}
     img {{
       display: block;
       width: 100%;
-      aspect-ratio: 4 / 3;
+      aspect-ratio: 16 / 9;
       object-fit: contain;
       background: #000;
     }}
     .camera-info {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 18px;
       padding: 8px 0 0;
       color: #a8a8a8;
       font-size: 13px;
     }}
+    .legend {{
+      display: grid;
+      gap: 10px;
+      color: #b0b0b0;
+      font-size: 13px;
+      line-height: 1.3;
+    }}
+    .legend div {{ display: grid; grid-template-columns: 58px 1fr; gap: 8px; }}
+    .legend b {{ color: #f5f5f5; font-weight: 600; }}
     select {{
       color: #f5f5f5;
       background: #111;
       border: 1px solid #666;
       padding: 5px 7px;
       font: inherit;
+    }}
+    @media (max-width: 760px) {{
+      .camera-layout {{ grid-template-columns: 1fr; }}
+      .legend {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     }}
   </style>
 </head>

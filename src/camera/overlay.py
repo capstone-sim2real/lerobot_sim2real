@@ -77,20 +77,19 @@ class OverlayRenderer:
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
         centre_px, biased_px, *retry_px = all_px
         self._cross(frame, tuple(centre_px), (255, 255, 0), 10, 2)
-        self._text(frame, f"{color} C ({centre[0]:.0f},{centre[1]:.0f})", tuple(centre_px + (10, -10)), (255, 255, 0))
+        self._text(frame, "C", tuple(centre_px + (10, -10)), (255, 255, 0))
         cv2.circle(frame, tuple(biased_px), 6, (0, 165, 255), 2)
-        self._text(frame, f"B ({biased[0]:.0f},{biased[1]:.0f})", tuple(biased_px + (8, 16)), (0, 165, 255))
+        self._text(frame, "B", tuple(biased_px + (8, 16)), (0, 165, 255))
         for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
             cv2.circle(frame, tuple(point_px), 5, (255, 0, 255), 2)
             short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
-            self._text(frame, f"{short} ({xy[0]:.0f},{xy[1]:.0f})", tuple(point_px + (7, -7)), (255, 0, 255))
+            self._text(frame, short, tuple(point_px + (7, -7)), (255, 0, 255))
         if target_label is not None:
             target_xy = dict(candidates).get(target_label)
             if target_xy is not None:
                 target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
                 cv2.rectangle(frame, tuple(target_px - 9), tuple(target_px + 9), (0, 0, 255), 2)
-                short = {"centre": "C", "front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(target_label, target_label)
-                self._text(frame, f"T={short}", tuple(target_px + (10, 26)), (0, 0, 255))
+                self._text(frame, "T", tuple(target_px + (10, 26)), (0, 0, 255))
 
     def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
         """Return the same first usable point that the FSM will try first."""
