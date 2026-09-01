@@ -26,6 +26,16 @@ so101-run = "runners.run_task:main"
 so101-camera = "camera.server:main"
 so101-detect = "tools.view_detect:main"
 so101-calibrate = "tools.calibrate_homography:main"
+so101-robot-calibrate = "tools.calibrate_robot:main"
+so101-scan-motors = "tools.scan_motors:main"
+so101-fk = "tools.fk_probe:main"
+so101-gripper = "tools.gripper_probe:main"
+so101-gripper-move = "tools.gripper_move_probe:main"
+so101-ik = "tools.ik_move:main"
+so101-keyboard = "tools.keyboard_control:main"
+so101-record-calibration-point = "tools.record_calibration_point:main"
+so101-capture-calibration-point = "tools.capture_calibration_point:main"
+so101-torque-off = "tools.torque_off:main"
 
 [tool.uv.sources]
 lerobot = { path = "third_party/lerobot", editable = true }

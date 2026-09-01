@@ -4,7 +4,7 @@ arm. Read-only — sends no commands. Use this BEFORE running
 so101_calib_point.sh to check the grip height (z) looks consistent with
 previous points (keep the wrist vertical/top-down each time; AGENTS.md §6).
 
-    ./scripts/so101_fk_probe.sh
+    so101-fk
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from lerobot.model.kinematics import RobotKinematics
 from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
 from lerobot.robots.so_follower.so_follower import SOFollower
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_URDF = PROJECT_ROOT / "third_party/so101/so101.urdf"
 MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
 PORT = os.environ.get(

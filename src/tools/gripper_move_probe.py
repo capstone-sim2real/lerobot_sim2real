@@ -2,7 +2,7 @@
 """Command the gripper to one target position and report before/after,
 to isolate whether a commanded move actually reaches the motor.
 
-    ./scripts/so101_gripper_move_probe.sh --to 60
+    so101-gripper-move --to 60
 """
 from __future__ import annotations
 

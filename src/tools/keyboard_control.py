@@ -26,7 +26,7 @@ from lerobot.robots.so_follower.so_follower import SOFollower
 DEFAULT_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00"
 DEFAULT_ID = "my_follower"
 DEFAULT_TARGET_FRAME = "gripper_frame_link"
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_URDF_CANDIDATES = [
     Path("third_party/so101/so101.urdf"),
     Path("~/third_party/so101/so101.urdf"),

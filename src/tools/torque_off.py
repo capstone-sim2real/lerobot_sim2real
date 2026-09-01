@@ -5,7 +5,7 @@ overheat-protection trip) — it reports that motor's failure and still
 disables the rest, instead of the normal full-handshake connect() failing
 outright when one motor doesn't answer.
 
-    ./scripts/so101_torque_off.sh
+    so101-torque-off
 """
 from __future__ import annotations
 
