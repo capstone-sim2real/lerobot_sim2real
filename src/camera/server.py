@@ -431,16 +431,24 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
           if (image.dataset.mode !== 'raw') {{
             image.src = `/video/${{image.dataset.camera}}.mjpg`;
             image.dataset.mode = 'raw';
+            image.dataset.loading = '0';
           }}
           return;
         }}
+        // A cold IK target preview can take several seconds. Do not replace
+        // that request on every timer tick or the browser will cancel it
+        // before the JPEG ever reaches the screen.
+        if (image.dataset.loading === '1') return;
+        image.dataset.loading = '1';
+        image.onload = () => {{ image.dataset.loading = '0'; }};
+        image.onerror = () => {{ image.dataset.loading = '0'; }};
         image.src = `/overlay/${{image.dataset.camera}}.jpg?color=${{encodeURIComponent(color)}}&t=${{Date.now()}}`;
         image.dataset.mode = 'overlay';
       }});
       refreshDetails(color);
     }};
     document.querySelector('#overlay-color')?.addEventListener('change', refreshOverlays);
-    setInterval(refreshOverlays, 750);
+    setInterval(refreshOverlays, 1000);
     refreshOverlays();
   </script>
 </body>
