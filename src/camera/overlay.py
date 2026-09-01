@@ -7,6 +7,7 @@ while an overlay request only reads its already-encoded latest JPEG.
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 
 import cv2
 import numpy as np
@@ -21,13 +22,19 @@ class OverlayRenderer:
     """Draw detections, retry candidates, and the first IK-reachable goal."""
 
     def __init__(self, config_path: Path | str) -> None:
+        config_path = Path(config_path).resolve()
         self._cfg = load_config(config_path)
-        self._calib = PlaneCalibration.load(self._cfg.perception.calibration_path)
+        self._project_root = config_path.parents[2]
+        calibration_path = Path(self._cfg.perception.calibration_path)
+        if not calibration_path.is_absolute():
+            calibration_path = self._project_root / calibration_path
+        self._calib = PlaneCalibration.load(calibration_path)
         self._ik: TopDownIK | None = None
         # IK preview is substantially more expensive than detection. Cache
         # its selected label; candidate coordinates are still redrawn from
         # the current detection every frame.
         self._target_labels: dict[tuple[str, int, int], str | None] = {}
+        self._target_lock = threading.Lock()
 
     def render(self, jpeg: bytes, *, color: str | None = None) -> tuple[bytes, list[dict[str, object]]]:
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -88,16 +95,17 @@ class OverlayRenderer:
     def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
         """Return the same first usable point that the FSM will try first."""
         key = (color, round(centre[0] / 5.0), round(centre[1] / 5.0))
-        if key not in self._target_labels:
-            grasp_z = self._calib.meta.get("grasp_z_mm_mean")
-            if grasp_z is None:
-                self._target_labels[key] = None
-            else:
-                self._ik = self._ik or TopDownIK(self._cfg.ik)
-                hover_z = highest_reachable_hover(self._ik, *centre, float(grasp_z), self._cfg)
-                plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z), hover_z)
-                self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
-        return self._target_labels[key]
+        with self._target_lock:
+            if key not in self._target_labels:
+                grasp_z = self._calib.meta.get("grasp_z_mm_mean")
+                if grasp_z is None:
+                    self._target_labels[key] = None
+                else:
+                    self._ik = self._ik or TopDownIK(self._cfg.ik, project_root=self._project_root)
+                    hover_z = highest_reachable_hover(self._ik, *centre, float(grasp_z), self._cfg)
+                    plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z), hover_z)
+                    self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
+            return self._target_labels[key]
 
     @staticmethod
     def _cross(frame: np.ndarray, point: tuple[int, int], color: tuple[int, int, int], size: int, thickness: int) -> None:

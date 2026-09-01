@@ -29,7 +29,9 @@ class FrameRecorder:
     def __init__(self, directory: Path | str, interval_s: float) -> None:
         if interval_s <= 0:
             raise ValueError("save interval must be positive")
-        self._directory = Path(directory)
+        # The IK preview temporarily changes the process cwd while loading
+        # its URDF. Recording must not follow that transient cwd.
+        self._directory = Path(directory).resolve()
         self._interval_s = interval_s
         self._next_save_at: dict[str, float] = {}
         self._saved = 0
