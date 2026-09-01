@@ -23,11 +23,13 @@ class OverlayRenderer:
         self._cfg = load_config(config_path)
         self._calib = PlaneCalibration.load(self._cfg.perception.calibration_path)
 
-    def render(self, jpeg: bytes) -> tuple[bytes, list[dict[str, object]]]:
+    def render(self, jpeg: bytes, *, color: str | None = None) -> tuple[bytes, list[dict[str, object]]]:
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise RuntimeError("Camera returned an invalid JPEG")
         detections = detect_blocks(frame, self._calib, self._cfg.perception, is_rgb=False)
+        if color:
+            detections = [detection for detection in detections if detection.color == color]
         payload: list[dict[str, object]] = []
         for detection in detections:
             centre = tuple(float(v) for v in detection.center_mm)

@@ -14,7 +14,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import cv2
 import numpy as np
@@ -219,7 +219,9 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     server: CameraServer
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        request = urlparse(self.path)
+        path = request.path
+        color = parse_qs(request.query).get("color", [""])[0] or None
         if path in {"/", "/index.html"}:
             self._send_html()
             return
@@ -230,10 +232,10 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             self._send_snapshot(path.removeprefix("/snapshot/").removesuffix(".jpg"))
             return
         if path.startswith("/overlay/") and path.endswith(".jpg"):
-            self._send_overlay(path.removeprefix("/overlay/").removesuffix(".jpg"))
+            self._send_overlay(path.removeprefix("/overlay/").removesuffix(".jpg"), color=color)
             return
         if path.startswith("/detections/") and path.endswith(".json"):
-            self._send_detections(path.removeprefix("/detections/").removesuffix(".json"))
+            self._send_detections(path.removeprefix("/detections/").removesuffix(".json"), color=color)
             return
         if path.startswith("/video/") and path.endswith(".mjpg"):
             self._send_stream(path.removeprefix("/video/").removesuffix(".mjpg"))
@@ -341,15 +343,26 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
   <div class="topbar">
     <h1>SO-101 Cameras</h1>
     <code>http://{html.escape(host)}</code>
+    {"""<label>overlay block <select id="overlay-color">
+      <option value="">all</option><option value="green" selected>green</option>
+      <option value="yellow">yellow</option><option value="blue">blue</option>
+      <option value="red">red</option><option value="wood">wood</option>
+    </select></label>""" if self.server.overlay is not None else ""}
   </div>
   <main>
     {camera_tiles}
     {overlay_tiles}
   </main>
   <script>
-    setInterval(() => document.querySelectorAll('img.overlay').forEach((image) => {{
-      image.src = `/overlay/${{image.dataset.camera}}.jpg?t=${{Date.now()}}`;
-    }}), 750);
+    const refreshOverlays = () => {{
+      const color = document.querySelector('#overlay-color')?.value || '';
+      document.querySelectorAll('img.overlay').forEach((image) => {{
+        image.src = `/overlay/${{image.dataset.camera}}.jpg?color=${{encodeURIComponent(color)}}&t=${{Date.now()}}`;
+      }});
+    }};
+    document.querySelector('#overlay-color')?.addEventListener('change', refreshOverlays);
+    setInterval(refreshOverlays, 750);
+    refreshOverlays();
   </script>
 </body>
 </html>
@@ -367,7 +380,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_bytes(camera.latest_jpeg(), "image/jpeg")
 
-    def _get_overlay(self, name: str) -> tuple[bytes, list[dict[str, object]]] | None:
+    def _get_overlay(self, name: str, *, color: str | None) -> tuple[bytes, list[dict[str, object]]] | None:
         if self.server.overlay is None:
             self.send_error(HTTPStatus.NOT_FOUND, "overlay is disabled")
             return None
@@ -376,18 +389,18 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, f"unknown camera: {name}")
             return None
         try:
-            return self.server.overlay.render(camera.latest_jpeg())
+            return self.server.overlay.render(camera.latest_jpeg(), color=color)
         except Exception as exc:
             self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, f"overlay failed: {exc}")
             return None
 
-    def _send_overlay(self, name: str) -> None:
-        rendered = self._get_overlay(name)
+    def _send_overlay(self, name: str, *, color: str | None) -> None:
+        rendered = self._get_overlay(name, color=color)
         if rendered is not None:
             self._send_bytes(rendered[0], "image/jpeg")
 
-    def _send_detections(self, name: str) -> None:
-        rendered = self._get_overlay(name)
+    def _send_detections(self, name: str, *, color: str | None) -> None:
+        rendered = self._get_overlay(name, color=color)
         if rendered is not None:
             self._send_json({"camera": name, "detections": rendered[1]})
 
