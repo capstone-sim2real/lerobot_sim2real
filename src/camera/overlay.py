@@ -60,14 +60,14 @@ class OverlayRenderer:
         all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
         centre_px, biased_px, *retry_px = all_px
-        self._cross(frame, tuple(centre_px), (255, 255, 0), 10, 2)
-        self._text(frame, f"{color} C ({centre[0]:.0f},{centre[1]:.0f})", tuple(centre_px + (10, -10)), (255, 255, 0))
-        cv2.circle(frame, tuple(biased_px), 6, (0, 165, 255), 2)
-        self._text(frame, f"B ({biased[0]:.0f},{biased[1]:.0f})", tuple(biased_px + (8, 16)), (0, 165, 255))
+        self._cross(frame, tuple(centre_px), (255, 255, 255), 10, 2)
+        self._text(frame, f"{color} C ({centre[0]:.0f},{centre[1]:.0f})", tuple(centre_px + (10, -10)), (255, 255, 255))
+        cv2.circle(frame, tuple(biased_px), 6, (190, 190, 190), 2)
+        self._text(frame, f"B ({biased[0]:.0f},{biased[1]:.0f})", tuple(biased_px + (8, 16)), (190, 190, 190))
         for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
-            cv2.circle(frame, tuple(point_px), 5, (255, 0, 255), 2)
+            cv2.circle(frame, tuple(point_px), 5, (130, 130, 130), 2)
             short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
-            self._text(frame, f"{short} ({xy[0]:.0f},{xy[1]:.0f})", tuple(point_px + (7, -7)), (255, 0, 255))
+            self._text(frame, f"{short} ({xy[0]:.0f},{xy[1]:.0f})", tuple(point_px + (7, -7)), (130, 130, 130))
 
     @staticmethod
     def _cross(frame: np.ndarray, point: tuple[int, int], color: tuple[int, int, int], size: int, thickness: int) -> None:

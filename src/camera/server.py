@@ -246,15 +246,14 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
         print(f"{self.client_address[0]} - {fmt % args}")
 
     def _send_html(self) -> None:
-        host = self.headers.get("Host", "localhost")
         camera_tiles = "\n".join(
             f"""
-            <section class="camera">
-              <header>
-                <h2>{html.escape(name)}</h2>
-                <code>{html.escape(camera.device)}</code>
-              </header>
+            <section class="camera-view">
               <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
+              <div class="camera-info">
+                <span>{html.escape(name)} · {html.escape(camera.device)}</span>
+                {"<span>C: detected centre · B: biased centre · FL/FR/BL/BR: retry points (mm)</span>" if self.server.overlay is not None else ""}
+              </div>
             </section>
             """
             for name, camera in self.server.cameras.items()
@@ -277,46 +276,24 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       padding: 24px;
     }}
     main {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
-      max-width: 1400px;
+      max-width: 1280px;
       margin: 0 auto;
     }}
     .topbar {{
       max-width: 1400px;
       margin: 0 auto 16px;
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
+      align-items: center;
+      justify-content: flex-end;
       gap: 16px;
     }}
-    h1, h2 {{
+    h1 {{
       margin: 0;
       font-weight: 600;
-    }}
-    h1 {{
       font-size: 22px;
     }}
-    h2 {{
-      font-size: 16px;
-    }}
-    code {{
-      color: #b8d7ff;
-      word-break: break-all;
-    }}
-    .camera {{
-      border: 1px solid #333;
-      border-radius: 8px;
-      overflow: hidden;
-      background: #1b1b1b;
-    }}
-    .camera header {{
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px;
-      border-bottom: 1px solid #333;
+    .camera-view {{
+      width: 100%;
     }}
     img {{
       display: block;
@@ -325,12 +302,26 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       object-fit: contain;
       background: #000;
     }}
+    .camera-info {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      padding: 8px 0 0;
+      color: #a8a8a8;
+      font-size: 13px;
+    }}
+    label, select {{
+      color: #f5f5f5;
+      background: #111;
+      border: 1px solid #666;
+      padding: 5px 7px;
+      font: inherit;
+    }}
   </style>
 </head>
 <body>
   <div class="topbar">
     <h1>SO-101 Cameras</h1>
-    <code>http://{html.escape(host)}</code>
     {"""<label>overlay block <select id="overlay-color">
       <option value="none" selected>none</option><option value="">all</option>
       <option value="green">green</option>
