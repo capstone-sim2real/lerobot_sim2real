@@ -58,11 +58,12 @@ so101-keyboard --step 1
 so101-camera --host 0.0.0.0 --port 8090
 ```
 
-에이전트 검토용으로 프레임을 주기 저장하려면 다음처럼 실행합니다.
+에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 마지막 저장 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
 
 ```bash
 so101-camera --host 0.0.0.0 --port 8090 \
-  --save-dir /tmp/so101-camera --save-interval-s 2
+  --save-dir /tmp/so101-camera --save-interval-s 2 \
+  --save-on-change --change-threshold 8 --max-save-interval-s 10
 ```
 
 CV/IK 파지 flow 실행 (카메라 서버를 먼저 띄워둔 채로):
