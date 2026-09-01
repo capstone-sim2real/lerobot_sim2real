@@ -280,17 +280,11 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       margin: 0 auto;
     }}
     .topbar {{
-      max-width: 1400px;
+      max-width: 1280px;
       margin: 0 auto 16px;
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      gap: 16px;
-    }}
-    h1 {{
-      margin: 0;
-      font-weight: 600;
-      font-size: 22px;
     }}
     .camera-view {{
       width: 100%;
@@ -310,7 +304,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       color: #a8a8a8;
       font-size: 13px;
     }}
-    label, select {{
+    select {{
       color: #f5f5f5;
       background: #111;
       border: 1px solid #666;
@@ -321,13 +315,12 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <div class="topbar">
-    <h1>SO-101 Cameras</h1>
-    {"""<label>overlay block <select id="overlay-color">
+    {"""<select id="overlay-color" aria-label="overlay colour">
       <option value="none" selected>none</option><option value="">all</option>
       <option value="green">green</option>
       <option value="yellow">yellow</option><option value="blue">blue</option>
       <option value="red">red</option><option value="wood">wood</option>
-    </select></label>""" if self.server.overlay is not None else ""}
+    </select>""" if self.server.overlay is not None else ""}
   </div>
   <main>
     {camera_tiles}
