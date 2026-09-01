@@ -77,6 +77,55 @@ class TrajectoryPlayer:
             self._robot.send_joints(goal)
             self._tick_sleep()
 
+    def descend(
+        self,
+        goal: Pose,
+        *,
+        max_step: float | None = None,
+        tol: float | None = None,
+        settle_s: float | None = None,
+    ) -> tuple[Pose, bool]:
+        """Descend toward ``goal``; report whether something stopped it short.
+
+        The command stream is byte-for-byte what ``move_to`` sends — no
+        sensor read inside the interpolation loop. A per-tick bus read at
+        fps=30 is a serial round trip that slows the loop enough to eat the
+        whole ``move_timeout_s`` budget, which strands the arm partway down.
+
+        The two differences from ``move_to`` are that it settles against a
+        short budget of its own rather than the full timeout, and that
+        falling short is *returned* rather than raised: a grasp descent that
+        lands on the block instead of beside it is a normal outcome for the
+        caller to retry, not an error.
+
+        Returns ``(measured_pose, blocked)``. ``blocked`` is a hint for
+        ordering retries — it is never a reason to skip closing the jaws,
+        since only closing them establishes whether the block is holdable.
+        """
+        max_step = max_step if max_step is not None else self._cfg.descent_step_per_tick
+        tol = tol if tol is not None else self._cfg.arrival_tol
+        settle_s = settle_s if settle_s is not None else self._cfg.descent_settle_s
+        start = self._robot.read_joints()
+        deadline = time.monotonic() + self._cfg.move_timeout_s
+        for step in interpolate(start, goal, max_step):
+            if time.monotonic() > deadline:
+                break
+            self._robot.send_joints(step)
+            self._tick_sleep()
+        # settle until within tolerance (the arm lags the command stream),
+        # but give up quickly: if it is stuck on the block, holding the
+        # command against it for the full timeout only leans on the servos.
+        settle_deadline = min(time.monotonic() + settle_s, deadline)
+        while time.monotonic() <= settle_deadline:
+            current = self._robot.read_joints()
+            if max(abs(current[j] - goal[j]) for j in goal) <= tol:
+                break
+            self._robot.send_joints(goal)
+            self._tick_sleep()
+        current = self._robot.read_joints()
+        shortfall = max(abs(current[j] - goal[j]) for j in goal)
+        return current, shortfall > self._cfg.descent_blocked_tol
+
     def follow(self, waypoints: list[Pose], *, max_step: float | None = None) -> Pose:
         current: Pose = {}
         for pose in waypoints:

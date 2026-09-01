@@ -74,6 +74,8 @@ motion:
   transit_arrival_tol: 8.0
   hover_clearance_mm: 120.0
   hover_min_clearance_mm: 40.0
+  hover_search_step_mm: 5.0
+  transit_apex_radius_mm: 195.0
   move_timeout_s: 10.0
   gripper_action_wait_s: 0.6
   home_pose: home
@@ -84,6 +86,18 @@ motion:
   tower_ladder_prefix: tower_descent
   contact_backoff_ticks: 1
   place_settle_s: 0.5
+  # grasp point bias in the gripper's own frame (radial = away from the base,
+  # tangential = the gripper's own left) -- see MotionConfig
+  grasp_radial_offset_mm: 12.0
+  grasp_tangential_offset_mm: 0.0
+  left_half_y_mm: 0.0
+  left_half_radial_offset_mm: 10.0
+  left_half_tangential_offset_mm: 10.0
+  # (radial, tangential) mm: front-left, front-right, back-left, back-right
+  grasp_retry_offsets_mm: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
+  blocked_descent_offsets_mm: [10.0, -10.0]
+  descent_blocked_tol: 4.0
+  descent_settle_s: 5.0
 
 ik:
   urdf_path: third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf
