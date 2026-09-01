@@ -4,6 +4,7 @@ import numpy as np
 
 from config import AppConfig, FsmConfig, SensingConfig
 from control import MockRobotIO
+from control.grasp import GraspAttempt, GraspPlan
 from control.ik import IkResult
 from fsm import ik_handler
 from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_states
@@ -134,6 +135,25 @@ def test_cv_ik_pick_skips_after_empty_attempt(monkeypatch):
     monkeypatch.setattr(ik_handler, "run_grasp_attempts", lambda *_args, **_kwargs: None)
     assert _cv_ik_state(motion, _FakePlayer()).step(ctx) is StateName.SELECT
     assert ctx.target_id in ctx.skipped and motion.opened == 1
+
+
+def test_cv_ik_pick_uses_a_reachable_offset_when_centre_is_unreachable(monkeypatch):
+    motion, player, ctx = _FakeMotion(), _FakePlayer(), _cv_ik_context()
+    solved = IkResult({"shoulder_pan": 0.0}, 0.1, 0.1)
+    centre = GraspAttempt("centre", (0.0, 0.0), (220.0, -20.0), solved, solved, False)
+    offset = GraspAttempt("back-left", (-10.0, 10.0), (210.0, -10.0), solved, solved, True)
+    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset], [])
+    monkeypatch.setattr(ik_handler, "highest_reachable_hover", lambda *_args: 48.0)
+    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args: plan)
+    attempted = []
+
+    def run(_player, _robot, _cfg, received_plan, **_kwargs):
+        attempted.extend(received_plan.attempts)
+        return offset
+
+    monkeypatch.setattr(ik_handler, "run_grasp_attempts", run)
+    assert _cv_ik_state(motion, player).step(ctx) is StateName.VERIFY
+    assert attempted == [centre, offset] and motion.opened == 0
 
 
 def test_runner_builds_cv_ik_pick_without_policy_server():

@@ -94,7 +94,10 @@ class CvIkPickState(State):
         plan = plan_grasp_attempts(self._ik, self._cfg, x_mm, y_mm, self._grasp_z_mm, hover_z_mm)
         ctx.extras["grasp_plan"] = plan
 
-        if not plan.attempts[0].reachable:
+        # The centre point is preferred, but a calibration/IK miss at that
+        # exact point must not discard nearby grasp points that are solvable.
+        # ``run_grasp_attempts`` filters the unreachable entries itself.
+        if not any(attempt.reachable for attempt in plan.attempts):
             return self._retry_or_skip(ctx, "unreachable")
 
         try:
