@@ -252,7 +252,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
               <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
               <div class="camera-info">
                 <span>{html.escape(name)} · {html.escape(camera.device)}</span>
-                {"<span>C: detected centre · B: biased centre · FL/FR/BL/BR: retry points (mm)</span>" if self.server.overlay is not None else ""}
+                {"<span>C: detected centre · B: biased centre · FL/FR/BL/BR: retry points · T: first IK-reachable goal (mm)</span>" if self.server.overlay is not None else ""}
               </div>
             </section>
             """

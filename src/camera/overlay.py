@@ -12,16 +12,22 @@ import cv2
 import numpy as np
 
 from config import load_config
-from control.grasp import biased_grasp_xy, grasp_candidate_points
+from control.grasp import biased_grasp_xy, grasp_candidate_points, highest_reachable_hover, plan_grasp_attempts
+from control.ik import TopDownIK
 from perception import PlaneCalibration, detect_blocks
 
 
 class OverlayRenderer:
-    """Draw detections and the non-IK grasp candidate points on a frame."""
+    """Draw detections, retry candidates, and the first IK-reachable goal."""
 
     def __init__(self, config_path: Path | str) -> None:
         self._cfg = load_config(config_path)
         self._calib = PlaneCalibration.load(self._cfg.perception.calibration_path)
+        self._ik: TopDownIK | None = None
+        # IK preview is substantially more expensive than detection. Cache
+        # its selected label; candidate coordinates are still redrawn from
+        # the current detection every frame.
+        self._target_labels: dict[tuple[str, int, int], str | None] = {}
 
     def render(self, jpeg: bytes, *, color: str | None = None) -> tuple[bytes, list[dict[str, object]]]:
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -35,15 +41,17 @@ class OverlayRenderer:
             centre = tuple(float(v) for v in detection.center_mm)
             biased = biased_grasp_xy(self._cfg.motion, *centre)
             candidates = grasp_candidate_points(self._cfg.motion, *centre)
+            target_label = self._first_reachable_target(detection.color, centre)
             payload.append(
                 {
                     "color": detection.color,
                     "center_mm": centre,
                     "biased_center_mm": biased,
                     "candidates_mm": [{"label": label, "xy": xy} for label, xy in candidates],
+                    "target_label": target_label,
                 }
             )
-            self._draw_detection(frame, detection.color, centre, biased, candidates)
+            self._draw_detection(frame, detection.color, centre, biased, candidates, target_label)
         ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         if not ok:
             raise RuntimeError("Could not encode perception overlay")
@@ -56,6 +64,7 @@ class OverlayRenderer:
         centre: tuple[float, float],
         biased: tuple[float, float],
         candidates: list[tuple[str, tuple[float, float]]],
+        target_label: str | None,
     ) -> None:
         all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
@@ -68,6 +77,27 @@ class OverlayRenderer:
             cv2.circle(frame, tuple(point_px), 5, (255, 0, 255), 2)
             short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
             self._text(frame, f"{short} ({xy[0]:.0f},{xy[1]:.0f})", tuple(point_px + (7, -7)), (255, 0, 255))
+        if target_label is not None:
+            target_xy = dict(candidates).get(target_label)
+            if target_xy is not None:
+                target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
+                cv2.rectangle(frame, tuple(target_px - 9), tuple(target_px + 9), (0, 0, 255), 2)
+                short = {"centre": "C", "front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(target_label, target_label)
+                self._text(frame, f"T={short}", tuple(target_px + (10, 26)), (0, 0, 255))
+
+    def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
+        """Return the same first usable point that the FSM will try first."""
+        key = (color, round(centre[0] / 5.0), round(centre[1] / 5.0))
+        if key not in self._target_labels:
+            grasp_z = self._calib.meta.get("grasp_z_mm_mean")
+            if grasp_z is None:
+                self._target_labels[key] = None
+            else:
+                self._ik = self._ik or TopDownIK(self._cfg.ik)
+                hover_z = highest_reachable_hover(self._ik, *centre, float(grasp_z), self._cfg)
+                plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z), hover_z)
+                self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
+        return self._target_labels[key]
 
     @staticmethod
     def _cross(frame: np.ndarray, point: tuple[int, int], color: tuple[int, int, int], size: int, thickness: int) -> None:
