@@ -257,11 +257,11 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
               </div>
               {"""<aside class="legend" aria-label="overlay legend">
                 <div class="legend-title">Overlay</div>
-                <div class="key"><i class="cyan"></i><b>C</b><span>detected centre</span></div>
-                <div class="key"><i class="orange"></i><b>B</b><span>bias-corrected centre</span></div>
-                <div class="key"><i class="magenta"></i><b>FL / FR</b><span>front retries</span></div>
-                <div class="key"><i class="magenta"></i><b>BL / BR</b><span>back retries</span></div>
-                <div class="key"><i class="red"></i><b>T</b><span>first IK-reachable target</span></div>
+                <div class="key cyan"><b>C</b><span>detected centre</span></div>
+                <div class="key orange"><b>B</b><span>bias-corrected centre</span></div>
+                <div class="key magenta"><b>FL / FR</b><span>front retries</span></div>
+                <div class="key magenta"><b>BL / BR</b><span>back retries</span></div>
+                <div class="key red"><b>T</b><span>first IK-reachable target</span></div>
                 <section class="details">Select an overlay to show live values.</section>
               </aside>""" if self.server.overlay is not None else ""}
             </section>
@@ -322,13 +322,12 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       line-height: 1.3;
     }}
     .legend-title {{ color: #f5f5f5; font-size: 14px; font-weight: 600; margin-bottom: 3px; }}
-    .key {{ display: grid; grid-template-columns: 10px 58px 1fr; gap: 8px; align-items: center; }}
+    .key {{ display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: center; }}
     .legend b {{ color: #f5f5f5; font-weight: 600; }}
-    .key i {{ width: 9px; height: 9px; border-radius: 50%; display: block; }}
-    .key .cyan {{ background: #00ffff; }}
-    .key .orange {{ background: #ffa500; }}
-    .key .magenta {{ background: #ff00ff; }}
-    .key .red {{ background: #ff0000; }}
+    .cyan b, .detail-row.c span:first-child {{ color: #00ffff; }}
+    .orange b, .detail-row.b span:first-child {{ color: #ffa500; }}
+    .magenta b, .detail-row.retry span:first-child {{ color: #ff00ff; }}
+    .red b, .detail-row.t span:first-child {{ color: #ff0000; }}
     .details {{
       display: grid;
       gap: 6px;
@@ -371,7 +370,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     const pointText = (point) => `(${{point.map((value) => Number(value).toFixed(1)).join(', ')}}) mm`;
     const addDetailRow = (parent, name, value) => {{
       const row = document.createElement('div');
-      row.className = 'detail-row';
+      row.className = `detail-row ${{name.toLowerCase()}}`;
       const key = document.createElement('span');
       key.textContent = name;
       const text = document.createElement('span');
