@@ -30,7 +30,24 @@ from pick_stack.perception.homography import PlaneCalibration
 from pick_stack.tools._capture import grab
 from pick_stack.tools.auto_pick_pixels import find_block_centroid
 
-HOVER_CLEARANCE_MM = 60.0
+
+def highest_reachable_hover(ik, x_mm: float, y_mm: float, base_z_mm: float, cfg) -> float:
+    """Highest top-down-reachable z above the grasp plane, up to the cap.
+
+    The top-down envelope shrinks with reach, so a fixed lift height is
+    unreachable at far positions (measured: 60mm already fails past ~290mm
+    radius). Search downward from the cap and take the first z the IK can
+    actually hold."""
+    z = base_z_mm + cfg.motion.hover_clearance_mm
+    floor = base_z_mm + cfg.motion.hover_min_clearance_mm
+    # require the pose to be genuinely reached, not merely inside the IK
+    # gate: a 12mm "solution" just means the arm stops short of the
+    # commanded height, which would make the reported hover a fiction.
+    while z > floor:
+        if ik.solve(x_mm, y_mm, z).position_error_mm <= 3.0:
+            return z
+        z -= 10.0
+    return floor
 
 
 def load_named_point(points_csv: Path, name: str) -> tuple[float, float, float]:
@@ -55,11 +72,12 @@ def plan(cfg: AppConfig, color: str, dest_name: str, snapshot_url: str, points_c
     place_x, place_y, place_z = load_named_point(points_csv, dest_name)
 
     ik = TopDownIK(cfg.ik, project_root=".")
-    hover_z = grasp_z + HOVER_CLEARANCE_MM
+    pick_hover_z = highest_reachable_hover(ik, pick_x, pick_y, grasp_z, cfg)
+    place_hover_z = highest_reachable_hover(ik, place_x, place_y, place_z, cfg)
     waypoints = {
-        "pick_hover": ik.solve(pick_x, pick_y, hover_z),
+        "pick_hover": ik.solve(pick_x, pick_y, pick_hover_z),
         "pick_grasp": ik.solve(pick_x, pick_y, grasp_z),
-        "place_hover": ik.solve(place_x, place_y, place_z + HOVER_CLEARANCE_MM),
+        "place_hover": ik.solve(place_x, place_y, place_hover_z),
         "place_drop": ik.solve(place_x, place_y, place_z),
     }
     return {
@@ -69,6 +87,7 @@ def plan(cfg: AppConfig, color: str, dest_name: str, snapshot_url: str, points_c
         "grasp_z_mm": grasp_z,
         "place_xy_mm": (place_x, place_y),
         "place_z_mm": place_z,
+        "hover_z_mm": (pick_hover_z, place_hover_z),
         "waypoints": waypoints,
     }
 
@@ -77,6 +96,7 @@ def print_plan(p: dict) -> None:
     print(f"detected {p['area_px']:.0f}px blob at pixel {p['pixel']}")
     print(f"pick target : x={p['pick_xy_mm'][0]:7.1f}mm y={p['pick_xy_mm'][1]:7.1f}mm grasp_z={p['grasp_z_mm']:.1f}mm")
     print(f"place target: x={p['place_xy_mm'][0]:7.1f}mm y={p['place_xy_mm'][1]:7.1f}mm z={p['place_z_mm']:.1f}mm")
+    print(f"hover z     : pick={p['hover_z_mm'][0]:.0f}mm  place={p['hover_z_mm'][1]:.0f}mm (highest top-down reachable)")
     print()
     print(f"{'waypoint':12s} {'pos_err_mm':>10s} {'tilt_err_deg':>12s}  joints")
     for name, r in p["waypoints"].items():
@@ -85,8 +105,9 @@ def print_plan(p: dict) -> None:
         print(f"{name:12s} {r.position_error_mm:10.2f} {r.tilt_error_deg:12.2f}  {joints}{flag}")
 
 
-def execute(cfg: AppConfig, p: dict) -> None:
+def execute(cfg: AppConfig, p: dict) -> bool:
     from pick_stack.control.poses import PoseRegistry
+    from pick_stack.control.sensing import check_grasp
     from pick_stack.control.robot_io import So101RobotIO
     from pick_stack.control.trajectory import TrajectoryPlayer
 
@@ -105,30 +126,45 @@ def execute(cfg: AppConfig, p: dict) -> None:
         print("going home first...")
         player.move_to(poses.get(cfg.motion.home_pose), max_step=1.0)
         print("opening gripper, moving to pick_hover...")
-        player.move_to({"gripper": cfg.sensing.gripper_open_pos})
-        player.move_to(wp["pick_hover"].joints, max_step=1.0)
+        player.set_gripper(cfg.sensing.gripper_open_pos)
+        player.move_to(wp["pick_hover"].joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
         print("descending to grasp...")
         player.move_to(wp["pick_grasp"].joints, max_step=cfg.motion.descent_step_per_tick)
         print("closing gripper...")
-        player.move_to({"gripper": cfg.sensing.gripper_close_pos})
+        player.set_gripper(cfg.sensing.gripper_close_pos)
         time.sleep(cfg.sensing.grasp_settle_s)
+        check = check_grasp(robot, cfg.sensing)
+        print(
+            f"  grasp: {'HELD' if check.grasped else 'EMPTY'}  "
+            f"pos={check.gripper_pos:.1f} load={check.gripper_load_abs:.0f}"
+        )
+        if not check.grasped:
+            print("  no block in the jaws — aborting before transport (AGENTS.md §3).")
+            player.set_gripper(cfg.sensing.gripper_open_pos)
+            player.move_to(wp["pick_hover"].joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+            return False
         print("lifting...")
-        player.move_to(wp["pick_hover"].joints)
+        player.move_to(wp["pick_hover"].joints, tol=cfg.motion.transit_arrival_tol)
         print("moving to place_hover...")
-        player.move_to(wp["place_hover"].joints)
+        player.move_to(wp["place_hover"].joints, tol=cfg.motion.transit_arrival_tol)
         print("descending to place...")
         player.move_to(wp["place_drop"].joints, max_step=cfg.motion.descent_step_per_tick)
         print("opening gripper (release)...")
-        player.move_to({"gripper": cfg.sensing.gripper_open_pos})
+        player.set_gripper(cfg.sensing.gripper_open_pos)
         time.sleep(cfg.motion.place_settle_s)
         print("lifting clear...")
-        player.move_to(wp["place_hover"].joints)
+        player.move_to(wp["place_hover"].joints, tol=cfg.motion.transit_arrival_tol)
         print("done.")
+        return True
     finally:
+        # Always end at home, success or failure: the next run detects the
+        # block *before* it moves the arm, so an arm left hovering over the
+        # workspace would occlude the very block it is about to pick.
         try:
-            player.move_to({"gripper": cfg.sensing.gripper_open_pos})
+            player.set_gripper(cfg.sensing.gripper_open_pos)
+            player.move_to(PoseRegistry.load(cfg.motion.poses_path).get(cfg.motion.home_pose), max_step=1.0, tol=cfg.motion.transit_arrival_tol)
         except Exception as e:
-            print(f"warning: safe-open on shutdown failed: {e}", file=sys.stderr)
+            print(f"warning: safe return home failed: {e}", file=sys.stderr)
         robot.disconnect()
 
 
@@ -159,8 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     if input("\nAbout to move the real arm. Type 'go' to proceed: ").strip().lower() != "go":
         print("cancelled.")
         return 0
-    execute(cfg, p)
-    return 0
+    grasped = execute(cfg, p)
+    return 0 if grasped else 1
 
 
 if __name__ == "__main__":

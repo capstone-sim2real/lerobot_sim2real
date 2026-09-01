@@ -46,7 +46,7 @@ class PerceptionConfig:
     defined by the venue calibration JSON (tools/calibrate_homography.py)."""
 
     # venue calibration produced by tools/calibrate_homography.py
-    calibration_path: str = "src/pick_stack/configs/calib/venue_default.json"
+    calibration_path: str = "src/pick_stack/configs/calib/venue_lab.json"
     top_camera_key: str = "top"
     # chessboard square edge length on the physical board — measure it!
     square_mm: float = 25.0
@@ -142,6 +142,13 @@ class MotionConfig:
     descent_step_per_tick: float = 0.6
     # a move counts as arrived when every joint is within this tolerance
     arrival_tol: float = 3.0
+    # looser tolerance for transit moves: holding a block leaves a
+    # steady-state joint offset that no amount of extra time closes
+    transit_arrival_tol: float = 8.0
+    # lift height above the grasp plane; the actual hover is the highest
+    # top-down-reachable z up to this cap (the envelope shrinks with reach)
+    hover_clearance_mm: float = 120.0
+    hover_min_clearance_mm: float = 40.0
     move_timeout_s: float = 10.0
     # pause after open/close commands before moving on
     gripper_action_wait_s: float = 0.6

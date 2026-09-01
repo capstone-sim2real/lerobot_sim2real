@@ -46,10 +46,16 @@ class TrajectoryPlayer:
         if self._cfg.fps > 0:
             time.sleep(1.0 / self._cfg.fps)
 
-    def move_to(self, goal: Pose, *, max_step: float | None = None) -> Pose:
+    def move_to(self, goal: Pose, *, max_step: float | None = None, tol: float | None = None) -> Pose:
         """Move to goal from the measured current pose; returns the final
-        measured pose. Raises TimeoutError if arrival_tol is not reached."""
+        measured pose. Raises TimeoutError if the tolerance is not reached.
+
+        ``tol`` defaults to ``arrival_tol``. Carrying a block leaves a
+        steady-state offset (gravity holds the joint short of its command),
+        so transit moves should pass a looser tolerance than the grasp
+        descent — waiting longer does not close that gap."""
         max_step = max_step if max_step is not None else self._cfg.max_step_per_tick
+        tol = tol if tol is not None else self._cfg.arrival_tol
         start = self._robot.read_joints()
         deadline = time.monotonic() + self._cfg.move_timeout_s
         for step in interpolate(start, goal, max_step):
@@ -61,11 +67,12 @@ class TrajectoryPlayer:
         while True:
             current = self._robot.read_joints()
             err = max(abs(current[j] - goal[j]) for j in goal)
-            if err <= self._cfg.arrival_tol:
+            if err <= tol:
                 return current
             if time.monotonic() > deadline:
                 raise TimeoutError(
-                    f"move_to did not reach goal within {self._cfg.move_timeout_s}s (max joint error {err:.1f})"
+                    f"move_to did not reach goal within {self._cfg.move_timeout_s}s "
+                    f"(max joint error {err:.1f}, tol {tol:.1f})"
                 )
             self._robot.send_joints(goal)
             self._tick_sleep()
@@ -76,7 +83,32 @@ class TrajectoryPlayer:
             current = self.move_to(pose, max_step=max_step)
         return current
 
-    def set_gripper(self, position: float) -> None:
-        self._robot.send_joints({"gripper": position})
+    def set_gripper(self, position: float, *, stall_ticks: int = 4, stall_eps: float = 0.3) -> float:
+        """Drive the gripper to ``position``, stopping early if it stalls.
+
+        Deliberately neither a single send nor ``move_to``:
+
+        - a single send is capped by the robot's ``max_relative_target``
+          clamp, so a full open (2 -> 95) would only move 10 units;
+        - ``move_to`` treats not reaching the goal as a TimeoutError, but a
+          gripper closing onto a block *cannot* reach the goal — stopping
+          short is exactly how ``check_grasp`` recognises a held block
+          (AGENTS.md §10).
+
+        So: step toward the target like an interpolated move, and return as
+        soon as the measured position stops changing. Returns the final
+        measured gripper position.
+        """
+        current = self._robot.read_joints()["gripper"]
+        stalled = 0
+        for step in interpolate({"gripper": current}, {"gripper": position}, self._cfg.max_step_per_tick):
+            self._robot.send_joints(step)
+            self._tick_sleep()
+            measured = self._robot.read_joints()["gripper"]
+            stalled = stalled + 1 if abs(measured - current) < stall_eps else 0
+            current = measured
+            if stalled >= stall_ticks:
+                break  # jaws are against something (or at a hard stop)
         if self._cfg.gripper_action_wait_s > 0:
             time.sleep(self._cfg.gripper_action_wait_s)
+        return self._robot.read_joints()["gripper"]

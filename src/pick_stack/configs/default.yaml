@@ -22,7 +22,7 @@ robot:
       fourcc: MJPG
 
 perception:
-  calibration_path: src/pick_stack/configs/calib/venue_default.json
+  calibration_path: src/pick_stack/configs/calib/venue_lab.json
   top_camera_key: top
   square_mm: 25.0        # 실제 체스판 한 칸 길이 실측 후 수정
   min_pattern: [5, 5]
@@ -71,6 +71,9 @@ motion:
   max_step_per_tick: 2.0
   descent_step_per_tick: 0.6
   arrival_tol: 3.0
+  transit_arrival_tol: 8.0
+  hover_clearance_mm: 120.0
+  hover_min_clearance_mm: 40.0
   move_timeout_s: 10.0
   gripper_action_wait_s: 0.6
   home_pose: home
