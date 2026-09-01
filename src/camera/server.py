@@ -24,16 +24,31 @@ BOUNDARY = "frame"
 
 
 class FrameRecorder:
-    """Persist the newest frame from each camera at a bounded interval."""
+    """Persist periodic frames, optionally only when the scene has changed."""
 
-    def __init__(self, directory: Path | str, interval_s: float) -> None:
+    def __init__(
+        self,
+        directory: Path | str,
+        interval_s: float,
+        *,
+        change_threshold: float | None = None,
+        max_interval_s: float | None = None,
+    ) -> None:
         if interval_s <= 0:
             raise ValueError("save interval must be positive")
+        if change_threshold is not None and change_threshold < 0:
+            raise ValueError("change threshold must be non-negative")
+        if max_interval_s is not None and max_interval_s <= 0:
+            raise ValueError("maximum save interval must be positive")
         # The IK preview temporarily changes the process cwd while loading
         # its URDF. Recording must not follow that transient cwd.
         self._directory = Path(directory).resolve()
         self._interval_s = interval_s
+        self._change_threshold = change_threshold
+        self._max_interval_s = max_interval_s
         self._next_save_at: dict[str, float] = {}
+        self._last_saved_at: dict[str, float] = {}
+        self._reference_frames: dict[str, np.ndarray] = {}
         self._saved = 0
         self._lock = threading.Lock()
 
@@ -46,12 +61,28 @@ class FrameRecorder:
         with self._lock:
             return self._saved
 
+    @property
+    def saves_on_change(self) -> bool:
+        return self._change_threshold is not None
+
     def record(self, camera_name: str, jpeg: bytes, *, now: float | None = None) -> Path | None:
         now = time.time() if now is None else now
         with self._lock:
             if now < self._next_save_at.get(camera_name, 0.0):
                 return None
             self._next_save_at[camera_name] = now + self._interval_s
+            if self._change_threshold is not None:
+                reference = self._reference_frames.get(camera_name)
+                forced = (
+                    self._max_interval_s is not None
+                    and now - self._last_saved_at.get(camera_name, now) >= self._max_interval_s
+                )
+                current = self._comparison_frame(jpeg)
+                changed = reference is None or self._change_score(reference, current) >= self._change_threshold
+                if not changed and not forced:
+                    return None
+                self._reference_frames[camera_name] = current
+                self._last_saved_at[camera_name] = now
 
         stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(now))
         millis = int((now % 1) * 1000)
@@ -64,6 +95,18 @@ class FrameRecorder:
         with self._lock:
             self._saved += 1
         return path
+
+    @staticmethod
+    def _comparison_frame(jpeg: bytes) -> np.ndarray:
+        frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        if frame is None:
+            raise ValueError("cannot compare an invalid JPEG")
+        frame = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
+        return cv2.GaussianBlur(frame, (5, 5), 0)
+
+    @staticmethod
+    def _change_score(previous: np.ndarray, current: np.ndarray) -> float:
+        return float(np.mean(cv2.absdiff(previous, current)))
 
 
 class CameraStream:
@@ -549,6 +592,23 @@ def parse_args() -> argparse.Namespace:
         help="Seconds between saved frames per camera. Default: 0 (disabled).",
     )
     parser.add_argument(
+        "--save-on-change",
+        action="store_true",
+        help="Save only when the scene differs enough from the last saved frame.",
+    )
+    parser.add_argument(
+        "--change-threshold",
+        type=float,
+        default=8.0,
+        help="Mean grayscale difference required by --save-on-change. Default: 8.",
+    )
+    parser.add_argument(
+        "--max-save-interval-s",
+        type=float,
+        default=10.0,
+        help="Force a status frame this often when --save-on-change is enabled. Default: 10.",
+    )
+    parser.add_argument(
         "--overlay-config",
         default="",
         help="Enable detection/grasp-plan overlay using this project YAML config.",
@@ -556,6 +616,10 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if bool(args.save_dir) != (args.save_interval_s > 0):
         parser.error("--save-dir and a positive --save-interval-s must be supplied together")
+    if args.save_on_change and not args.save_dir:
+        parser.error("--save-on-change requires --save-dir and --save-interval-s")
+    if args.save_on_change and args.max_save_interval_s <= 0:
+        parser.error("--max-save-interval-s must be positive with --save-on-change")
     return args
 
 
@@ -566,7 +630,16 @@ def main() -> int:
         from camera.overlay import OverlayRenderer
 
         overlay = OverlayRenderer(args.overlay_config)
-    recorder = FrameRecorder(args.save_dir, args.save_interval_s) if args.save_dir else None
+    recorder = (
+        FrameRecorder(
+            args.save_dir,
+            args.save_interval_s,
+            change_threshold=args.change_threshold if args.save_on_change else None,
+            max_interval_s=args.max_save_interval_s if args.save_on_change else None,
+        )
+        if args.save_dir
+        else None
+    )
     cameras = {
         "shoulder": CameraStream(
             "shoulder",
@@ -609,7 +682,8 @@ def main() -> int:
     if overlay is not None:
         print("Overlay: /overlay/<camera>.jpg, /detections/<camera>.json")
     if recorder is not None:
-        print(f"Saving one JPEG per camera every {recorder.interval_s:g}s under {args.save_dir}")
+        mode = "when the scene changes" if recorder.saves_on_change else "periodically"
+        print(f"Saving JPEGs {mode}, checked every {recorder.interval_s:g}s under {args.save_dir}")
 
     try:
         server.serve_forever()

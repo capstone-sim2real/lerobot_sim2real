@@ -79,3 +79,18 @@ def test_camera_frame_recorder_saves_atomically_at_the_requested_interval(tmp_pa
     assert second is not None and second.read_bytes() == b"three"
     assert recorder.saved == 2
     assert not list((tmp_path / "shoulder").glob("*.tmp"))
+
+
+def test_camera_frame_recorder_can_save_only_significant_scene_changes(tmp_path):
+    def jpeg(value: int) -> bytes:
+        ok, encoded = cv2.imencode(".jpg", np.full((90, 160, 3), value, dtype=np.uint8))
+        assert ok
+        return encoded.tobytes()
+
+    recorder = FrameRecorder(tmp_path, interval_s=1.0, change_threshold=8.0, max_interval_s=5.0)
+    assert recorder.record("shoulder", jpeg(0), now=100.0) is not None
+    assert recorder.record("shoulder", jpeg(0), now=101.0) is None
+    assert recorder.record("shoulder", jpeg(40), now=102.0) is not None
+    assert recorder.record("shoulder", jpeg(40), now=103.0) is None
+    assert recorder.record("shoulder", jpeg(40), now=107.0) is not None
+    assert recorder.saved == 3
