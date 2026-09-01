@@ -262,7 +262,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
                 <div class="key"><i class="magenta"></i><b>FL / FR</b><span>front retries</span></div>
                 <div class="key"><i class="magenta"></i><b>BL / BR</b><span>back retries</span></div>
                 <div class="key"><i class="red"></i><b>T</b><span>first IK-reachable target</span></div>
-                <section class="details" data-camera="{html.escape(name)}">Select an overlay to show live values.</section>
+                <section class="details">Select an overlay to show live values.</section>
               </aside>""" if self.server.overlay is not None else ""}
             </section>
             """
@@ -394,7 +394,8 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       detailsInFlight = true;
       detailsColor = color;
       lastDetailsAt = now;
-      const camera = panel.dataset.camera;
+      const camera = document.querySelector('.camera-image')?.dataset.camera;
+      if (!camera) return;
       try {{
         const response = await fetch(`/detections/${{camera}}.json?color=${{encodeURIComponent(color)}}`);
         if (!response.ok) throw new Error('request failed');
