@@ -48,7 +48,7 @@ class FrameRecorder:
         self._max_interval_s = max_interval_s
         self._next_save_at: dict[str, float] = {}
         self._last_saved_at: dict[str, float] = {}
-        self._reference_frames: dict[str, np.ndarray] = {}
+        self._previous_frames: dict[str, np.ndarray] = {}
         self._saved = 0
         self._lock = threading.Lock()
 
@@ -72,16 +72,16 @@ class FrameRecorder:
                 return None
             self._next_save_at[camera_name] = now + self._interval_s
             if self._change_threshold is not None:
-                reference = self._reference_frames.get(camera_name)
+                previous = self._previous_frames.get(camera_name)
                 forced = (
                     self._max_interval_s is not None
                     and now - self._last_saved_at.get(camera_name, now) >= self._max_interval_s
                 )
                 current = self._comparison_frame(jpeg)
-                changed = reference is None or self._change_score(reference, current) >= self._change_threshold
+                changed = previous is None or self._change_score(previous, current) >= self._change_threshold
+                self._previous_frames[camera_name] = current
                 if not changed and not forced:
                     return None
-                self._reference_frames[camera_name] = current
                 self._last_saved_at[camera_name] = now
 
         stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(now))
