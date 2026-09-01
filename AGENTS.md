@@ -33,7 +33,7 @@
 ```
 
 `src/`가 본체다. LeRobot은 `third_party/lerobot` submodule로 커밋을 고정하고,
-루트 `uv` 환경에 editable 설치한다. `scripts/so101_env.sh`가 루트 venv를 활성화한다.
+루트 `uv` 환경에 editable 설치한다. 실행은 `uv run` 또는 설치된 `so101-*` CLI를 사용한다.
 
 **`import config`는 lerobot·placo·torch 없이도 성공해야 한다.** 하드웨어
 의존 모듈은 전부 함수 안에서 lazy import 한다. CI/단위 테스트가 이에 의존한다.
@@ -96,7 +96,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   자리에 턱을 물려도 손목 각도에 따라 기록되는 좌표가 최대 13.7mm 달라진다.
   손목 각도가 점마다 다르면 그 오프셋이 점마다 다르게 섞여 적합이 망가진다.
   런타임 IK도 중립 손목으로 잡으므로(§7) 캘리브레이션 자세와 런타임 자세가
-  일치해야 한다. `scripts/so101_fk_probe.sh`가 `wrist_roll`을 실시간으로
+  일치해야 한다. `so101-fk`가 `wrist_roll`을 실시간으로
   표시하니 기록 전에 확인한다.
 - **관절 각도도 함께 기록한다.** 좌표만 남기면 위 오프셋을 사후에 역산·보정할
   수 없다 (2026-08-31에 실제로 시도했다가 실패했다). `points.csv`는 5축
@@ -138,7 +138,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   (`pose_target = pose_actual.copy()`) 측방 이동 시 5-DOF로 불가능한 자세를
   요구하게 되어 실패한다.
 - placo는 **메시를 cwd 기준으로 찾는다.** URDF는 절대경로로 주고 cwd를 URDF의
-  부모 디렉토리로 바꾼 뒤 로드한다 (`scripts/so101_ik_move.py:load_kinematics` 참고).
+  부모 디렉토리로 바꾼 뒤 로드한다 (`tools/ik_move.py:load_kinematics` 참고).
 
 **IK는 소수의 카테시안 웨이포인트에서만 푼다.** 웨이포인트 사이는
 `control/trajectory.py`의 `interpolate()` + `TrajectoryPlayer`로 관절공간

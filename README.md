@@ -65,14 +65,13 @@ so101-camera --host 0.0.0.0 --port 8090 \
   --save-dir /tmp/so101-camera --save-interval-s 2
 ```
 
-색으로 블록을 찾아 집어서 지정 좌표로 옮기기 (카메라 서버를 먼저 띄워둔 채로):
+CV/IK 파지 flow 실행 (카메라 서버를 먼저 띄워둔 채로):
 
 ```bash
-uv run python -m tools.demo_pick_and_place \
-  --color green --to P13
+so101-run --task 1 --flow pick_lift_lower --color green
 ```
 
-계획만 확인하려면 `--dry-run`. 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
+자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
 
 ## Repository Layout
 
@@ -93,17 +92,8 @@ uv run python -m tools.demo_pick_and_place \
 - [SO-101 문제해결](docs/guide/SO101_문제해결.md)
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
-- [SO-101 데이터 수집 & 관리 가이드 (Orin)](docs/guide/SO101_데이터수집_관리.md)
-- [SO-101 학습 & 추론 가이드 (데스크탑)](docs/guide/SO101_학습_추론.md)
 - [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
 - [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
-
-## Datasets
-
-모방학습 데이터셋은 git이 아니라 HuggingFace Hub(public)에 둡니다. 로그인 없이 바로 받을 수 있습니다. 받는 법과 수집·관리는 [데이터 수집 & 관리 가이드](docs/guide/SO101_데이터수집_관리.md) 참고.
-
-- [`142spp/so101_place_v1`](https://huggingface.co/datasets/142spp/so101_place_v1) — 병합 마스터 (초록+노랑, 51 에피소드, 학습용)
-- [`142spp/so101_place_green_v1`](https://huggingface.co/datasets/142spp/so101_place_green_v1), [`142spp/so101_place_yellow_v1`](https://huggingface.co/datasets/142spp/so101_place_yellow_v1) — 색별 원본
 
 ## Notes
 

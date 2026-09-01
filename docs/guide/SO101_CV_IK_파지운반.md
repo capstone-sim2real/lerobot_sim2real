@@ -1,8 +1,8 @@
 # SO-101 CV+IK 파지·운반 가이드
 
 탑다운 카메라로 블록을 찾아 역기구학으로 집고, 지정한 좌표로 옮기는 경로의
-실행 방법과 설계를 정리합니다. ACT 정책 경로(`fsm/handlers.py`)와는 별개이며,
-현재 통합 지점은 `tools/demo_pick_and_place.py` 하나입니다.
+실행 방법과 설계를 정리합니다. 현재 정식 실행 경로는 `so101-run`과
+`fsm/ik_handler.py`입니다.
 
 ## 1. 실행 방법
 
@@ -23,23 +23,13 @@ so101-camera --host 0.0.0.0 --port 8090
 
 ```bash
 cd ~/lerobot_sim2real
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
-  --color green --to P13
+so101-run --task 1 --flow pick_lift_lower --color green
 ```
 
 - `--color` : `red` `yellow` `green` `blue` `wood`
-- `--to` : `docs/calibration/points.csv` 의 점 이름 (`P1`~`P15`)
-- `--dry-run` : 계획만 출력. 하드웨어에 연결하지 않고 모터도 움직이지 않음
 - `--set a.b=c` : 설정 임시 오버라이드 (여러 번 사용 가능)
 
-계획을 출력한 뒤 확인을 받습니다. **엔터를 누르면 팔이 움직입니다.**
-`n` + 엔터면 취소입니다.
-
-```
-About to move the real arm. Enter to proceed, 'n' to cancel:
-```
-
-**반드시 좌표를 눈으로 확인하고 누르세요.** 오타 방어가 없습니다.
+실행 전에는 웹 오버레이의 `T`와 작업공간을 확인하세요.
 
 ### 실행 전 점검
 
@@ -267,8 +257,7 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 **(a) 전역 반경 보정 — 우측 블록으로**
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
-  --color green --to P8 \
+so101-run --task 1 --flow pick_lift_lower --color green \
   --set motion.left_half_radial_offset_mm=0 \
   --set motion.left_half_tangential_offset_mm=0 \
   --set motion.grasp_retry_offsets_mm='[]' \
@@ -316,8 +305,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
 한 번에 처리합니다).
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.view_detect \
-    --camera /dev/video0 \
+so101-detect --snapshot http://127.0.0.1:8090/snapshot/shoulder.jpg \
     --calib src/configs/calib/venue_lab.json \
     --out /tmp/detect.png
 ```
@@ -327,8 +315,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.view_detect \
 하드웨어·placo 없이 도는 테스트입니다.
 
 ```bash
-cd ~/lerobot_sim2real
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
+uv run --extra hardware --extra dev pytest -q
 ```
 
 | 파일 | 범위 |
@@ -402,12 +389,12 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
 
 1. **드리프트 재검사** — 테이프 작업 중 카메라를 건드렸을 수 있음
    ```bash
-   python -m tools.camera_drift_check --watch 600
+   uv run python -m tools.camera_drift_check --watch 600
    ```
 2. **구역 좌표 등록** — 전용 도구가 이미 있습니다. 저장된 프레임에서 테이프
    안쪽 네 모서리의 픽셀 좌표를 읽어 다시 실행하면 됩니다.
    ```bash
-   python -m tools.calibrate_homography \
+   so101-calibrate \
        --image src/configs/calib/venue_lab.json.frame.png \
        --square-mm 25 --venue lab \
        --base-px <bx,by> --zone-px "x1,y1 x2,y2 x3,y3 x4,y4" \
@@ -419,8 +406,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
    고르지 않고 `perception.hsv_ranges`의 전 색을 한 번에 검출해 주석 이미지를
    남깁니다. 빨간 블록만 잡히고 테이프는 빠져야 합니다.
    ```bash
-   PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.view_detect \
-       --camera /dev/video0 \
+   so101-detect --snapshot http://127.0.0.1:8090/snapshot/shoulder.jpg \
        --calib src/configs/calib/venue_lab.json \
        --out /tmp/detect.png
    ```
