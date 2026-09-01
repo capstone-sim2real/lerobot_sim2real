@@ -26,8 +26,8 @@ sudo usermod -aG dialout "$USER"
 # 로그아웃 후 다시 로그인
 
 cd ~/lerobot_sim2real
-./scripts/setup_lerobot_env.sh
-./scripts/so101_scan_motors.sh
+uv sync --python 3.12 --extra hardware --extra dev
+so101-scan-motors
 ```
 
 자세한 설치 절차와 `uv`, `fish`, 권한 문제는 [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)를 봅니다.
@@ -37,39 +37,32 @@ cd ~/lerobot_sim2real
 모터 응답 확인:
 
 ```bash
-./scripts/so101_scan_motors.sh
+so101-scan-motors
 ```
 
 캘리브레이션 초기화 및 재실행:
 
 ```bash
-./scripts/so101_calibrate.sh all
-```
-
-리더-팔로워 텔레오퍼레이션:
-
-```bash
-./scripts/so101_teleop.sh 30
-./scripts/so101_teleop.sh 60
+so101-robot-calibrate all --reset
 ```
 
 리더 없이 원격 키보드 조작:
 
 ```bash
-./scripts/so101_keyboard_control.sh --step 1
+so101-keyboard --step 1
 ```
 
 브라우저로 카메라 실시간 확인:
 
 ```bash
-./scripts/so101_camera_web.sh
+so101-camera --host 0.0.0.0 --port 8090
 ```
 
 에이전트 검토용으로 프레임을 주기 저장하려면 다음처럼 실행합니다.
 
 ```bash
-SO101_CAMERA_SAVE_DIR=logs/camera SO101_CAMERA_SAVE_INTERVAL_S=2 \
-  ./scripts/so101_camera_web.sh
+so101-camera --host 0.0.0.0 --port 8090 \
+  --save-dir /tmp/so101-camera --save-interval-s 2
 ```
 
 색으로 블록을 찾아 집어서 지정 좌표로 옮기기 (카메라 서버를 먼저 띄워둔 채로):
@@ -81,12 +74,6 @@ uv run python -m tools.demo_pick_and_place \
 
 계획만 확인하려면 `--dry-run`. 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
 
-모방학습 에피소드 1개 기록:
-
-```bash
-./scripts/so101_learn.sh record
-```
-
 ## Repository Layout
 
 ```text
@@ -94,11 +81,11 @@ uv run python -m tools.demo_pick_and_place \
 ├── docs/
 │   ├── guide/                 SO-101 사용/실험 가이드
 │   └── report/                착수보고서 등 제출 문서
-├── scripts/                   SO-101 실행 래퍼 스크립트
+├── src/tools/                 SO-101 Python CLI 구현
 ├── third_party/               SO-101 자산·LeRobot submodule
 ```
 
-`third_party/lerobot`은 Git submodule이고, `.venv/`는 각 팀원이 `./scripts/setup_lerobot_env.sh`로 생성하는 로컬 환경입니다. `uv.lock`과 submodule 커밋을 함께 추적해 같은 드라이버·기구학 버전을 재현합니다.
+`third_party/lerobot`은 Git submodule이고, `.venv/`는 각 팀원이 `uv sync`로 생성하는 로컬 환경입니다. `uv.lock`과 submodule 커밋을 함께 추적해 같은 드라이버·기구학 버전을 재현합니다.
 
 ## Documents
 

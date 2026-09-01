@@ -245,8 +245,8 @@ IK 모델 내 수렴 오차        0.00 mm          25점 중 23점
 python -m tools.camera_drift_check --watch 600
 
 # 캘리브레이션 점 기록 (손목 각도 실시간 확인용 프로브 병행)
-./scripts/so101_fk_probe.sh
-./scripts/so101_calib_point.sh P1
+so101-fk
+so101-capture-calibration-point P1
 
 # 픽셀 자동 검출 및 homography 적합 (잔차·LOO 출력)
 python -m tools.auto_pick_pixels --color green

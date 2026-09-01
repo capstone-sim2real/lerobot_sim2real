@@ -13,7 +13,7 @@
 
 ```bash
 cd ~/lerobot_sim2real
-./scripts/so101_camera_web.sh
+so101-camera --host 0.0.0.0 --port 8090
 ```
 
 `http://<호스트>:8090` 에서 화면을 확인할 수 있습니다. 이 서버가 없으면
@@ -46,7 +46,7 @@ About to move the real arm. Enter to proceed, 'n' to cancel:
 | 항목 | 확인 방법 |
 |---|---|
 | 카메라가 흔들리지 않았는가 | `python -m tools.camera_drift_check --watch 600` (p95 < 2px) |
-| 팔에 토크가 걸려 있는가 | 손으로 밀리면 `./scripts/so101_torque_off.sh` 의 반대 — 재연결 필요 |
+| 팔에 토크가 걸려 있는가 | 손으로 밀리면 `so101-torque-off` 의 반대 — 재연결 필요 |
 | 작업영역이 비어 있는가 | 운반 경로에 장애물이 없어야 함 |
 
 ---
@@ -304,7 +304,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
 
 | 증상 | 원인 / 조치 |
 |---|---|
-| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `./scripts/so101_camera_web.sh` |
+| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera --host 0.0.0.0 --port 8090` |
 | `No <color> block found` | 블록이 화면 밖이거나 HSV 범위 밖. `view_detect`로 확인 (아래) |
 | `ABORT: a required waypoint exceeds the IK error gate` | 목표가 도달 범위 밖. 5절의 반경-높이 표 확인 |
 | 바닥까지 안 내려감 | `--set motion.descent_settle_s=8`. 서보 정착이 느린 것이지 조기 정지가 아님 |
