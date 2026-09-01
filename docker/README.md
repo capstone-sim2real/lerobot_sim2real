@@ -1,7 +1,7 @@
 # Docker — Eval 서버 제출 이미지
 
 > **보관 문서**: ACT policy server 제출용 Docker 경로는 현재 CV/IK 실행
-> 범위에서 제외했습니다. 이 문서는 과거 제출 환경 기록입니다.
+> 범위에서 제외했음. 이 문서는 과거 제출 환경 기록임.
 
 최종 제출물은 eval 서버(x86_64, `nvidia-driver-580-open`)에 로드되는 Docker
 이미지입니다 (AGENTS.md §2.7). 이 이미지는 **policy_server + 학습된 ACT
