@@ -101,7 +101,7 @@ class SensingConfig:
     # the team's arm is 0..77.69, tools/so101_gripper_probe.sh). Only the
     # FSM's own open/close bookkeeping reads this — the ACT/teleop path
     # commands the gripper itself and never reads these fields.
-    gripper_open_pos: float = 70.0
+    gripper_open_pos: float = 75.0
     gripper_close_pos: float = 2.0
     # grasp check thresholds, measured 2026-08-31 (tune_gripper_load.py,
     # --mode grasp, 6 trials): held pos=44.1..44.3 load=500(saturated);
