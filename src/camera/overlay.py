@@ -76,16 +76,16 @@ class OverlayRenderer:
         all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
         centre_px, biased_px, *retry_px = all_px
-        self._circle_label(frame, centre_px, "C", (255, 255, 0), (10, -10))
-        self._circle_label(frame, biased_px, "B", (0, 165, 255), (8, 16))
+        self._cross_label(frame, centre_px, "C", (255, 255, 0), (10, -10))
+        self._cross_label(frame, biased_px, "B", (0, 165, 255), (8, 16))
         for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
             short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
-            self._circle_label(frame, point_px, short, (255, 0, 255), (7, -7))
+            self._cross_label(frame, point_px, short, (255, 0, 255), (7, -7))
         if target_label is not None:
             target_xy = dict(candidates).get(target_label)
             if target_xy is not None:
                 target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
-                self._circle_label(frame, target_px, "T", (0, 0, 255), (10, 26), radius=9)
+                self._cross_label(frame, target_px, "T", (0, 0, 255), (10, 26), size=9)
 
     def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
         """Return the same first usable point that the FSM will try first."""
@@ -103,15 +103,17 @@ class OverlayRenderer:
             return self._target_labels[key]
 
     @staticmethod
-    def _circle_label(
+    def _cross_label(
         frame: np.ndarray,
         point: np.ndarray,
         label: str,
         color: tuple[int, int, int],
         text_offset: tuple[int, int],
-        radius: int = 5,
+        size: int = 5,
     ) -> None:
-        cv2.circle(frame, tuple(point), radius, color, 2, cv2.LINE_AA)
+        x, y = point
+        cv2.line(frame, (x - size, y), (x + size, y), color, 2, cv2.LINE_AA)
+        cv2.line(frame, (x, y - size), (x, y + size), color, 2, cv2.LINE_AA)
         OverlayRenderer._text(frame, label, tuple(point + text_offset), color)
 
     @staticmethod
