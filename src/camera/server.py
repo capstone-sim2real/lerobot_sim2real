@@ -254,23 +254,11 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
                 <h2>{html.escape(name)}</h2>
                 <code>{html.escape(camera.device)}</code>
               </header>
-              <img src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
+              <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
             </section>
             """
             for name, camera in self.server.cameras.items()
         )
-        overlay_tiles = "\n".join(
-            f"""
-            <section class="camera">
-              <header>
-                <h2>{html.escape(name)} detection plan</h2>
-                <code>C=detected centre · B=biased centre · FL/FR/BL/BR=retry points (mm)</code>
-              </header>
-              <img class="overlay" data-camera="{html.escape(name)}" src="/overlay/{html.escape(name)}.jpg" alt="{html.escape(name)} detection overlay">
-            </section>
-            """
-            for name in self.server.cameras
-        ) if self.server.overlay is not None else ""
         body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -344,20 +332,28 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     <h1>SO-101 Cameras</h1>
     <code>http://{html.escape(host)}</code>
     {"""<label>overlay block <select id="overlay-color">
-      <option value="">all</option><option value="green" selected>green</option>
+      <option value="none" selected>none</option><option value="">all</option>
+      <option value="green">green</option>
       <option value="yellow">yellow</option><option value="blue">blue</option>
       <option value="red">red</option><option value="wood">wood</option>
     </select></label>""" if self.server.overlay is not None else ""}
   </div>
   <main>
     {camera_tiles}
-    {overlay_tiles}
   </main>
   <script>
     const refreshOverlays = () => {{
-      const color = document.querySelector('#overlay-color')?.value || '';
-      document.querySelectorAll('img.overlay').forEach((image) => {{
+      const color = document.querySelector('#overlay-color')?.value;
+      document.querySelectorAll('img.camera-image').forEach((image) => {{
+        if (color === 'none' || color === undefined) {{
+          if (image.dataset.mode !== 'raw') {{
+            image.src = `/video/${{image.dataset.camera}}.mjpg`;
+            image.dataset.mode = 'raw';
+          }}
+          return;
+        }}
         image.src = `/overlay/${{image.dataset.camera}}.jpg?color=${{encodeURIComponent(color)}}&t=${{Date.now()}}`;
+        image.dataset.mode = 'overlay';
       }});
     }};
     document.querySelector('#overlay-color')?.addEventListener('change', refreshOverlays);
