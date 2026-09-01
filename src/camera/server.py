@@ -262,7 +262,6 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
                 <div class="key magenta"><b>FL / FR</b><span>front retries</span></div>
                 <div class="key magenta"><b>BL / BR</b><span>back retries</span></div>
                 <div class="key red"><b>T</b><span>first IK-reachable target</span></div>
-                <section class="details">Select an overlay to show live values.</section>
               </aside>""" if self.server.overlay is not None else ""}
             </section>
             """
@@ -328,18 +327,6 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     .orange b, .detail-row.b span:first-child {{ color: #ffa500; }}
     .magenta b, .detail-row.retry span:first-child {{ color: #ff00ff; }}
     .red b, .detail-row.t span:first-child {{ color: #ff0000; }}
-    .details {{
-      display: grid;
-      gap: 6px;
-      margin-top: 8px;
-      padding-top: 12px;
-      border-top: 1px solid #444;
-      color: #a8a8a8;
-    }}
-    .detail-block {{ display: grid; gap: 3px; }}
-    .detail-block + .detail-block {{ padding-top: 8px; border-top: 1px solid #333; }}
-    .detail-name {{ color: #f5f5f5; font-weight: 600; text-transform: capitalize; }}
-    .detail-row {{ display: grid; grid-template-columns: 44px 1fr; gap: 8px; }}
     select {{
       color: #f5f5f5;
       background: #111;
@@ -350,7 +337,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     @media (max-width: 760px) {{
       .camera-layout {{ grid-template-columns: 1fr; }}
       .legend {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-      .legend-title, .details {{ grid-column: 1 / -1; }}
+      .legend-title {{ grid-column: 1 / -1; }}
     }}
   </style>
 </head>
@@ -367,62 +354,6 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     {camera_tiles}
   </main>
   <script>
-    const pointText = (point) => `(${{point.map((value) => Number(value).toFixed(1)).join(', ')}}) mm`;
-    const addDetailRow = (parent, name, value) => {{
-      const row = document.createElement('div');
-      row.className = `detail-row ${{name.toLowerCase()}}`;
-      const key = document.createElement('span');
-      key.textContent = name;
-      const text = document.createElement('span');
-      text.textContent = value;
-      row.append(key, text);
-      parent.append(row);
-    }};
-    let detailsInFlight = false;
-    let detailsColor = '';
-    let lastDetailsAt = 0;
-    const refreshDetails = async (color) => {{
-      const panel = document.querySelector('.details');
-      if (!panel) return;
-      if (color === 'none' || color === undefined) {{
-        panel.textContent = 'Select an overlay to show live values.';
-        return;
-      }}
-      const now = Date.now();
-      if (detailsInFlight || (detailsColor === color && now - lastDetailsAt < 2000)) return;
-      detailsInFlight = true;
-      detailsColor = color;
-      lastDetailsAt = now;
-      const camera = document.querySelector('.camera-image')?.dataset.camera;
-      if (!camera) return;
-      try {{
-        const response = await fetch(`/detections/${{camera}}.json?color=${{encodeURIComponent(color)}}`);
-        if (!response.ok) throw new Error('request failed');
-        const data = await response.json();
-        panel.replaceChildren();
-        if (!data.detections.length) {{
-          panel.textContent = 'No matching block detected.';
-          return;
-        }}
-        data.detections.forEach((detection) => {{
-          const block = document.createElement('div');
-          block.className = 'detail-block';
-          const name = document.createElement('div');
-          name.className = 'detail-name';
-          name.textContent = detection.color;
-          block.append(name);
-          addDetailRow(block, 'C', pointText(detection.center_mm));
-          addDetailRow(block, 'B', pointText(detection.biased_center_mm));
-          addDetailRow(block, 'T', detection.target_label ? `T → ${{detection.target_label}}` : 'no reachable target');
-          addDetailRow(block, 'retry', `${{detection.candidates_mm.length - 1}} points`);
-          panel.append(block);
-        }});
-      }} catch (_error) {{
-        panel.textContent = 'Live values unavailable.';
-      }} finally {{
-        detailsInFlight = false;
-      }}
-    }};
     const refreshOverlays = () => {{
       const color = document.querySelector('#overlay-color')?.value;
       document.querySelectorAll('img.camera-image').forEach((image) => {{
@@ -444,7 +375,6 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
         image.src = `/overlay/${{image.dataset.camera}}.jpg?color=${{encodeURIComponent(color)}}&t=${{Date.now()}}`;
         image.dataset.mode = 'overlay';
       }});
-      refreshDetails(color);
     }};
     document.querySelector('#overlay-color')?.addEventListener('change', refreshOverlays);
     setInterval(refreshOverlays, 1000);
