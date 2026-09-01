@@ -76,21 +76,16 @@ class OverlayRenderer:
         all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
         centre_px, biased_px, *retry_px = all_px
-        self._text(frame, f"C ({centre[0]:.0f},{centre[1]:.0f})", tuple(centre_px + (10, -10)), (255, 255, 0))
-        self._text(frame, f"B ({biased[0]:.0f},{biased[1]:.0f})", tuple(biased_px + (8, 16)), (0, 165, 255))
+        self._circle_label(frame, centre_px, "C", (255, 255, 0), (10, -10))
+        self._circle_label(frame, biased_px, "B", (0, 165, 255), (8, 16))
         for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
             short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
-            self._text(frame, f"{short} ({xy[0]:.0f},{xy[1]:.0f})", tuple(point_px + (7, -7)), (255, 0, 255))
+            self._circle_label(frame, point_px, short, (255, 0, 255), (7, -7))
         if target_label is not None:
             target_xy = dict(candidates).get(target_label)
             if target_xy is not None:
                 target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
-                self._text(
-                    frame,
-                    f"T={target_label} ({target_xy[0]:.0f},{target_xy[1]:.0f})",
-                    tuple(target_px + (10, 26)),
-                    (0, 0, 255),
-                )
+                self._circle_label(frame, target_px, "T", (0, 0, 255), (10, 26), radius=9)
 
     def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
         """Return the same first usable point that the FSM will try first."""
@@ -106,6 +101,18 @@ class OverlayRenderer:
                     plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z), hover_z)
                     self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
             return self._target_labels[key]
+
+    @staticmethod
+    def _circle_label(
+        frame: np.ndarray,
+        point: np.ndarray,
+        label: str,
+        color: tuple[int, int, int],
+        text_offset: tuple[int, int],
+        radius: int = 5,
+    ) -> None:
+        cv2.circle(frame, tuple(point), radius, color, 2, cv2.LINE_AA)
+        OverlayRenderer._text(frame, label, tuple(point + text_offset), color)
 
     @staticmethod
     def _cross(frame: np.ndarray, point: tuple[int, int], color: tuple[int, int, int], size: int, thickness: int) -> None:

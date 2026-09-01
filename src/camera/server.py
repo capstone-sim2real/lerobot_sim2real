@@ -255,14 +255,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
                 <img class="camera-image" data-camera="{html.escape(name)}" data-mode="raw" src="/video/{html.escape(name)}.mjpg" alt="{html.escape(name)} camera stream">
                 <div class="camera-info">{html.escape(name)} · {html.escape(camera.device)}</div>
               </div>
-              {"""<aside class="legend" aria-label="overlay legend">
-                <div class="legend-title">Overlay</div>
-                <div class="key cyan"><b>C</b><span>detected centre</span></div>
-                <div class="key orange"><b>B</b><span>bias-corrected centre</span></div>
-                <div class="key magenta"><b>FL / FR</b><span>front retries</span></div>
-                <div class="key magenta"><b>BL / BR</b><span>back retries</span></div>
-                <div class="key red"><b>T</b><span>first IK-reachable target</span></div>
-              </aside>""" if self.server.overlay is not None else ""}
+              {"""<aside class="details" aria-live="polite">Select an overlay.</aside>""" if self.server.overlay is not None else ""}
             </section>
             """
             for name, camera in self.server.cameras.items()
@@ -313,20 +306,21 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
       color: #a8a8a8;
       font-size: 13px;
     }}
-    .legend {{
+    .details {{
       display: grid;
       gap: 9px;
       color: #b0b0b0;
       font-size: 13px;
       line-height: 1.3;
     }}
-    .legend-title {{ color: #f5f5f5; font-size: 14px; font-weight: 600; margin-bottom: 3px; }}
-    .key {{ display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: center; }}
-    .legend b {{ color: #f5f5f5; font-weight: 600; }}
-    .cyan b, .detail-row.c span:first-child {{ color: #00ffff; }}
-    .orange b, .detail-row.b span:first-child {{ color: #ffa500; }}
-    .magenta b, .detail-row.retry span:first-child {{ color: #ff00ff; }}
-    .red b, .detail-row.t span:first-child {{ color: #ff0000; }}
+    .detail-block {{ display: grid; gap: 6px; }}
+    .detail-block + .detail-block {{ padding-top: 10px; border-top: 1px solid #444; }}
+    .detail-name {{ color: #f5f5f5; font-weight: 600; text-transform: capitalize; }}
+    .detail-row {{ display: grid; grid-template-columns: 58px 1fr; gap: 8px; }}
+    .detail-row.c span:first-child {{ color: #00ffff; }}
+    .detail-row.b span:first-child {{ color: #ffa500; }}
+    .detail-row.retry span:first-child {{ color: #ff00ff; }}
+    .detail-row.t span:first-child {{ color: #ff0000; }}
     select {{
       color: #f5f5f5;
       background: #111;
@@ -336,8 +330,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     }}
     @media (max-width: 760px) {{
       .camera-layout {{ grid-template-columns: 1fr; }}
-      .legend {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-      .legend-title {{ grid-column: 1 / -1; }}
+      .details {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     }}
   </style>
 </head>
@@ -354,6 +347,62 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
     {camera_tiles}
   </main>
   <script>
+    const pointText = (point) => `(${{point.map((value) => Number(value).toFixed(1)).join(', ')}}) mm`;
+    const shortLabel = {{'front-left': 'FL', 'front-right': 'FR', 'back-left': 'BL', 'back-right': 'BR'}};
+    const addDetailRow = (parent, label, value, style) => {{
+      const row = document.createElement('div');
+      row.className = `detail-row ${{style}}`;
+      const key = document.createElement('span');
+      key.textContent = label;
+      const text = document.createElement('span');
+      text.textContent = value;
+      row.append(key, text);
+      parent.append(row);
+    }};
+    let detailsInFlight = false;
+    let detailsColor = '';
+    let lastDetailsAt = 0;
+    const refreshDetails = async (color) => {{
+      const panel = document.querySelector('.details');
+      if (!panel) return;
+      if (color === 'none' || color === undefined) {{
+        panel.textContent = 'Select an overlay.';
+        return;
+      }}
+      const now = Date.now();
+      if (detailsInFlight || (detailsColor === color && now - lastDetailsAt < 2000)) return;
+      detailsInFlight = true;
+      detailsColor = color;
+      lastDetailsAt = now;
+      const camera = document.querySelector('.camera-image')?.dataset.camera;
+      try {{
+        const response = await fetch(`/detections/${{camera}}.json?color=${{encodeURIComponent(color)}}`);
+        if (!response.ok) throw new Error('request failed');
+        const data = await response.json();
+        panel.replaceChildren();
+        data.detections.forEach((detection) => {{
+          const block = document.createElement('div');
+          block.className = 'detail-block';
+          const name = document.createElement('div');
+          name.className = 'detail-name';
+          name.textContent = detection.color;
+          block.append(name);
+          addDetailRow(block, 'C', pointText(detection.center_mm), 'c');
+          addDetailRow(block, 'B', pointText(detection.biased_center_mm), 'b');
+          detection.candidates_mm.slice(1).forEach((candidate) => {{
+            addDetailRow(block, shortLabel[candidate.label] || candidate.label, pointText(candidate.xy), 'retry');
+          }});
+          const target = detection.candidates_mm.find((candidate) => candidate.label === detection.target_label);
+          addDetailRow(block, 'T', target ? `${{detection.target_label}} ${{pointText(target.xy)}}` : 'unreachable', 't');
+          panel.append(block);
+        }});
+        if (!data.detections.length) panel.textContent = 'No matching block.';
+      }} catch (_error) {{
+        panel.textContent = 'Coordinates unavailable.';
+      }} finally {{
+        detailsInFlight = false;
+      }}
+    }};
     const refreshOverlays = () => {{
       const color = document.querySelector('#overlay-color')?.value;
       document.querySelectorAll('img.camera-image').forEach((image) => {{
@@ -375,6 +424,7 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
         image.src = `/overlay/${{image.dataset.camera}}.jpg?color=${{encodeURIComponent(color)}}&t=${{Date.now()}}`;
         image.dataset.mode = 'overlay';
       }});
+      refreshDetails(color);
     }};
     document.querySelector('#overlay-color')?.addEventListener('change', refreshOverlays);
     setInterval(refreshOverlays, 1000);
