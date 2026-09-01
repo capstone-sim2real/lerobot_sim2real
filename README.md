@@ -2,7 +2,7 @@
 
 SO-101 로봇팔, Jetson/JetBot 기반 vision-action 실험, 온디바이스 LLM 추론 벤치마크를 정리하는 졸업과제 저장소입니다.
 
-이 저장소는 LeRobot 원본을 직접 수정하지 않고, 팀 장비에 맞춘 실행 스크립트와 문서를 관리합니다.
+LeRobot은 `third_party/lerobot` submodule로 고정하며, 프로젝트 루트의 단일 `uv` 환경에서 함께 실행합니다.
 
 ## Quick Start
 
@@ -75,7 +75,7 @@ SO101_CAMERA_SAVE_DIR=logs/camera SO101_CAMERA_SAVE_INTERVAL_S=2 \
 색으로 블록을 찾아 집어서 지정 좌표로 옮기기 (카메라 서버를 먼저 띄워둔 채로):
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
+uv run python -m tools.demo_pick_and_place \
   --color green --to P13
 ```
 
@@ -95,22 +95,10 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m tools.demo_pick_and_place \
 │   ├── guide/                 SO-101 사용/실험 가이드
 │   └── report/                착수보고서 등 제출 문서
 ├── scripts/                   SO-101 실행 래퍼 스크립트
-├── third_party/               외부 참고 자산
+├── third_party/               SO-101 자산·LeRobot submodule
 ```
 
-LeRobot은 저장소 안에 복사하지 않고 별도 위치에 둡니다.
-
-```text
-프로젝트: ~/lerobot_sim2real
-LeRobot:  ~/lerobot
-venv:     ~/lerobot/.venv
-```
-
-프로젝트 스크립트는 내부에서 `~/lerobot/.venv`를 불러옵니다. 다른 위치에 LeRobot을 설치했다면 `LEROBOT_DIR` 환경변수를 지정합니다.
-
-```bash
-LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
-```
+`third_party/lerobot`은 Git submodule이고, `.venv/`는 각 팀원이 `./scripts/setup_lerobot_env.sh`로 생성하는 로컬 환경입니다. `uv.lock`과 submodule 커밋을 함께 추적해 같은 드라이버·기구학 버전을 재현합니다.
 
 ## Documents
 

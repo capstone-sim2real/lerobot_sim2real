@@ -27,13 +27,13 @@
 ## §2 저장소 구조와 환경
 
 ```
-~/lerobot_sim2real     이 저장소 (프로젝트)
-~/lerobot              LeRobot 원본 — 직접 수정하지 않는다
-~/lerobot/.venv        공용 venv (placo 설치됨)
+~/lerobot_sim2real              이 저장소 (프로젝트)
+~/lerobot_sim2real/third_party/lerobot  LeRobot submodule — 직접 수정하지 않는다
+~/lerobot_sim2real/.venv        공용 실행 환경 (placo 포함)
 ```
 
-`src/`가 본체다. LeRobot은 서브모듈이 아니라 별도 위치의 설치본이며,
-`scripts/so101_env.sh`가 venv를 활성화한다.
+`src/`가 본체다. LeRobot은 `third_party/lerobot` submodule로 커밋을 고정하고,
+루트 `uv` 환경에 editable 설치한다. `scripts/so101_env.sh`가 루트 venv를 활성화한다.
 
 **`import config`는 lerobot·placo·torch 없이도 성공해야 한다.** 하드웨어
 의존 모듈은 전부 함수 안에서 lazy import 한다. CI/단위 테스트가 이에 의존한다.
@@ -219,9 +219,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
 
 ```bash
 cd ~/lerobot_sim2real
-PYTHONPATH=src uv run --no-project --python 3.12 \
-  --with pytest --with pyyaml --with numpy --with opencv-python-headless \
-  python -m pytest tests -q
+uv run --extra dev pytest tests -q
 ```
 
 하드웨어·lerobot·placo 없이 전부 통과해야 한다. 새 상태 핸들러는 `MockRobotIO`

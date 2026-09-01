@@ -41,13 +41,5 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE → (블록 남음 && 시간 
 
 ```bash
 cd ~/lerobot_sim2real
-PYTHONPATH=src uv run --no-project --python 3.12 \
-  --with pytest --with pyyaml --with numpy python -m pytest tests -q
-```
-
-또는 lerobot venv에 editable 설치 후:
-
-```bash
-uv pip install --python ~/lerobot/.venv/bin/python -e ".[dev]"
-~/lerobot/.venv/bin/python -m pytest tests -q
+uv run --extra dev pytest tests -q
 ```

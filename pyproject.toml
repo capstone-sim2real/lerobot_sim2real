@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pick-stack"
 version = "0.1.0"
-description = "SO-101 pick & stack hybrid FSM (ACT pick + rule-based transport/place)"
-requires-python = ">=3.10"
+description = "SO-101 CV+IK pick-and-place FSM"
+requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
     "numpy>=2.0.0,<2.3.0",
@@ -17,6 +17,18 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+hardware = [
+    "lerobot[feetech,kinematics]",
+]
+
+[project.scripts]
+so101-run = "runners.run_task:main"
+so101-camera = "camera.server:main"
+so101-detect = "tools.view_detect:main"
+so101-calibrate = "tools.calibrate_homography:main"
+
+[tool.uv.sources]
+lerobot = { path = "third_party/lerobot", editable = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

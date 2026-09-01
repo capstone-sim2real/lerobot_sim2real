@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LEROBOT_DIR="${LEROBOT_DIR:-$HOME/lerobot}"
-LEROBOT_REPO="${LEROBOT_REPO:-https://github.com/huggingface/lerobot.git}"
-LEROBOT_COMMIT="${LEROBOT_COMMIT:-8a74e0ac6d01706d67fddfed682a09d694d9c8c0}"
-INSTALL_KINEMATICS="${INSTALL_KINEMATICS:-0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 UV_BIN="${UV_BIN:-uv}"
 if ! command -v "$UV_BIN" >/dev/null 2>&1; then
@@ -19,27 +17,19 @@ if ! command -v "$UV_BIN" >/dev/null 2>&1; then
   fi
 fi
 
-if [[ ! -d "$LEROBOT_DIR/.git" ]]; then
-  git clone "$LEROBOT_REPO" "$LEROBOT_DIR"
-fi
+cd "$REPO_ROOT"
+git submodule update --init --recursive
+"$UV_BIN" sync --python 3.12 --extra hardware --extra dev
 
-cd "$LEROBOT_DIR"
-git fetch --tags origin
-git checkout "$LEROBOT_COMMIT"
-
-if [[ "$INSTALL_KINEMATICS" == "1" ]]; then
-  "$UV_BIN" sync --extra feetech --extra kinematics
-else
-  "$UV_BIN" sync --extra feetech
-fi
-
-. "$LEROBOT_DIR/.venv/bin/activate"
+. "$REPO_ROOT/.venv/bin/activate"
 python - <<'PY'
 import lerobot
 import serial
 import scservo_sdk
+import placo
 
 print("lerobot", lerobot.__version__)
 print("pyserial", serial.VERSION)
 print("scservo_sdk ok")
+print("placo ok")
 PY
