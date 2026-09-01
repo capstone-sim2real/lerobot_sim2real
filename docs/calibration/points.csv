@@ -1,10 +1,16 @@
-name,image,u_px,v_px,x_m,y_m,z_m,notes
-P1,p1_top.jpg,453.37,578.82,0.080694,0.107757,0.004972,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P2,p2_top.jpg,577.52,522.10,0.103341,0.001084,0.004533,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P3,p3_top.jpg,718.82,593.74,0.057646,-0.109220,0.003695,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P4,p4_top.jpg,380.74,472.09,0.163597,0.146408,0.003677,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P5,p5_top.jpg,563.28,406.78,0.214873,0.007123,0.007481,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P6,p6_top.jpg,794.07,465.66,0.137713,-0.170956,0.003428,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P7,p7_top.jpg,316.66,384.11,0.233606,0.201980,0.006554,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P8,p8_top.jpg,564.84,298.29,0.302587,0.007771,0.003127,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
-P9,p9_top.jpg,838.24,372.05,0.231821,-0.191028,0.005821,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+name,image,u_px,v_px,x_m,y_m,z_m,shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,notes
+P1,p1_top.jpg,717.21,567.59,0.102080,-0.101879,0.003942,58.022,-20.484,53.451,58.989,2.154,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P2,p2_top.jpg,655.02,521.18,0.139880,-0.071300,0.007494,35.077,-28.132,57.758,56.879,1.978,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P3,p3_top.jpg,571.95,503.05,0.155402,0.016644,0.011003,-8.264,-31.824,58.813,60.044,1.978,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P4,p4_top.jpg,497.59,517.24,0.134755,0.066121,0.011734,-34.725,-34.462,60.308,60.220,2.066,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P5,p5_top.jpg,449.42,578.62,0.084210,0.091643,0.004776,-63.824,-40.264,67.165,60.044,2.066,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P6,p6_top.jpg,782.78,485.83,0.161569,-0.164393,0.015788,53.187,6.505,17.582,59.868,1.714,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P7,p7_top.jpg,689.38,424.55,0.198026,-0.087634,0.003346,28.747,4.044,26.549,57.758,1.890,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P8,p8_top.jpg,569.55,412.42,0.206643,0.009524,0.005584,-3.341,-2.374,33.495,57.407,1.890,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P9,p9_top.jpg,464.82,456.60,0.153085,0.074542,0.007012,-33.231,-14.242,45.978,59.341,1.802,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P10,p10_top.jpg,368.03,508.45,0.129691,0.147985,0.008391,-58.549,-1.758,31.385,57.934,2.066,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P11,p11_top.jpg,836.86,415.09,0.221144,-0.197334,0.010083,47.209,40.703,-32.352,75.429,1.890,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P12,p12_top.jpg,719.08,334.79,0.281591,-0.117448,0.015595,25.758,34.637,-24.176,69.978,1.978,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P13,p13_top.jpg,569.83,316.88,0.284877,-0.017310,0.010213,3.956,25.934,-8.088,65.055,2.066,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P14,p14_top.jpg,429.46,367.99,0.253819,0.094987,0.012776,-23.912,16.967,4.659,59.165,2.154,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection
+P15,p15_top.jpg,288.23,458.75,0.187219,0.197782,0.012057,-53.187,29.802,-15.209,70.857,1.978,FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection

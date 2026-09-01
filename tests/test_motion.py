@@ -57,9 +57,14 @@ def test_place_in_slot_sequence():
     controller = make_controller(robot)
     controller.place_in_slot(0)
 
-    # descended to the slot, released, lifted back out
+    # descended to the slot, released, lifted back out. set_gripper steps
+    # toward the target rather than sending it in one shot (that single send
+    # was silently capped by max_relative_target), so assert where it ended
+    # up, not how many commands it took.
     gripper_cmds = [a["gripper"] for a in robot.sent_actions if set(a) == {"gripper"}]
-    assert gripper_cmds == [50.0]
+    assert gripper_cmds, "expected the gripper to be opened for the release"
+    assert gripper_cmds[-1] == pytest.approx(50.0)
+    assert gripper_cmds == sorted(gripper_cmds), "release should only open, never re-close"
     assert robot.read_joints()["shoulder_lift"] == pytest.approx(-10.0)  # back at zone_approach
 
     with pytest.raises(IndexError):

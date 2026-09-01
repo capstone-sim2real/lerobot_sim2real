@@ -146,10 +146,43 @@ class TopDownIK:
         idx = np.argsort(d2)[:n]
         return table[idx]
 
-    def solve(self, x_mm: float, y_mm: float, z_mm: float, yaw_deg: float = 0.0) -> IkResult:
+    def neutral_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float) -> float:
+        """The yaw that leaves ``wrist_roll`` near 0 at this position.
+
+        yaw and wrist_roll move ~1:1 (wrist_roll ~= yaw + c, where c depends
+        on position because shoulder_pan already rotated the whole arm), so
+        one probe solve at yaw=0 gives c directly. Grasping near this yaw is
+        the posture a human naturally reaches with, and it keeps wrist_roll
+        away from its limits — a fixed base-frame yaw instead forces
+        wrist_roll to swing ~80 deg across the workspace to hold one
+        absolute direction, which is what overheated the wrist_roll servo
+        on 2026-08-31.
+        """
+        probe = self.solve(x_mm, y_mm, z_mm, yaw_deg=0.0)
+        return -probe.joints["wrist_roll"]
+
+    def grasp_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float) -> float:
+        """Jaw yaw for a square block: of the four equivalent alignments
+        (block_angle + k*90), the one closest to ``neutral_yaw_deg``.
+
+        A square block grasps identically every 90 deg, so this aligns the
+        jaws with a pair of block faces while keeping wrist_roll within
+        +-45 deg of neutral (AGENTS.md §9)."""
+        neutral = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
+        candidates = [block_angle_deg + 90.0 * k for k in range(4)]
+        return min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
+
+    def solve(self, x_mm: float, y_mm: float, z_mm: float, yaw_deg: float | None = None) -> IkResult:
         """Best-effort top-down IK solve. Check ``position_error_mm`` /
         ``tilt_error_deg`` against config thresholds before trusting the
-        result (AGENTS.md §6/§7 — this can fail gracefully out-of-reach)."""
+        result (AGENTS.md §6/§7 — this can fail gracefully out-of-reach).
+
+        ``yaw_deg=None`` picks the neutral (radial) yaw for this position —
+        the sane default. Pass an explicit yaw only when the jaw plane must
+        match something external, e.g. a detected block angle routed through
+        ``grasp_yaw_deg()``."""
+        if yaw_deg is None:
+            yaw_deg = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
         k = self._load_kinematics()
         target = _topdown_pose(x_mm, y_mm, z_mm, yaw_deg)
         r_mm = float(np.hypot(x_mm, y_mm))

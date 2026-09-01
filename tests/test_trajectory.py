@@ -73,3 +73,35 @@ def test_follow_visits_waypoints_in_order():
     assert final["elbow_flex"] == pytest.approx(-6.0)
     pans = [a.get("shoulder_pan") for a in robot.sent_actions if "shoulder_pan" in a]
     assert pans == sorted(pans)  # monotonic approach, no jumps
+
+
+class _StallingRobot(MockRobotIO):
+    """Gripper that refuses to close past ``stall_at`` — a held block."""
+
+    def __init__(self, stall_at: float):
+        super().__init__()
+        self._stall_at = stall_at
+
+    def send_joints(self, positions):
+        clamped = dict(positions)
+        if "gripper" in clamped:
+            clamped["gripper"] = max(clamped["gripper"], self._stall_at)
+        return super().send_joints(clamped)
+
+
+def test_set_gripper_returns_when_jaws_stall_on_a_block():
+    # closing onto a block cannot reach the goal; that is the grasp signal,
+    # not an error (AGENTS.md §10)
+    robot = _StallingRobot(stall_at=44.0)
+    robot.joints["gripper"] = 95.0
+    player = TrajectoryPlayer(robot, MotionConfig(fps=0.0, gripper_action_wait_s=0.0))
+    final = player.set_gripper(2.0)
+    assert final == pytest.approx(44.0, abs=0.5)
+
+
+def test_set_gripper_crosses_a_span_wider_than_one_step():
+    robot = MockRobotIO()
+    robot.joints["gripper"] = 2.0
+    player = TrajectoryPlayer(robot, MotionConfig(fps=0.0, gripper_action_wait_s=0.0))
+    final = player.set_gripper(95.0)
+    assert final == pytest.approx(95.0, abs=0.5)

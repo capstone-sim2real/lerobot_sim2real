@@ -25,7 +25,16 @@ from lerobot.robots.so_follower.so_follower import SOFollower
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_URDF = PROJECT_ROOT / "third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
 ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
-CSV_FIELDS = ["name", "image", "u_px", "v_px", "x_m", "y_m", "z_m", "notes"]
+# Joint angles are recorded alongside the FK position because the position
+# alone cannot be re-analysed later: gripper_frame_link sits ~8mm off the
+# wrist_roll axis, so the same jaw placement yields different recorded xyz
+# depending on wrist_roll, and without the joints that offset cannot be
+# reconstructed or corrected for (AGENTS.md §6/§7).
+CSV_FIELDS = [
+    "name", "image", "u_px", "v_px", "x_m", "y_m", "z_m",
+    "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll",
+    "notes",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -148,6 +157,7 @@ def main() -> int:
             "x_m": f"{xyz[0]:.6f}",
             "y_m": f"{xyz[1]:.6f}",
             "z_m": f"{xyz[2]:.6f}",
+            **{motor: f"{value:.3f}" for motor, value in zip(ARM_MOTORS, joints)},
             "notes": "FK at gripper_frame_link; pixel coordinate pending chessboard intersection selection",
         },
         args.overwrite,

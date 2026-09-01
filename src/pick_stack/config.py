@@ -46,7 +46,7 @@ class PerceptionConfig:
     defined by the venue calibration JSON (tools/calibrate_homography.py)."""
 
     # venue calibration produced by tools/calibrate_homography.py
-    calibration_path: str = "src/pick_stack/configs/calib/venue_default.json"
+    calibration_path: str = "src/pick_stack/configs/calib/venue_lab.json"
     top_camera_key: str = "top"
     # chessboard square edge length on the physical board — measure it!
     square_mm: float = 25.0
@@ -97,11 +97,13 @@ class SensingConfig:
     tools/tune_gripper_load.py before trusting them.
     """
 
-    # gripper commands (normalized RANGE_0_100; measured mechanical range on
-    # the team's arm is 0..77.69, tools/so101_gripper_probe.sh). Only the
+    # gripper commands, normalized RANGE_0_100 — 100 is the end of the range
+    # the servo calibration recorded, not the mechanical stop (the jaws open
+    # noticeably further, but that travel is outside the recorded range and
+    # is never commanded). 95 was verified against a real block. Only the
     # FSM's own open/close bookkeeping reads this — the ACT/teleop path
     # commands the gripper itself and never reads these fields.
-    gripper_open_pos: float = 70.0
+    gripper_open_pos: float = 95.0
     gripper_close_pos: float = 2.0
     # grasp check thresholds, measured 2026-08-31 (tune_gripper_load.py,
     # --mode grasp, 6 trials): held pos=44.1..44.3 load=500(saturated);
@@ -140,6 +142,13 @@ class MotionConfig:
     descent_step_per_tick: float = 0.6
     # a move counts as arrived when every joint is within this tolerance
     arrival_tol: float = 3.0
+    # looser tolerance for transit moves: holding a block leaves a
+    # steady-state joint offset that no amount of extra time closes
+    transit_arrival_tol: float = 8.0
+    # lift height above the grasp plane; the actual hover is the highest
+    # top-down-reachable z up to this cap (the envelope shrinks with reach)
+    hover_clearance_mm: float = 120.0
+    hover_min_clearance_mm: float = 40.0
     move_timeout_s: float = 10.0
     # pause after open/close commands before moving on
     gripper_action_wait_s: float = 0.6
