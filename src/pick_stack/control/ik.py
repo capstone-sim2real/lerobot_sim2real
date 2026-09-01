@@ -14,6 +14,7 @@ this module (and therefore ``pick_stack``) never requires them (AGENTS.md
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +50,29 @@ def _topdown_pose(x_mm: float, y_mm: float, z_mm: float, yaw_deg: float) -> np.n
 def _tilt_deg(T: np.ndarray) -> float:
     """Angle between the gripper's approach axis and straight down."""
     return float(np.degrees(np.arccos(np.clip(-T[2, 2], -1.0, 1.0))))
+
+
+def gripper_frame_offset(
+    x_mm: float, y_mm: float, radial_mm: float, tangential_mm: float
+) -> tuple[float, float]:
+    """Nudge a target in the gripper's own frame rather than the base frame.
+
+    At the neutral yaw the jaw plane is carried entirely by ``shoulder_pan``
+    (``wrist_roll`` stays within +-3.7 deg across the workspace, AGENTS.md
+    §7), so "away from the base" is the radial direction and the gripper's
+    own left is the tangential one. Near the middle of the board these line
+    up with the board axes; toward either side they rotate with the arm,
+    which is why a fixed base-frame nudge drifts diagonally there.
+
+    ``radial_mm`` pushes outward (further from the base), ``tangential_mm``
+    pushes to the gripper's left (+y when the target is straight ahead).
+    """
+    phi = math.atan2(y_mm, x_mm)
+    c, s = math.cos(phi), math.sin(phi)
+    return (
+        x_mm + radial_mm * c - tangential_mm * s,
+        y_mm + radial_mm * s + tangential_mm * c,
+    )
 
 
 class TopDownIK:

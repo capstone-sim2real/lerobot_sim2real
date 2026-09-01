@@ -65,6 +65,15 @@ cd ~/lerobot_sim2real
 ./scripts/so101_camera_web.sh
 ```
 
+색으로 블록을 찾아 집어서 지정 좌표로 옮기기 (카메라 서버를 먼저 띄워둔 채로):
+
+```bash
+PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_place \
+  --color green --to P13
+```
+
+계획만 확인하려면 `--dry-run`. 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
+
 모방학습 에피소드 1개 기록:
 
 ```bash
@@ -105,6 +114,7 @@ LEROBOT_DIR=/path/to/lerobot ./scripts/so101_scan_motors.sh
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
 - [SO-101 데이터 수집 & 관리 가이드 (Orin)](docs/guide/SO101_데이터수집_관리.md)
 - [SO-101 학습 & 추론 가이드 (데스크탑)](docs/guide/SO101_학습_추론.md)
+- [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
 - [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
 
 ## Datasets

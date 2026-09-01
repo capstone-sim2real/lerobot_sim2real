@@ -149,6 +149,17 @@ class MotionConfig:
     # top-down-reachable z up to this cap (the envelope shrinks with reach)
     hover_clearance_mm: float = 120.0
     hover_min_clearance_mm: float = 40.0
+    # granularity of that downward search. The top-down envelope peaks near
+    # 90mm and wrist_flex sits on its +-95 deg limit throughout, so every mm
+    # of lift is worth finding: a coarse step throws away clearance the arm
+    # actually had.
+    hover_search_step_mm: float = 5.0
+    # Radius to fold the arm back to while carrying a block. The top-down
+    # envelope is strongly radius-dependent (measured: ~90mm of lift at
+    # 195mm reach, ~50mm at 285mm), so a block picked or placed far out is
+    # carried across at this reach instead of at the reach it was picked
+    # from. 0 disables the retraction.
+    transit_apex_radius_mm: float = 195.0
     move_timeout_s: float = 10.0
     # pause after open/close commands before moving on
     gripper_action_wait_s: float = 0.6
@@ -164,6 +175,37 @@ class MotionConfig:
     # ticks to reverse after contact before releasing (0 = release in place)
     contact_backoff_ticks: int = 1
     place_settle_s: float = 0.5
+
+    # --- grasp point bias, in the GRIPPER's own frame (control/ik.py
+    # gripper_frame_offset): radial = away from the base, tangential = the
+    # gripper's own left. The detector reports the block centre, but the jaws
+    # were measured closing on its near edge (~5-10mm into a 40mm block
+    # instead of ~20mm), so the grasp point is pushed outward.
+    grasp_radial_offset_mm: float = 12.0
+    grasp_tangential_offset_mm: float = 0.0
+    # Extra bias on the left half of the workspace (y > left_half_y_mm),
+    # where the measured grasp success is lower. Adds to the global bias.
+    left_half_y_mm: float = 0.0
+    left_half_radial_offset_mm: float = 10.0
+    left_half_tangential_offset_mm: float = 10.0
+    # Retry grasp points as (radial, tangential) mm from the biased centre,
+    # tried in order. The default four are front-left, front-right,
+    # back-left, back-right. Empty disables retrying.
+    grasp_retry_offsets_mm: list[list[float]] = field(
+        default_factory=lambda: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
+    )
+    # Tried first when the descent is blocked: the depth was right and only
+    # the lateral position was off, so nudge tangentially (left, then right).
+    blocked_descent_offsets_mm: list[float] = field(default_factory=lambda: [10.0, -10.0])
+    # A descent that ends this far short of its goal (action units) counts as
+    # blocked rather than arrived. Only reorders the retries — the jaws are
+    # closed and checked either way.
+    descent_blocked_tol: float = 4.0
+    # How long the grasp descent may settle against its goal. The loop exits
+    # the moment it is within arrival_tol, so this only bounds the blocked
+    # case: it costs a normal descent nothing, and stops the servos leaning
+    # on the block for the full move_timeout_s when the jaws land on it.
+    descent_settle_s: float = 5.0
 
 
 @dataclass

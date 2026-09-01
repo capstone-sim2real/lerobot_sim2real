@@ -105,3 +105,68 @@ def test_set_gripper_crosses_a_span_wider_than_one_step():
     player = TrajectoryPlayer(robot, MotionConfig(fps=0.0, gripper_action_wait_s=0.0))
     final = player.set_gripper(95.0)
     assert final == pytest.approx(95.0, abs=0.5)
+
+
+class StallingRobot(MockRobotIO):
+    """Teleports like MockRobotIO until a joint hits ``stop_at``, then holds.
+
+    Stands in for the gripper landing on the block instead of beside it: the
+    descent cannot finish, and nothing raises to say so.
+    """
+
+    def __init__(self, joint: str, stop_at: float):
+        super().__init__()
+        self._joint = joint
+        self._stop_at = stop_at
+
+    def send_joints(self, positions):
+        clamped = dict(positions)
+        if self._joint in clamped:
+            clamped[self._joint] = max(clamped[self._joint], self._stop_at)
+        return super().send_joints(clamped)
+
+
+def test_descend_reaches_goal_and_reports_clear():
+    robot = MockRobotIO()
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg(descent_step_per_tick=0.6))
+    goal = {**full_pose(0.0), "shoulder_lift": -6.0}
+    final, blocked = player.descend(goal)
+    assert not blocked
+    assert final["shoulder_lift"] == pytest.approx(-6.0)
+
+
+def test_descend_reports_blocked_when_it_stops_short():
+    # the arm gets 1 unit down out of the 6 it was asked for
+    robot = StallingRobot("shoulder_lift", stop_at=-1.0)
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg(descent_step_per_tick=0.6, descent_settle_s=0.05))
+    goal = {**full_pose(0.0), "shoulder_lift": -6.0}
+    _, blocked = player.descend(goal)
+    assert blocked
+
+
+def test_descend_never_raises_on_a_blocked_goal():
+    # move_to would raise TimeoutError here; a grasp descent must not.
+    robot = StallingRobot("shoulder_lift", stop_at=-1.0)
+    robot.connect()
+    player = TrajectoryPlayer(robot, fast_cfg(descent_step_per_tick=0.6, descent_settle_s=0.05))
+    goal = {**full_pose(0.0), "shoulder_lift": -6.0}
+    player.descend(goal)  # must not raise
+    with pytest.raises(TimeoutError):
+        player.move_to(goal, max_step=0.6)
+
+
+def test_descend_does_not_read_sensors_inside_the_command_loop():
+    """A per-tick bus read at fps=30 stalls the descent partway down.
+
+    Regression guard: the interpolation must issue the same command stream
+    as move_to, with reads only in the settle phase.
+    """
+    robot = MockRobotIO()
+    robot.connect()
+    reads: list[str] = []
+    robot.read_loads = lambda: reads.append("load") or {j: 0 for j in JOINT_NAMES}
+    player = TrajectoryPlayer(robot, fast_cfg(descent_step_per_tick=0.6))
+    player.descend({**full_pose(0.0), "shoulder_lift": -6.0})
+    assert reads == []

@@ -30,10 +30,21 @@ def main() -> int:
     try:
         for name, motor in robot.bus.motors.items():
             try:
-                robot.bus.disable_torque(name)
-                print(f"  {name} (id={motor.id}): torque OFF")
+                enabled = bool(robot.bus.read("Torque_Enable", name))
             except Exception as e:
-                print(f"  {name} (id={motor.id}): FAILED - {e}")
+                print(f"  {name} (id={motor.id}): FAILED to read status - {e}")
+                failed.append(name)
+                continue
+
+            if not enabled:
+                print(f"  {name} (id={motor.id}): torque already OFF")
+                continue
+
+            try:
+                robot.bus.disable_torque(name)
+                print(f"  {name} (id={motor.id}): torque was ON -> now OFF")
+            except Exception as e:
+                print(f"  {name} (id={motor.id}): FAILED to disable - {e}")
                 failed.append(name)
     finally:
         robot.bus.disconnect(disable_torque=False)
