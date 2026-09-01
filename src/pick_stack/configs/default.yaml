@@ -79,6 +79,20 @@ motion:
   contact_backoff_ticks: 1
   place_settle_s: 0.5
 
+ik:
+  urdf_path: third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf
+  target_frame: gripper_frame_link
+  seed_step_deg: 3.0
+  seed_range_deg: 100.0
+  seed_tilt_max_deg: 3.0
+  seed_cache_path: src/pick_stack/configs/calib/ik_seed_table.npz
+  pan_offset_candidates_deg: [0.0, 6.0, -6.0, 12.0, -12.0]
+  ik_iters: 8
+  # 실측 캘리브레이션 오차(AGENTS.md §6: RMS~10mm, 최악 ~30mm)보다 넉넉하게 잡음 —
+  # 이 한계는 "IK가 못 풀었다"를 걸러내는 것이지, 파지 정확도 자체를 보장하지 않음.
+  max_position_error_mm: 15.0
+  max_tilt_error_deg: 6.0
+
 policy:
   server_address: 127.0.0.1:8080     # Tailscale의 policy_server 주소로 변경
   policy_type: act
