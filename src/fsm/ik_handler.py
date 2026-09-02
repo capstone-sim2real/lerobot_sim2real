@@ -93,7 +93,13 @@ class CvIkPickState(State):
         ctx.record_attempt(ctx.target_id)
         x_mm, y_mm = target.center_mm
         plan = plan_grasp_attempts(
-            self._ik, self._cfg, x_mm, y_mm, self._grasp_z_mm, log=logger.info
+            self._ik,
+            self._cfg,
+            x_mm,
+            y_mm,
+            self._grasp_z_mm,
+            block_angle_deg=target.angle_deg,
+            log=logger.info,
         )
         ctx.extras["grasp_plan"] = plan
 

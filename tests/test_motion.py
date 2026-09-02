@@ -15,6 +15,9 @@ class StubIk:
     def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
         return IkResult({"shoulder_pan": 0.0}, 0.5, 0.1)
 
+    def grasp_yaw_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
+        return block_angle_deg
+
 
 def test_gripper_frame_bias_and_candidate_order():
     assert gripper_frame_offset(0.0, 100.0, 0.0, 10.0) == pytest.approx((-10.0, 100.0))
@@ -23,9 +26,9 @@ def test_gripper_frame_bias_and_candidate_order():
     left = biased_grasp_xy(cfg.motion, 200.0, 80.0)
     assert math.hypot(left[0] - 200.0, left[1] - 80.0) > math.hypot(right[0] - 200.0, right[1] + 80.0)
     plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0)
-    assert [a.label for a in plan.attempts] == ["centre", "front", "back", "left", "right"]
+    assert [a.label for a in plan.attempts] == ["centre", "back", "left", "right", "front"]
     assert [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, -80.0)] == [
-        "centre", "front", "back", "left", "right"
+        "centre", "back", "left", "right", "front"
     ]
 
 
@@ -48,10 +51,10 @@ def _cardinal_plan():
         (200, 0), (212, 0), 9.0, 80.0,
         [
             _attempt("centre"),
-            _attempt("front", (10.0, 0.0)),
             _attempt("back", (-10.0, 0.0)),
             _attempt("left", (0.0, 10.0)),
             _attempt("right", (0.0, -10.0)),
+            _attempt("front", (10.0, 0.0)),
         ],
     )
 
@@ -81,7 +84,7 @@ def test_blocked_descent_promotes_the_sideways_points(monkeypatch):
 
 def test_plain_failure_keeps_the_configured_order(monkeypatch):
     _, tried = _run_queue(monkeypatch, _cardinal_plan(), {})
-    assert tried == ["centre", "front", "back", "left", "right"]
+    assert tried == ["centre", "back", "left", "right", "front"]
 
 
 def _fast_motion(**overrides):
@@ -181,3 +184,57 @@ def test_retracting_arm_increases_reachable_hover():
     far = highest_reachable_hover(EnvelopeIk(), 285.0, 0.0, 10.0, cfg)
     near = highest_reachable_hover(EnvelopeIk(), 195.0, 0.0, 10.0, cfg)
     assert near > far + 20.0
+
+
+def test_reduced_bias_keeps_the_sideways_correction():
+    """The reachability backoff must not throw away the left/right fix.
+
+    Radial is what pushes a block past the reach envelope; a 10mm tangential
+    nudge moves reach by 0.17mm. Scaling it down buys nothing and costs the
+    whole left-half correction exactly where it is needed, since the left
+    half hits the envelope sooner *because* of its extra radial offset.
+    """
+    cfg = AppConfig().motion
+    det = (200.0, 80.0)  # left half
+    full = biased_grasp_xy(cfg, *det, scale=1.0)
+    none = biased_grasp_xy(cfg, *det, scale=0.0)
+    # radial shrinks to nothing...
+    assert math.hypot(*none) == pytest.approx(math.hypot(*det), abs=0.5)
+    assert math.hypot(*full) > math.hypot(*det) + 20.0
+    # ...while the sideways component survives untouched
+    def tangential_of(p):
+        phi = math.atan2(det[1], det[0])
+        return -(p[0] - det[0]) * math.sin(phi) + (p[1] - det[1]) * math.cos(phi)
+    assert tangential_of(none) == pytest.approx(tangential_of(full), abs=1e-9)
+    assert tangential_of(none) == pytest.approx(cfg.left_half_tangential_offset_mm, abs=1e-9)
+
+
+def test_left_ramp_is_off_by_default_and_grows_with_y():
+    cfg = AppConfig().motion
+    near, far = (200.0, 40.0), (200.0, 160.0)
+    assert cfg.left_ramp_tangential_mm_per_100mm == 0.0  # unsupported by the calibration data
+    plain_near = biased_grasp_xy(cfg, *near)
+    cfg.left_ramp_tangential_mm_per_100mm = 10.0
+    ramped_near = biased_grasp_xy(cfg, *near)
+    ramped_far = biased_grasp_xy(cfg, *far)
+    shift_near = math.hypot(ramped_near[0] - plain_near[0], ramped_near[1] - plain_near[1])
+    assert shift_near == pytest.approx(4.0, abs=1e-6)  # 0.4 of 100mm
+    plain_far = biased_grasp_xy(AppConfig().motion, *far)
+    shift_far = math.hypot(ramped_far[0] - plain_far[0], ramped_far[1] - plain_far[1])
+    assert shift_far > shift_near
+    # the right half is untouched either way
+    assert biased_grasp_xy(cfg, 200.0, -80.0) == biased_grasp_xy(AppConfig().motion, 200.0, -80.0)
+
+
+def test_block_angle_turns_the_jaws_and_is_recorded():
+    cfg = AppConfig()
+    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, block_angle_deg=35.0)
+    assert plan.yaw_deg == pytest.approx(35.0)
+    assert all(a.yaw_deg == pytest.approx(35.0) for a in plan.attempts)
+    # no angle given -> neutral yaw, as before
+    assert plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0).yaw_deg is None
+
+
+def test_plan_records_the_bias_scale_it_settled_on():
+    plan = plan_grasp_attempts(StubIk(), AppConfig(), 200.0, -80.0, 9.0)
+    assert plan.bias_scale == 1.0  # StubIk reaches everything

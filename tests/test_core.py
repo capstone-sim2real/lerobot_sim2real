@@ -94,3 +94,26 @@ def test_camera_frame_recorder_can_save_only_significant_scene_changes(tmp_path)
     assert recorder.record("shoulder", jpeg(40), now=103.0) is None
     assert recorder.record("shoulder", jpeg(40), now=107.0) is not None
     assert recorder.saved == 3
+
+
+def test_detects_block_rotation_for_jaw_alignment():
+    """A diamond-oriented block must report its edge angle, not 0.
+
+    The gripper grips two faces only if it can be turned to the block's
+    edges; without an angle it always meets two corners and slips.
+    """
+    pairs = [((0.0, 0.0), (0.0, 0.0)), ((400.0, 0.0), (400.0, 0.0)),
+             ((400.0, 300.0), (400.0, 300.0)), ((0.0, 300.0), (0.0, 300.0))]
+    calib = PlaneCalibration(H=calibrate_from_pairs(pairs), image_size=(400, 300),
+                             square_mm=25.0, base_xy_mm=(200.0, 400.0))
+    cfg = AppConfig().perception
+    cfg.rectified_mm_per_px = 1.0
+    for drawn in (0, 20, 45, 70):
+        frame = np.full((300, 400, 3), 200, np.uint8)
+        box = cv2.boxPoints(((200.0, 150.0), (40.0, 40.0), float(drawn)))
+        cv2.fillPoly(frame, [box.astype(np.int32)], (60, 200, 60))
+        found = detect_blocks(frame, calib, cfg, is_rgb=False)
+        assert found, drawn
+        # folded to [0, 90): a square grasps identically every quarter turn
+        off_by = ((found[0].angle_deg - drawn) + 45.0) % 90.0 - 45.0
+        assert abs(off_by) < 3.0, (drawn, found[0].angle_deg)

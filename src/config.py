@@ -185,11 +185,22 @@ class MotionConfig:
     left_half_y_mm: float = 0.0
     left_half_radial_offset_mm: float = 10.0
     left_half_tangential_offset_mm: float = 10.0
+    # Optional ramp on top of that step, per 100mm of y past left_half_y_mm.
+    # OFF by default: the 15 calibration points give a tangential-residual/y
+    # correlation of +0.017, and a smooth positional correction is exactly
+    # hypothesis 4 of docs/report/CV_IK_전환_정리.md, which was tested by
+    # inverse-distance interpolation and rejected (LOO 13.99 -> 14.45mm).
+    # Kept as a tunable for the hands-on observation that the left half gets
+    # worse further out; turn it on only with a before/after measurement.
+    left_ramp_radial_mm_per_100mm: float = 0.0
+    left_ramp_tangential_mm_per_100mm: float = 0.0
     # Retry grasp points as (radial, tangential) mm from the biased centre,
-    # tried in order: front, back, left, right. Labels are derived from the
-    # signs, so diagonals work here too. Empty disables retrying.
+    # tried in order: back, left, right, front. Near side first, because a
+    # failed grasp most often shoves the block toward the robot. Labels are
+    # derived from the signs, so diagonals work here too. Empty disables
+    # retrying.
     grasp_retry_offsets_mm: list[list[float]] = field(
-        default_factory=lambda: [[10.0, 0.0], [-10.0, 0.0], [0.0, 10.0], [0.0, -10.0]]
+        default_factory=lambda: [[-10.0, 0.0], [0.0, 10.0], [0.0, -10.0], [10.0, 0.0]]
     )
     # A descent that ends this far short of its goal (action units) counts as
     # blocked rather than arrived. Only reorders the retries — the jaws are

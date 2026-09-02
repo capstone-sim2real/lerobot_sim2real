@@ -93,6 +93,9 @@ class _FakeIk:
     def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
         return IkResult({"shoulder_pan": 0.0, "shoulder_lift": -20.0, "elbow_flex": 30.0, "wrist_flex": 10.0, "wrist_roll": 0.0}, 0.1, 0.1)
 
+    def grasp_yaw_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
+        return block_angle_deg
+
 
 class _FakePlayer:
     def __init__(self):

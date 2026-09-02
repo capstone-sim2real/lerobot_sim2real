@@ -6,6 +6,7 @@ while an overlay request only reads its already-encoded latest JPEG.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import threading
 
@@ -33,7 +34,7 @@ class OverlayRenderer:
         # IK preview is substantially more expensive than detection. Cache
         # its selected label; candidate coordinates are still redrawn from
         # the current detection every frame.
-        self._target_labels: dict[tuple[str, int, int], str | None] = {}
+        self._target_labels: dict[tuple[str, int, int, int], tuple[str | None, float, float | None]] = {}
         self._target_lock = threading.Lock()
 
     def render(self, jpeg: bytes, *, color: str | None = None) -> tuple[bytes, list[dict[str, object]]]:
@@ -46,9 +47,13 @@ class OverlayRenderer:
         payload: list[dict[str, object]] = []
         for detection in detections:
             centre = tuple(float(v) for v in detection.center_mm)
-            biased = biased_grasp_xy(self._cfg.motion, *centre)
-            candidates = grasp_candidate_points(self._cfg.motion, *centre)
-            target_label = self._first_reachable_target(detection.color, centre)
+            # The plan may have backed the radial bias off to stay in reach.
+            # Draw what the arm will actually do, not the full-bias point.
+            target_label, bias_scale, yaw_deg = self._plan_summary(
+                detection.color, centre, detection.angle_deg
+            )
+            biased = biased_grasp_xy(self._cfg.motion, *centre, scale=bias_scale)
+            candidates = grasp_candidate_points(self._cfg.motion, *centre, scale=bias_scale)
             payload.append(
                 {
                     "color": detection.color,
@@ -56,9 +61,14 @@ class OverlayRenderer:
                     "biased_center_mm": biased,
                     "candidates_mm": [{"label": label, "xy": xy} for label, xy in candidates],
                     "target_label": target_label,
+                    "block_angle_deg": detection.angle_deg,
+                    "jaw_yaw_deg": yaw_deg,
+                    "bias_scale": bias_scale,
                 }
             )
-            self._draw_detection(frame, detection.color, centre, biased, candidates, target_label)
+            self._draw_detection(
+                frame, detection.color, centre, biased, candidates, target_label, yaw_deg
+            )
         ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         if not ok:
             raise RuntimeError("Could not encode perception overlay")
@@ -72,6 +82,7 @@ class OverlayRenderer:
         biased: tuple[float, float],
         candidates: list[tuple[str, tuple[float, float]]],
         target_label: str | None,
+        yaw_deg: float | None = None,
     ) -> None:
         all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
         all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
@@ -88,19 +99,36 @@ class OverlayRenderer:
             if target_xy is not None:
                 target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
                 self._cross_label(frame, target_px, "T", (0, 0, 255), (10, 26), size=9)
+        if yaw_deg is not None:
+            # The direction the jaws close along, so a glance says whether
+            # they will meet two faces of the block or two of its corners.
+            # _topdown_pose puts that axis on column 0 = (-sin yaw, cos yaw).
+            half = 26.0
+            dx, dy = -math.sin(math.radians(yaw_deg)), math.cos(math.radians(yaw_deg))
+            ends_mm = np.array(
+                [[biased[0] - dx * half, biased[1] - dy * half],
+                 [biased[0] + dx * half, biased[1] + dy * half]]
+            )
+            (x0, y0), (x1, y1) = self._calib.board_to_pixel(ends_mm).round().astype(int)
+            cv2.line(frame, (x0, y0), (x1, y1), (0, 255, 255), 2, cv2.LINE_AA)
 
-    def _first_reachable_target(self, color: str, centre: tuple[float, float]) -> str | None:
-        """Return the same first usable point that the FSM will try first."""
-        key = (color, round(centre[0] / 5.0), round(centre[1] / 5.0))
+    def _plan_summary(
+        self, color: str, centre: tuple[float, float], angle_deg: float
+    ) -> tuple[str | None, float, float | None]:
+        """What the FSM would do here: first usable point, bias scale, jaw yaw."""
+        key = (color, round(centre[0] / 5.0), round(centre[1] / 5.0), round(angle_deg / 5.0))
         with self._target_lock:
             if key not in self._target_labels:
                 grasp_z = self._calib.meta.get("grasp_z_mm_mean")
                 if grasp_z is None:
-                    self._target_labels[key] = None
+                    self._target_labels[key] = (None, 1.0, None)
                 else:
                     self._ik = self._ik or TopDownIK(self._cfg.ik, project_root=self._project_root)
-                    plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z))
-                    self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
+                    plan = plan_grasp_attempts(
+                        self._ik, self._cfg, *centre, float(grasp_z), block_angle_deg=angle_deg
+                    )
+                    label = next((a.label for a in plan.attempts if a.reachable), None)
+                    self._target_labels[key] = (label, plan.bias_scale, plan.yaw_deg)
             return self._target_labels[key]
 
     @staticmethod

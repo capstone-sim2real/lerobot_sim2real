@@ -9,6 +9,7 @@ not geometry: tape is thin/elongated/hollow at corners, a block is a filled
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import cv2
@@ -28,6 +29,9 @@ class BlockDetection:
     fill: float
     # minAreaRect corners in board mm, for debug rendering
     box_mm: list[tuple[float, float]]
+    # Edge direction in board mm, folded to [0, 90) because a square grasps
+    # identically every 90 deg. Default keeps positional construction working.
+    angle_deg: float = 0.0
 
 
 def detect_blocks(
@@ -84,6 +88,14 @@ def detect_blocks(
                 )
 
             box_px = cv2.boxPoints(((cx, cy), (rw, rh), _angle))
+            box_mm = [to_mm(px, py) for px, py in box_px]
+            # Taken from two adjacent corners rather than minAreaRect's own
+            # angle: box_mm is already board mm (rectify() is a positive
+            # uniform scale plus a translation, so it preserves angles and
+            # handedness), which sidesteps both the frame conversion and
+            # OpenCV's version-dependent angle range.
+            (ax, ay), (bx, by) = box_mm[0], box_mm[1]
+            angle_deg = math.degrees(math.atan2(by - ay, bx - ax)) % 90.0
             detections.append(
                 BlockDetection(
                     color=color,
@@ -92,7 +104,8 @@ def detect_blocks(
                     aspect=float(aspect),
                     solidity=float(solidity),
                     fill=float(fill),
-                    box_mm=[to_mm(px, py) for px, py in box_px],
+                    box_mm=box_mm,
+                    angle_deg=float(angle_deg),
                 )
             )
     detections.sort(key=lambda d: (d.center_mm[1], d.center_mm[0]))
