@@ -130,3 +130,18 @@ fsm:
 logging:
   log_dir: logs/pick_stack
   save_transitions: true
+
+# Operator display only. None of these values are used by SELECT, IK, or the
+# robot control loop. The outer arc is a nominal visual guide; TopDownIK stays
+# authoritative for the reachability of each concrete grasp.
+camera:
+  overlay:
+    analysis_fps: 5.0
+    worker_nice: 10
+    opencv_threads: 1
+    workspace_boundary:
+      enabled: true
+      outer_radius_mm: 320.0
+      angle_min_deg: -75.0
+      angle_max_deg: 75.0
+      sample_step_deg: 2.0

@@ -299,6 +299,39 @@ class LoggingConfig:
 
 
 @dataclass
+class WorkspaceBoundaryConfig:
+    """Operator-only outline of the nominal top-down pick workspace.
+
+    This geometry is never consulted by SELECT or IK.  The real reachability
+    gate remains ``TopDownIK``; this is only a stable visual reference in the
+    camera page.
+    """
+
+    enabled: bool = True
+    outer_radius_mm: float = 320.0
+    angle_min_deg: float = -75.0
+    angle_max_deg: float = 75.0
+    sample_step_deg: float = 2.0
+
+
+@dataclass
+class CameraOverlayConfig:
+    """Resource limits for the non-critical operator overlay process."""
+
+    analysis_fps: float = 5.0
+    worker_nice: int = 10
+    opencv_threads: int = 1
+    workspace_boundary: WorkspaceBoundaryConfig = field(default_factory=WorkspaceBoundaryConfig)
+
+
+@dataclass
+class CameraConfig:
+    """Camera web UI settings; capture transport stays configured by its CLI."""
+
+    overlay: CameraOverlayConfig = field(default_factory=CameraOverlayConfig)
+
+
+@dataclass
 class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
     perception: PerceptionConfig = field(default_factory=PerceptionConfig)
@@ -309,6 +342,7 @@ class AppConfig:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    camera: CameraConfig = field(default_factory=CameraConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

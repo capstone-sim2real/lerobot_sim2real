@@ -13,7 +13,7 @@
 
 ```bash
 cd ~/lerobot_sim2real
-so101-camera --host 0.0.0.0 --port 8090
+so101-camera
 ```
 
 `http://<호스트>:8090` 에서 화면을 확인할 수 있습니다. 이 서버가 없으면
@@ -358,7 +358,7 @@ so101-run --task 1 --flow pick_lift_lower --color green \
 
 | 증상 | 원인 / 조치 |
 |---|---|
-| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera --host 0.0.0.0 --port 8090` |
+| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera` |
 | `No <color> block found` | 블록이 화면 밖이거나 HSV 범위 밖. `view_detect`로 확인 (아래) |
 | `ABORT: a required waypoint exceeds the IK error gate` | 목표가 도달 범위 밖. 5절의 반경-높이 표 확인 |
 | 바닥까지 안 내려감 | `--set motion.descent_settle_s=8`. 서보 정착이 느린 것이지 조기 정지가 아님 |

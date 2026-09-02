@@ -1,157 +1,178 @@
-"""Perception overlay for the camera web UI.
+"""Lightweight perception metadata for the camera web UI.
 
-This is deliberately optional: the camera server remains the sole USB owner,
-while an overlay request only reads its already-encoded latest JPEG.
+The operator overlay is deliberately display-only. It reuses the detector's
+already-defined geometry, but never runs IK and never feeds a result back into
+the task runner. JPEG composition happens in the browser, so this module only
+decodes and analyses frames at the configured low rate.
 """
 
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
-import threading
+from typing import Any
 
 import cv2
 import numpy as np
 
-from config import load_config
-from control.grasp import biased_grasp_xy, grasp_candidate_points, plan_grasp_attempts
-from control.ik import TopDownIK
-from perception import PlaneCalibration, detect_blocks
+from config import AppConfig, WorkspaceBoundaryConfig, load_config
+from control.grasp import biased_grasp_xy, grasp_candidate_points
+from perception import BlockDetection, PlaneCalibration, detect_blocks
 
 
-class OverlayRenderer:
-    """Draw detections, retry candidates, and the first IK-reachable goal."""
+def _point_list(
+    values: np.ndarray | tuple[float, float] | list[tuple[float, float]],
+) -> list[list[float]]:
+    points = np.asarray(values, dtype=np.float64).reshape(-1, 2)
+    return [[float(x), float(y)] for x, y in points]
+
+
+def workspace_boundary_metadata(
+    calibration: PlaneCalibration,
+    cfg: WorkspaceBoundaryConfig,
+) -> dict[str, Any] | None:
+    """Project the configured base-frame arc into the calibrated image."""
+    if not cfg.enabled:
+        return None
+    if cfg.outer_radius_mm <= 0:
+        raise ValueError("workspace outer_radius_mm must be positive")
+    if cfg.sample_step_deg <= 0:
+        raise ValueError("workspace sample_step_deg must be positive")
+    if cfg.angle_max_deg <= cfg.angle_min_deg:
+        raise ValueError("workspace angle_max_deg must be greater than angle_min_deg")
+
+    count = max(
+        2,
+        int(math.ceil((cfg.angle_max_deg - cfg.angle_min_deg) / cfg.sample_step_deg)) + 1,
+    )
+    angles_deg = np.linspace(cfg.angle_min_deg, cfg.angle_max_deg, count)
+    angles_rad = np.radians(angles_deg)
+    base_x, base_y = calibration.base_xy_mm or (0.0, 0.0)
+    points_mm = np.column_stack(
+        [
+            base_x + cfg.outer_radius_mm * np.cos(angles_rad),
+            base_y + cfg.outer_radius_mm * np.sin(angles_rad),
+        ]
+    )
+    points_px = calibration.board_to_pixel(points_mm)
+    return {
+        "kind": "nominal_topdown_outer",
+        "radius_mm": float(cfg.outer_radius_mm),
+        "angle_min_deg": float(cfg.angle_min_deg),
+        "angle_max_deg": float(cfg.angle_max_deg),
+        "points_px": _point_list(points_px),
+    }
+
+
+def detection_metadata(
+    detection: BlockDetection,
+    calibration: PlaneCalibration,
+    cfg: AppConfig,
+) -> dict[str, Any]:
+    """Convert one detector result into browser-drawable raw-image geometry.
+
+    Candidate points use the configured full display bias. The task runner may
+    reduce only its radial bias after an IK reachability check; that exact
+    decision is intentionally not duplicated by the operator display.
+    """
+    centre = tuple(float(value) for value in detection.center_mm)
+    biased = biased_grasp_xy(cfg.motion, *centre)
+    candidates = grasp_candidate_points(cfg.motion, *centre)
+    box_mm = np.asarray(detection.box_mm, dtype=np.float64).reshape(-1, 2)
+
+    centre_px = calibration.board_to_pixel(np.asarray([centre], dtype=np.float64))[0]
+    biased_px = calibration.board_to_pixel(np.asarray([biased], dtype=np.float64))[0]
+    candidate_mm = np.asarray([xy for _label, xy in candidates], dtype=np.float64)
+    candidate_px = calibration.board_to_pixel(candidate_mm)
+    box_px = calibration.board_to_pixel(box_mm) if len(box_mm) else np.empty((0, 2))
+
+    # A detector edge axis is cheap and truthful. It is deliberately not
+    # labelled as the IK-selected wrist yaw used by the robot.
+    angle_rad = math.radians(detection.angle_deg)
+    dx, dy = math.cos(angle_rad), math.sin(angle_rad)
+    direction = np.asarray([dx, dy], dtype=np.float64)
+    half_axis_mm = (
+        float(np.max(np.abs((box_mm - np.asarray(centre)) @ direction)))
+        if len(box_mm)
+        else 0.0
+    )
+    axis_mm = np.asarray(
+        [
+            [centre[0] - dx * half_axis_mm, centre[1] - dy * half_axis_mm],
+            [centre[0] + dx * half_axis_mm, centre[1] + dy * half_axis_mm],
+        ],
+        dtype=np.float64,
+    )
+    axis_px = calibration.board_to_pixel(axis_mm)
+
+    return {
+        "color": detection.color,
+        "center_mm": list(centre),
+        "center_px": [float(value) for value in centre_px],
+        "box_mm": _point_list(box_mm),
+        "box_px": _point_list(box_px),
+        "block_angle_deg": float(detection.angle_deg),
+        "block_axis_px": _point_list(axis_px),
+        "biased_center_mm": list(biased),
+        "biased_center_px": [float(value) for value in biased_px],
+        "candidates_mm": [
+            {"label": label, "xy": [float(xy[0]), float(xy[1])]}
+            for label, xy in candidates
+        ],
+        "candidates_px": [
+            {"label": label, "xy": [float(point[0]), float(point[1])]}
+            for (label, _xy), point in zip(candidates, candidate_px, strict=True)
+        ],
+        "display_plan": "nominal_full_bias",
+    }
+
+
+class OverlayAnalyzer:
+    """Detect blocks and publish geometry, without IK or JPEG re-encoding."""
 
     def __init__(self, config_path: Path | str) -> None:
         config_path = Path(config_path).resolve()
-        self._cfg = load_config(config_path)
-        self._project_root = config_path.parents[2]
-        calibration_path = Path(self._cfg.perception.calibration_path)
+        self.cfg = load_config(config_path)
+        project_root = config_path.parents[2]
+        calibration_path = Path(self.cfg.perception.calibration_path)
         if not calibration_path.is_absolute():
-            calibration_path = self._project_root / calibration_path
-        self._calib = PlaneCalibration.load(calibration_path)
-        self._ik: TopDownIK | None = None
-        # IK preview is substantially more expensive than detection. Cache
-        # its selected label; candidate coordinates are still redrawn from
-        # the current detection every frame.
-        self._target_labels: dict[tuple[str, int, int, int], tuple[str | None, float, float | None]] = {}
-        self._target_lock = threading.Lock()
+            calibration_path = project_root / calibration_path
+        self.calibration = PlaneCalibration.load(calibration_path)
 
-    def render(self, jpeg: bytes, *, color: str | None = None) -> tuple[bytes, list[dict[str, object]]]:
+    def static_metadata(self) -> dict[str, Any]:
+        return {
+            "image_size": list(self.calibration.image_size),
+            "workspace_boundary": workspace_boundary_metadata(
+                self.calibration,
+                self.cfg.camera.overlay.workspace_boundary,
+            ),
+            "display_only": True,
+        }
+
+    def analyse(
+        self,
+        jpeg: bytes,
+        *,
+        camera_name: str,
+        frame_seq: int,
+        captured_at: float,
+    ) -> dict[str, Any]:
+        started = time.perf_counter()
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise RuntimeError("Camera returned an invalid JPEG")
-        detections = detect_blocks(frame, self._calib, self._cfg.perception, is_rgb=False)
-        if color:
-            detections = [detection for detection in detections if detection.color == color]
-        payload: list[dict[str, object]] = []
-        for detection in detections:
-            centre = tuple(float(v) for v in detection.center_mm)
-            # The plan may have backed the radial bias off to stay in reach.
-            # Draw what the arm will actually do, not the full-bias point.
-            target_label, bias_scale, yaw_deg = self._plan_summary(
-                detection.color, centre, detection.angle_deg
-            )
-            biased = biased_grasp_xy(self._cfg.motion, *centre, scale=bias_scale)
-            candidates = grasp_candidate_points(self._cfg.motion, *centre, scale=bias_scale)
-            payload.append(
-                {
-                    "color": detection.color,
-                    "center_mm": centre,
-                    "biased_center_mm": biased,
-                    "candidates_mm": [{"label": label, "xy": xy} for label, xy in candidates],
-                    "target_label": target_label,
-                    "block_angle_deg": detection.angle_deg,
-                    "jaw_yaw_deg": yaw_deg,
-                    "bias_scale": bias_scale,
-                }
-            )
-            self._draw_detection(
-                frame, detection.color, centre, biased, candidates, target_label, yaw_deg
-            )
-        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-        if not ok:
-            raise RuntimeError("Could not encode perception overlay")
-        return encoded.tobytes(), payload
-
-    def _draw_detection(
-        self,
-        frame: np.ndarray,
-        color: str,
-        centre: tuple[float, float],
-        biased: tuple[float, float],
-        candidates: list[tuple[str, tuple[float, float]]],
-        target_label: str | None,
-        yaw_deg: float | None = None,
-    ) -> None:
-        all_mm = np.array([centre, biased, *(xy for _, xy in candidates[1:])], dtype=np.float64)
-        all_px = self._calib.board_to_pixel(all_mm).round().astype(int)
-        centre_px, biased_px, *retry_px = all_px
-        self._cross_label(frame, centre_px, "C", (255, 255, 0), (10, -10))
-        self._cross_label(frame, biased_px, "B", (0, 165, 255), (8, 16))
-        for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
-            # initials of the direction words, so cardinals ("front" -> F) and
-            # diagonals ("front-left" -> FL) both render without a lookup table
-            short = "".join(word[0].upper() for word in label.split("-"))
-            self._cross_label(frame, point_px, short, (255, 0, 255), (7, -7))
-        if target_label is not None:
-            target_xy = dict(candidates).get(target_label)
-            if target_xy is not None:
-                target_px = self._calib.board_to_pixel(np.array([target_xy])).round().astype(int)[0]
-                self._cross_label(frame, target_px, "T", (0, 0, 255), (10, 26), size=9)
-        if yaw_deg is not None:
-            # The direction the jaws close along, so a glance says whether
-            # they will meet two faces of the block or two of its corners.
-            # _topdown_pose puts that axis on column 0 = (-sin yaw, cos yaw).
-            half = 26.0
-            dx, dy = -math.sin(math.radians(yaw_deg)), math.cos(math.radians(yaw_deg))
-            ends_mm = np.array(
-                [[biased[0] - dx * half, biased[1] - dy * half],
-                 [biased[0] + dx * half, biased[1] + dy * half]]
-            )
-            (x0, y0), (x1, y1) = self._calib.board_to_pixel(ends_mm).round().astype(int)
-            cv2.line(frame, (x0, y0), (x1, y1), (0, 255, 255), 2, cv2.LINE_AA)
-
-    def _plan_summary(
-        self, color: str, centre: tuple[float, float], angle_deg: float
-    ) -> tuple[str | None, float, float | None]:
-        """What the FSM would do here: first usable point, bias scale, jaw yaw."""
-        key = (color, round(centre[0] / 5.0), round(centre[1] / 5.0), round(angle_deg / 5.0))
-        with self._target_lock:
-            if key not in self._target_labels:
-                grasp_z = self._calib.meta.get("grasp_z_mm_mean")
-                if grasp_z is None:
-                    self._target_labels[key] = (None, 1.0, None)
-                else:
-                    self._ik = self._ik or TopDownIK(self._cfg.ik, project_root=self._project_root)
-                    plan = plan_grasp_attempts(
-                        self._ik, self._cfg, *centre, float(grasp_z), block_angle_deg=angle_deg
-                    )
-                    label = next((a.label for a in plan.attempts if a.reachable), None)
-                    self._target_labels[key] = (label, plan.bias_scale, plan.yaw_deg)
-            return self._target_labels[key]
-
-    @staticmethod
-    def _cross_label(
-        frame: np.ndarray,
-        point: np.ndarray,
-        label: str,
-        color: tuple[int, int, int],
-        text_offset: tuple[int, int],
-        size: int = 5,
-    ) -> None:
-        x, y = point
-        cv2.line(frame, (x - size, y), (x + size, y), color, 2, cv2.LINE_AA)
-        cv2.line(frame, (x, y - size), (x, y + size), color, 2, cv2.LINE_AA)
-        OverlayRenderer._text(frame, label, tuple(point + text_offset), color)
-
-    @staticmethod
-    def _cross(frame: np.ndarray, point: tuple[int, int], color: tuple[int, int, int], size: int, thickness: int) -> None:
-        x, y = point
-        cv2.line(frame, (x - size, y), (x + size, y), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (x, y - size), (x, y + size), color, thickness, cv2.LINE_AA)
-
-    @staticmethod
-    def _text(frame: np.ndarray, text: str, origin: tuple[int, int], color: tuple[int, int, int]) -> None:
-        cv2.putText(frame, text, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(frame, text, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
+        detections = detect_blocks(frame, self.calibration, self.cfg.perception, is_rgb=False)
+        return {
+            "camera": camera_name,
+            "ready": True,
+            "frame_seq": int(frame_seq),
+            "captured_at": float(captured_at),
+            "analysed_at": time.time(),
+            "analysis_ms": round((time.perf_counter() - started) * 1000.0, 2),
+            "image_size": [int(frame.shape[1]), int(frame.shape[0])],
+            "display_only": True,
+            "detections": [
+                detection_metadata(item, self.calibration, self.cfg) for item in detections
+            ],
+        }

@@ -6,9 +6,11 @@
 
 ```text
 camera.server (/dev/video0 단독 소유)
-        │ HTTP snapshot / overlay
-        ▼
-perception.detect_blocks → SELECT
+  ├─ HTTP snapshot ───────────────▶ perception.detect_blocks → SELECT
+  ├─ MJPEG over HTTP ─────────────▶ 브라우저 원본 영상
+  └─ 최신 프레임 1개 ─▶ 저우선순위 vision worker ─▶ SSE JSON ─▶ Canvas overlay
+                                                        (표시 전용)
+        │
         ▼
 CvIkPickState
   ├─ 보정된 grasp attempt 생성
@@ -22,7 +24,7 @@ VERIFY → TRANSPORT → PLACE → SELECT
 
 | 모듈 | 역할 |
 |---|---|
-| `camera/` | USB 카메라 단독 소유, MJPEG/snapshot/오버레이 제공, 프레임 저장 |
+| `camera/` | USB 카메라 단독 소유, MJPEG/snapshot 제공, 별도 저우선순위 워커와 브라우저 Canvas로 표시 전용 오버레이 제공 |
 | `perception/` | homography, 색·형상 블록 검출, 대상 선택 |
 | `control/ik.py`, `control/grasp.py` | 탑다운 IK, 보정, 재시도 attempt 계획 |
 | `fsm/` | SELECT, PICK, VERIFY, TRANSPORT, PLACE 전이와 시간 예산 |
@@ -35,6 +37,7 @@ VERIFY → TRANSPORT → PLACE → SELECT
 2. 파지 성공은 그리퍼 Present_Position과 Present_Load를 함께 확인한 경우에만 인정함.
 3. IK 미도달 attempt는 건너뛰고, 도달 가능한 attempt를 순서대로 시도함.
 4. 모든 조정값은 YAML 또는 `--set` 오버라이드로 관리함.
+5. 관제 오버레이 좌표는 SELECT/IK로 되돌아가지 않으며 로봇 제어의 입력이 아님.
 
 ## 검증
 

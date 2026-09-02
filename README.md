@@ -55,13 +55,17 @@ so101-keyboard --step 1
 브라우저로 카메라 실시간 확인:
 
 ```bash
-so101-camera --host 0.0.0.0 --port 8090
+so101-camera
 ```
+
+기본값은 `0.0.0.0:8090`이며 비전 오버레이도 함께 활성화됩니다. 오버레이를
+완전히 끄려면 `so101-camera --no-overlay`를 사용합니다. 화면의 오버레이는
+원본 MJPEG 위에서 브라우저가 합성하므로 영상 스트림을 느리게 만들지 않습니다.
 
 에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 직전 비교 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
 
 ```bash
-so101-camera --host 0.0.0.0 --port 8090 \
+so101-camera \
   --save-dir /tmp/so101-camera --save-interval-s 2 \
   --save-on-change --change-threshold 8 --max-save-interval-s 10
 ```
