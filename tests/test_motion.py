@@ -362,7 +362,20 @@ def test_reduced_bias_keeps_the_sideways_correction():
         phi = math.atan2(det[1], det[0])
         return -(p[0] - det[0]) * math.sin(phi) + (p[1] - det[1]) * math.cos(phi)
     assert tangential_of(none) == pytest.approx(tangential_of(full), abs=1e-9)
-    assert tangential_of(none) == pytest.approx(cfg.left_half_tangential_offset_mm, abs=1e-9)
+    assert tangential_of(none) == pytest.approx(
+        cfg.grasp_tangential_offset_mm + cfg.left_half_tangential_offset_mm,
+        abs=1e-9,
+    )
+
+
+@pytest.mark.parametrize("det", [(240.0, 0.0), (180.0, 140.0), (180.0, -140.0)])
+def test_default_grasp_bias_is_ten_mm_to_relative_left_everywhere(det):
+    cfg = AppConfig().motion
+    aimed = biased_grasp_xy(cfg, *det)
+    phi = math.atan2(det[1], det[0])
+    tangential = -(aimed[0] - det[0]) * math.sin(phi) + (aimed[1] - det[1]) * math.cos(phi)
+
+    assert tangential == pytest.approx(10.0, abs=1e-9)
 
 
 def test_left_ramp_is_off_by_default_and_grows_with_y():

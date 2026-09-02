@@ -165,7 +165,7 @@ class SelectConfig:
     # deterministic rule; must match the teleop demonstration convention
     rule: str = "nearest_first"
     # blocks within this margin of the zone polygon count as "already placed"
-    zone_margin_mm: float = 20.0
+    zone_margin_mm: float = 0.0
     # quantization cell for stable target ids across re-detections
     target_cell_mm: float = 40.0
 
@@ -286,7 +286,9 @@ class MotionConfig:
     # were measured closing on its near edge (~5-10mm into a 40mm block
     # instead of ~20mm), so the grasp point is pushed outward.
     grasp_radial_offset_mm: float = 12.0
-    grasp_tangential_offset_mm: float = 0.0
+    # Uniform +10mm toward the gripper-relative left (the tangent of the
+    # base-centred reach circle), applied to every block and every retry.
+    grasp_tangential_offset_mm: float = 10.0
     # Which frame the offsets above (and the retry offsets below) live in.
     #
     # False: the NEUTRAL-yaw gripper frame — radial is base -> target, and
@@ -306,7 +308,7 @@ class MotionConfig:
     # where the measured grasp success is lower. Adds to the global bias.
     left_half_y_mm: float = 0.0
     left_half_radial_offset_mm: float = 10.0
-    left_half_tangential_offset_mm: float = 10.0
+    left_half_tangential_offset_mm: float = 0.0
     # Optional ramp on top of that step, per 100mm of y past left_half_y_mm.
     # OFF by default: the 15 calibration points give a tangential-residual/y
     # correlation of +0.017, and a smooth positional correction is exactly
@@ -419,6 +421,48 @@ class FsmConfig:
 
 
 @dataclass
+class Task1Config:
+    """Transport-task completion and deterministic placement geometry."""
+
+    # DONE is allowed only after fresh frames have continuously reported no
+    # blocks in the active region for this long.
+    empty_timeout_s: float = 5.0
+    scan_interval_s: float = 0.2
+    # A frozen/error status JPEG must never count toward the empty timeout.
+    max_frame_age_s: float = 1.0
+    # Slot coordinates in the calibrated quadrilateral: u runs left->right
+    # along its long edge, v runs far->near. Fill the far row first.
+    slot_uv: list[list[float]] = field(
+        default_factory=lambda: [
+            [0.14, 0.20],
+            [0.50, 0.20],
+            [0.80, 0.20],
+            [0.32, 0.76],
+            [0.68, 0.76],
+        ]
+    )
+    # Per-slot command correction away from the base for measured under-reach.
+    slot_radial_offset_mm: list[float] = field(
+        default_factory=lambda: [20.0, 20.0, 20.0, 20.0, 20.0]
+    )
+    # The oblique top camera increasingly under-estimates reach at the far
+    # edge. Keep near picks untouched, then add a radial correction which
+    # reaches max_offset_mm at max_radius_mm.
+    pick_correction_start_radius_mm: float = 200.0
+    pick_correction_max_radius_mm: float = 320.0
+    pick_correction_max_offset_mm: float = 20.0
+    # At long reach a perfectly vertical gripper saturates wrist_flex near
+    # +95 deg. Gradually tip the approach axis radially outward so the wrist
+    # opens while remaining within ik.max_tilt_error_deg.
+    pick_tilt_start_radius_mm: float = 280.0
+    pick_tilt_max_radius_mm: float = 320.0
+    pick_tilt_max_deg: float = 5.0
+    # Assumption pending hardware measurement: release just above the
+    # calibrated pick plane instead of driving the held block into the table.
+    release_clearance_mm: float = 5.0
+
+
+@dataclass
 class LoggingConfig:
     log_dir: str = "logs/pick_stack"
     # CSV of state transitions per run, named <run_id>_transitions.csv
@@ -470,6 +514,7 @@ class AppConfig:
     ik: IkConfig = field(default_factory=IkConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
+    task1: Task1Config = field(default_factory=Task1Config)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
 
@@ -504,6 +549,7 @@ def load_config(yaml_path: Path | str | None = None, overrides: list[str] | None
     for override in overrides or []:
         apply_override(cfg, override)
     validate_perception_colors(cfg.perception)
+    validate_task1(cfg)
     return cfg
 
 
@@ -535,6 +581,39 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
         raise ValueError(
             "perception.workspace_angle_max_deg must be greater than "
             "workspace_angle_min_deg"
+        )
+
+
+def validate_task1(cfg: AppConfig) -> None:
+    if cfg.task1.empty_timeout_s < 5.0:
+        raise ValueError("task1.empty_timeout_s must be at least 5 seconds")
+    if cfg.task1.scan_interval_s <= 0:
+        raise ValueError("task1.scan_interval_s must be positive")
+    if cfg.task1.max_frame_age_s <= 0:
+        raise ValueError("task1.max_frame_age_s must be positive")
+    if len(cfg.task1.slot_uv) < len(cfg.perception.color_prototypes):
+        raise ValueError(
+            "task1.slot_uv needs at least one slot per configured block colour"
+        )
+    if len(cfg.task1.slot_radial_offset_mm) != len(cfg.task1.slot_uv):
+        raise ValueError("task1.slot_radial_offset_mm must have one value per slot_uv")
+    if any(offset < 0 for offset in cfg.task1.slot_radial_offset_mm):
+        raise ValueError("task1.slot_radial_offset_mm values must be non-negative")
+    if cfg.task1.pick_correction_start_radius_mm < 0:
+        raise ValueError("task1.pick_correction_start_radius_mm must be non-negative")
+    if cfg.task1.pick_correction_max_radius_mm <= cfg.task1.pick_correction_start_radius_mm:
+        raise ValueError(
+            "task1.pick_correction_max_radius_mm must exceed pick_correction_start_radius_mm"
+        )
+    if cfg.task1.pick_correction_max_offset_mm < 0:
+        raise ValueError("task1.pick_correction_max_offset_mm must be non-negative")
+    if cfg.task1.pick_tilt_start_radius_mm < 0:
+        raise ValueError("task1.pick_tilt_start_radius_mm must be non-negative")
+    if cfg.task1.pick_tilt_max_radius_mm <= cfg.task1.pick_tilt_start_radius_mm:
+        raise ValueError("task1.pick_tilt_max_radius_mm must exceed pick_tilt_start_radius_mm")
+    if not 0 <= cfg.task1.pick_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
+        raise ValueError(
+            "task1.pick_tilt_max_deg must be between zero and ik.max_tilt_error_deg"
         )
 
 

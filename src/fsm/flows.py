@@ -11,19 +11,26 @@ from config import AppConfig, SensingConfig
 from control.motion import MotionController
 from control.robot_io import BaseRobotIO
 from control.trajectory import TrajectoryPlayer
+from control.task1_transport import Task1TransportPlanner
 from fsm.handlers import (
     ContextMotionState,
     PerceiveFn,
     PlaceState,
     ReleaseState,
     SelectState,
-    SlotPlaceStrategy,
     StackPlaceStrategy,
     TransportState,
     VerifyState,
 )
 from fsm.states import RunContext, State, StateName
+from fsm.task1 import (
+    Task1PerceiveFn,
+    Task1PlaceState,
+    Task1SelectState,
+    Task1TransportState,
+)
 from control.grasp import GraspAttempt
+from perception.homography import PlaneCalibration
 
 
 def _common_states(
@@ -51,28 +58,23 @@ def build_task1_states(
     *,
     robot: BaseRobotIO,
     motion: MotionController,
-    perceive: PerceiveFn,
+    perceive: Task1PerceiveFn,
     pick_state: State,
-    sensing_cfg: SensingConfig,
-    select_state: State | None = None,
+    cfg: AppConfig,
+    calib: PlaneCalibration,
+    planner: Task1TransportPlanner,
 ) -> dict[StateName, State]:
-    """Production transport flow: SELECT → PICK → VERIFY → TRANSPORT → PLACE."""
-    states = _common_states(
-        robot=robot,
-        motion=motion,
-        perceive=perceive,
-        pick_state=pick_state,
-        sensing_cfg=sensing_cfg,
-        after_verified=StateName.TRANSPORT,
-        select_state=select_state,
-    )
-    states.update(
-        {
-            StateName.TRANSPORT: TransportState(motion),
-            StateName.PLACE: PlaceState(SlotPlaceStrategy(motion)),
-        }
-    )
-    return states
+    """Gather until fresh perception proves no outside-zone blocks remain."""
+    if pick_state.name is not StateName.PICK:
+        raise ValueError("pick_state must implement the PICK state")
+    player = TrajectoryPlayer(robot, cfg.motion)
+    return {
+        StateName.SELECT: Task1SelectState(motion, perceive, calib, cfg),
+        StateName.PICK: pick_state,
+        StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
+        StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
+        StateName.PLACE: Task1PlaceState(motion, player, cfg),
+    }
 
 
 def build_task2_states(

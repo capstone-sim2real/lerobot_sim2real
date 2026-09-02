@@ -185,6 +185,11 @@ class CameraStream:
         with self._condition:
             return self._latest_jpeg
 
+    def latest_frame(self) -> tuple[bytes, int, float]:
+        """Return one atomic image/sequence/timestamp snapshot."""
+        with self._condition:
+            return self._latest_jpeg, self._frames, self._latest_ts
+
     def wait_for_frame(
         self, last_ts: float, timeout: float = 2.0
     ) -> tuple[bytes, float]:
@@ -380,7 +385,15 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
         if camera is None:
             self.send_error(HTTPStatus.NOT_FOUND, f"unknown camera: {name}")
             return
-        self._send_bytes(camera.latest_jpeg(), "image/jpeg")
+        jpeg, frame_seq, captured_at = camera.latest_frame()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Frame-Seq", str(frame_seq))
+        self.send_header("X-Captured-At", f"{captured_at:.6f}")
+        self.end_headers()
+        self.wfile.write(jpeg)
 
     def _overlay_available(self, name: str) -> bool:
         if self.server.overlay is None or name not in self.server.overlay_cameras:

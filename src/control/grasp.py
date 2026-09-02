@@ -99,6 +99,28 @@ class GraspPlan:
     bias_scale: float = 1.0
     # Jaw yaw the whole plan holds, or None for the neutral (radial) yaw.
     yaw_deg: float | None = None
+    # Negative values tip the gripper's downward axis radially outward.
+    radial_tilt_deg: float = 0.0
+
+
+def _solve_ik(
+    ik: TopDownIK,
+    x_mm: float,
+    y_mm: float,
+    z_mm: float,
+    yaw_deg: float | None,
+    radial_tilt_deg: float,
+) -> IkResult:
+    """Keep zero-tilt callers and lightweight test doubles backward compatible."""
+    if radial_tilt_deg:
+        return ik.solve(
+            x_mm,
+            y_mm,
+            z_mm,
+            yaw_deg=yaw_deg,
+            radial_tilt_deg=radial_tilt_deg,
+        )
+    return ik.solve(x_mm, y_mm, z_mm, yaw_deg=yaw_deg)
 
 
 def highest_reachable_hover(
@@ -108,6 +130,7 @@ def highest_reachable_hover(
     base_z_mm: float,
     cfg: AppConfig,
     yaw_deg: float | None = None,
+    radial_tilt_deg: float = 0.0,
 ) -> float:
     """Find the highest genuinely reachable top-down hover at this point.
 
@@ -121,7 +144,7 @@ def highest_reachable_hover(
         # A broad IK gate accepts the calibration error budget.  Hover needs
         # a stricter check: reporting a pose that is 12mm short would make
         # the clearance fictional and can drag a held block.
-        if ik.solve(x_mm, y_mm, z_mm, yaw_deg=yaw_deg).position_error_mm <= 3.0:
+        if _solve_ik(ik, x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg).position_error_mm <= 3.0:
             return z_mm
         z_mm -= cfg.motion.hover_search_step_mm
     return floor
@@ -202,12 +225,13 @@ def _solve_attempt(
     hover_z: float,
     yaw_deg: float | None = None,
     jaw_rot_deg: float = 0.0,
+    radial_tilt_deg: float = 0.0,
 ) -> GraspAttempt:
     x_mm, y_mm = gripper_frame_offset(
         base_xy[0], base_xy[1], *_in_jaw_frame(cfg.motion, offset[0], offset[1], jaw_rot_deg)
     )
-    hover = ik.solve(x_mm, y_mm, hover_z, yaw_deg=yaw_deg)
-    grasp = ik.solve(x_mm, y_mm, grasp_z, yaw_deg=yaw_deg)
+    hover = _solve_ik(ik, x_mm, y_mm, hover_z, yaw_deg, radial_tilt_deg)
+    grasp = _solve_ik(ik, x_mm, y_mm, grasp_z, yaw_deg, radial_tilt_deg)
     reachable = all(
         r.position_error_mm <= cfg.ik.max_position_error_mm
         and r.tilt_error_deg <= cfg.ik.max_tilt_error_deg
@@ -235,19 +259,34 @@ def _plan_at_scale(
     scale: float,
     yaw_deg: float | None = None,
     jaw_rot_deg: float = 0.0,
+    radial_tilt_deg: float = 0.0,
 ) -> GraspPlan:
     base_xy = biased_grasp_xy(cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
     # Search the hover at the aim point, not at the detection: that is where
     # the arm actually holds station, and the envelope shrinks fast with
     # reach, so a height found 12mm further in can be unreachable here.
-    hover_z = highest_reachable_hover(ik, *base_xy, grasp_z, cfg, yaw_deg)
+    hover_z = highest_reachable_hover(
+        ik, *base_xy, grasp_z, cfg, yaw_deg, radial_tilt_deg
+    )
     candidate_points = grasp_candidate_points(cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
-    attempts = [_solve_attempt(ik, cfg, "centre", base_xy, (0.0, 0.0), grasp_z, hover_z, yaw_deg)]
+    attempts = [
+        _solve_attempt(
+            ik,
+            cfg,
+            "centre",
+            base_xy,
+            (0.0, 0.0),
+            grasp_z,
+            hover_z,
+            yaw_deg,
+            radial_tilt_deg=radial_tilt_deg,
+        )
+    ]
     for (label, _xy), offset in zip(candidate_points[1:], cfg.motion.grasp_retry_offsets_mm, strict=True):
         attempts.append(
             _solve_attempt(
                 ik, cfg, label, base_xy, (float(offset[0]), float(offset[1])), grasp_z, hover_z,
-                yaw_deg, jaw_rot_deg,
+                yaw_deg, jaw_rot_deg, radial_tilt_deg,
             )
         )
     return GraspPlan(
@@ -258,6 +297,7 @@ def _plan_at_scale(
         attempts=attempts,
         bias_scale=scale,
         yaw_deg=yaw_deg,
+        radial_tilt_deg=radial_tilt_deg,
     )
 
 
@@ -269,6 +309,7 @@ def plan_grasp_attempts(
     grasp_z: float,
     *,
     block_angle_deg: float | None = None,
+    radial_tilt_deg: float = 0.0,
     log: Callable[[str], None] | None = None,
 ) -> GraspPlan:
     """Solve every grasp point that might be tried, before the arm moves.
@@ -303,7 +344,9 @@ def plan_grasp_attempts(
         rot = jaw_rot_deg if yaw is not None else 0.0
         plan = None
         for scale in (1.0, 0.5, 0.0):
-            plan = _plan_at_scale(ik, cfg, x_mm, y_mm, grasp_z, scale, yaw, rot)
+            plan = _plan_at_scale(
+                ik, cfg, x_mm, y_mm, grasp_z, scale, yaw, rot, radial_tilt_deg
+            )
             if plan.attempts[0].reachable:
                 if scale < 1.0 and log is not None:
                     log(
@@ -314,6 +357,8 @@ def plan_grasp_attempts(
                     log(f"  jaws turned to {yaw % 90.0:.0f} deg for the block's faces")
                     if cfg.motion.grasp_offsets_follow_jaw_yaw:
                         log(f"  grasp offsets rotated {rot:+.0f} deg to follow them")
+                if radial_tilt_deg and log is not None:
+                    log(f"  gripper tipped outward by {abs(radial_tilt_deg):.1f} deg for far reach")
                 return plan
     if log is not None:
         log("  no bias setting puts this block in reach")

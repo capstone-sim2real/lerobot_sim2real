@@ -404,6 +404,16 @@ _PAGE = """<!doctype html>
             drawText(context, `${Number(boundary.angle_max_deg).toFixed(0)}°`, [last[0] + 6, last[1] - 6], '#ff9800');
           }
         }
+        const targetZone = state.config.target_zone;
+        if (targetZone?.points_px?.length) {
+          drawPolyline(
+            context,
+            [...targetZone.points_px, targetZone.points_px[0]],
+            '#e040fb',
+            3
+          );
+          drawText(context, 'excluded zone', targetZone.points_px[0], '#e040fb');
+        }
         visibleRejects(state).forEach((reject) => drawReject(context, reject));
         visibleDetections(state).forEach((detection) => drawDetection(context, detection));
       });

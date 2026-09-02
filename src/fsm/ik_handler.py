@@ -45,6 +45,7 @@ class CvIkPickState(State):
         grasp_z_mm: float,
         retreat_pose: Pose | None,
         retreat_after_grasp: bool = True,
+        radial_tilt_extra_key: str | None = None,
         ik: TopDownIK | None = None,
         player: TrajectoryPlayer | None = None,
         project_root: Path | str = ".",
@@ -55,6 +56,7 @@ class CvIkPickState(State):
         self._grasp_z_mm = grasp_z_mm
         self._retreat_pose = retreat_pose
         self._retreat_after_grasp = retreat_after_grasp
+        self._radial_tilt_extra_key = radial_tilt_extra_key
         self._ik = ik or TopDownIK(cfg.ik, project_root=project_root)
         self._player = player or TrajectoryPlayer(robot, cfg.motion)
 
@@ -92,6 +94,11 @@ class CvIkPickState(State):
         target = selection.target
         ctx.record_attempt(ctx.target_id)
         x_mm, y_mm = target.center_mm
+        radial_tilt_deg = (
+            float(ctx.extras.get(self._radial_tilt_extra_key, 0.0))
+            if self._radial_tilt_extra_key is not None
+            else 0.0
+        )
         plan = plan_grasp_attempts(
             self._ik,
             self._cfg,
@@ -99,6 +106,7 @@ class CvIkPickState(State):
             y_mm,
             self._grasp_z_mm,
             block_angle_deg=target.angle_deg,
+            radial_tilt_deg=radial_tilt_deg,
             log=logger.info,
         )
         ctx.extras["grasp_plan"] = plan
@@ -110,9 +118,9 @@ class CvIkPickState(State):
             reach = math.hypot(x_mm, y_mm)
             worst = min(a.grasp.position_error_mm for a in plan.attempts)
             logger.warning(
-                "block at x=%.0f y=%.0f is %.0fmm out — TOO FAR to grasp top-down "
-                "(best IK still misses by %.0fmm; the arm's top-down envelope runs "
-                "out near 300mm reach). Move it closer to the base and retry.",
+                "block at x=%.0f y=%.0f is %.0fmm out — TOO FAR for the configured grasp "
+                "posture (best IK still misses by %.0fmm). Move it closer to the base "
+                "or tune the Task-1 far-reach correction and retry.",
                 x_mm, y_mm, reach, worst,
             )
             return self._retry_or_skip(ctx, "unreachable")

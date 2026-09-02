@@ -76,7 +76,7 @@ perception:
 
 select:
   rule: nearest_first
-  zone_margin_mm: 20.0
+  zone_margin_mm: 0.0
   target_cell_mm: 40.0
 
 sensing:
@@ -133,13 +133,14 @@ motion:
   # grasp point bias in the gripper's own frame (radial = away from the base,
   # tangential = the gripper's own left) -- see MotionConfig
   grasp_radial_offset_mm: 12.0
-  grasp_tangential_offset_mm: 0.0
+  # 모든 블록에서 부채꼴 접선 기준 그리퍼 상대 좌측으로 10mm.
+  grasp_tangential_offset_mm: 10.0
   # false: 중립 요 기준(반경/접선) — 기존 측정이 모두 이 프레임에서 나옴
   # true : 조우가 블록 면과 평행해진 뒤의 프레임 기준(그리퍼 롤각 반영)
   grasp_offsets_follow_jaw_yaw: false
   left_half_y_mm: 0.0
   left_half_radial_offset_mm: 10.0
-  left_half_tangential_offset_mm: 10.0
+  left_half_tangential_offset_mm: 0.0
   # optional ramp on top of the step; OFF by default -- see MotionConfig
   left_ramp_radial_mm_per_100mm: 0.0
   left_ramp_tangential_mm_per_100mm: 0.0
@@ -186,6 +187,26 @@ fsm:
   time_budget_s: 300.0
   max_retries_per_block: 2
   reserve_time_s: 10.0
+
+task1:
+  # HOME에서 fresh frame을 계속 보며 이 시간 동안 외부 블록이 없을 때만 DONE.
+  empty_timeout_s: 5.0
+  scan_interval_s: 0.2
+  max_frame_age_s: 1.0
+  # [u, v]: zone 긴 변의 왼쪽->오른쪽, 먼 변->가까운 변. 먼 3개 후 가까운 2개.
+  slot_uv: [[0.14, 0.20], [0.50, 0.20], [0.80, 0.20], [0.32, 0.76], [0.68, 0.76]]
+  # 모든 슬롯을 실기 under-reach만큼 로봇 기준 바깥 방향으로 20mm 더 멀리 명령.
+  slot_radial_offset_mm: [20.0, 20.0, 20.0, 20.0, 20.0]
+  # 사선 카메라의 먼 거리 오차 보정: 200mm까지 0, 320mm에서 바깥쪽 +20mm.
+  pick_correction_start_radius_mm: 200.0
+  pick_correction_max_radius_mm: 320.0
+  pick_correction_max_offset_mm: 20.0
+  # 원거리에서 wrist_flex 한계를 피하도록 gripper 축을 바깥쪽으로 최대 5도 기울임.
+  pick_tilt_start_radius_mm: 280.0
+  pick_tilt_max_radius_mm: 320.0
+  pick_tilt_max_deg: 5.0
+  # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
+  release_clearance_mm: 5.0
 
 logging:
   log_dir: logs/pick_stack

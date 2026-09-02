@@ -6,7 +6,13 @@ import cv2
 import numpy as np
 import pytest
 
-from camera.overlay import detection_metadata, reject_metadata, workspace_boundary_metadata
+from camera.overlay import (
+    detection_metadata,
+    reject_metadata,
+    target_zone_metadata,
+    workspace_boundary_metadata,
+)
+from camera.client import fetch_snapshot_with_metadata
 from camera.server import DEFAULT_OVERLAY_CONFIG, FrameRecorder, parse_args
 from camera.vision_worker import VisionWorker
 from camera.web_ui import render_camera_page
@@ -58,6 +64,30 @@ def test_camera_cli_enables_default_overlay_and_honours_explicit_options():
         "127.0.0.1", 9000, "custom.yaml"
     )
     assert parse_args(["--no-overlay"]).no_overlay is True
+
+
+def test_snapshot_client_requires_and_decodes_freshness_headers(monkeypatch):
+    image = np.full((10, 12, 3), 80, np.uint8)
+    ok, encoded = cv2.imencode(".jpg", image)
+    assert ok
+
+    class Response:
+        headers = {"X-Frame-Seq": "42", "X-Captured-At": "1234.5"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return encoded.tobytes()
+
+    monkeypatch.setattr("camera.client.urlopen", lambda *_args, **_kwargs: Response())
+    snapshot = fetch_snapshot_with_metadata("http://camera/snapshot.jpg")
+    assert snapshot.frame_seq == 42
+    assert snapshot.captured_at == 1234.5
+    assert snapshot.frame.shape == image.shape
 
 
 def _block_bgr(color: str, value: int = 170) -> tuple[int, int, int]:
@@ -118,6 +148,17 @@ def test_workspace_arc_is_projected_from_robot_base_and_matches_the_detector():
 def test_default_workspace_arc_spans_the_full_half_plane():
     cfg = AppConfig().perception
     assert (cfg.workspace_angle_min_deg, cfg.workspace_angle_max_deg) == (-90.0, 90.0)
+
+
+def test_target_zone_overlay_uses_the_detector_exclusion_polygon():
+    calibration = _calibration()
+    zone = target_zone_metadata(calibration)
+    assert zone is not None and zone["kind"] == "excluded_target_zone"
+    np.testing.assert_allclose(zone["points_mm"], calibration.zone_polygon_mm)
+    np.testing.assert_allclose(
+        zone["points_px"],
+        calibration.board_to_pixel(np.asarray(calibration.zone_polygon_mm)),
+    )
 
 
 def test_overlay_metadata_draws_existing_box_without_changing_detection_geometry():

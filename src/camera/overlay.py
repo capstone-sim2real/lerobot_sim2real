@@ -77,6 +77,17 @@ def workspace_boundary_metadata(
     }
 
 
+def target_zone_metadata(calibration: PlaneCalibration) -> dict[str, Any] | None:
+    if not calibration.zone_polygon_mm:
+        return None
+    points_mm = np.asarray(calibration.zone_polygon_mm, dtype=np.float64)
+    return {
+        "kind": "excluded_target_zone",
+        "points_mm": _point_list(points_mm),
+        "points_px": _point_list(calibration.board_to_pixel(points_mm)),
+    }
+
+
 def detection_metadata(
     detection: BlockDetection,
     calibration: PlaneCalibration,
@@ -184,6 +195,7 @@ class OverlayAnalyzer:
                 self.cfg.camera.overlay.workspace_boundary,
                 self.cfg.perception,
             ),
+            "target_zone": target_zone_metadata(self.calibration),
             "display_only": True,
         }
 

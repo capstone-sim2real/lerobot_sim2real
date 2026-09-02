@@ -31,6 +31,20 @@ def test_solve_beyond_topdown_reach_reports_large_error(ik: TopDownIK):
     assert result.position_error_mm > 15.0
 
 
+def test_small_outward_tilt_releases_far_reach_wrist_saturation(ik: TopDownIK):
+    vertical = ik.solve(x_mm=320.0, y_mm=0.0, z_mm=10.0)
+    opened = ik.solve(
+        x_mm=320.0,
+        y_mm=0.0,
+        z_mm=10.0,
+        radial_tilt_deg=-5.0,
+    )
+
+    assert opened.position_error_mm < vertical.position_error_mm
+    assert opened.joints["wrist_flex"] < vertical.joints["wrist_flex"]
+    assert opened.tilt_error_deg <= 6.0
+
+
 def test_default_yaw_keeps_wrist_roll_near_neutral(ik: TopDownIK):
     # A fixed base-frame yaw forces wrist_roll to swing ~80 deg across the
     # workspace to hold one absolute direction; the neutral default must not

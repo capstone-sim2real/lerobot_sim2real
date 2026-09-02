@@ -17,8 +17,13 @@ CvIkPickState
   ├─ IK 도달 가능 attempt만 실행
   └─ gripper position/load로 파지 검증
         ▼
-VERIFY → TRANSPORT → PLACE → SELECT
+VERIFY → TRANSPORT → PLACE → HOME/SELECT
 ```
+
+Task 1의 active perception 영역은 `도달 부채꼴 ∩ 고정 target zone 바깥`임.
+구역 안 블록은 색 할당 전에 검출 목록에서 제거되며, PLACE 횟수와 무관하게 fresh
+frame에서 외부 검출 0개가 연속 5초 유지될 때 DONE으로 전이함. 각 색은 하나뿐이므로
+색 이름이 재시도 identity와 3+2 슬롯 예약 key를 겸함.
 
 ## 모듈 구성
 

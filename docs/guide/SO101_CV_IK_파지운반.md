@@ -459,17 +459,15 @@ uv run --extra hardware --extra dev pytest -q
    ```bash
    uv run python -m tools.camera_drift_check --watch 600
    ```
-2. **구역 좌표 등록** — 전용 도구가 이미 있습니다. 저장된 프레임에서 테이프
-   안쪽 네 모서리의 픽셀 좌표를 읽어 다시 실행하면 됩니다.
+2. **구역 좌표 등록** — FK 기반 homography를 다시 맞추지 않고 빨강 테이프의
+   안쪽 사각형만 등록하는 전용 도구를 사용합니다. 기본 실행은 preview만 만들며,
+   확인 뒤 `--write`로 저장합니다.
    ```bash
-   so101-calibrate \
-       --image src/configs/calib/venue_lab.json.frame.png \
-       --square-mm 25 --venue lab \
-       --base-px <bx,by> --zone-px "x1,y1 x2,y2 x3,y3 x4,y4" \
-       --out src/configs/calib/venue_lab.json
+   so101-zone-calibrate
+   so101-zone-calibrate --write
    ```
-   `PlaneCalibration.zone_polygon_mm`(캘리브레이션 JSON 안, 현재 `null`)에
-   mm 좌표로 저장됩니다. `PerceptionConfig`가 아니라 캘리브레이션 파일입니다.
+   5개 프레임의 모서리 중앙값이 `PlaneCalibration.zone_polygon_mm`에 로봇 베이스
+   mm 좌표로 저장됩니다. 기존 `H`, base 원점, grasp-z 메타데이터는 보존됩니다.
 3. **빨강 검출 재확인** — 테이프가 실제로 걸러지는지. `view_detect`는 색을
    고르지 않고 `perception.hsv_ranges`의 전 색을 한 번에 검출해 주석 이미지를
    남깁니다. 빨간 블록만 잡히고 테이프는 빠져야 합니다.
@@ -480,32 +478,40 @@ uv run --extra hardware --extra dev pytest -q
    ```
    게이트를 바꿔가며 시험할 때는 YAML을 고치지 말고
    `--set perception.area_mm2_max=2600` 처럼 넘깁니다.
-4. **내려놓기 슬롯 정의** — 구역 안에 블록 5개 자리를 잡습니다. 블록 40mm에
-   그리퍼 조우 70mm이므로 **중심 간격 최소 70~80mm**가 필요합니다.
-   가로 20cm(테이프 안쪽 16cm)면 한 줄에 2개가 한계이니, 2×2+1 또는
-   2열 배치를 검토하세요.
+4. **슬롯·IK dry-run** — 등록된 사각형 안에 먼쪽 3개, 가까운쪽 2개 슬롯을
+   만들고 모든 drop/hover IK가 gate 안인지 확인합니다. 모터에는 연결하지 않습니다.
+   ```bash
+   so101-run --task 1 --dry-run
+   ```
+   Task 1 파지 좌표는 사선 top-down 카메라의 원거리 편향을 보정합니다.
+   기본값은 반경 200 mm까지 0 mm, 320 mm에서 로봇 바깥 방향 20 mm이며
+   `task1.pick_correction_*` 세 값으로 조절합니다. 이 보정은 PICK에만 적용되고,
+   적재 구역 제외 및 5초 완료 판정에는 보정 전 검출 좌표를 사용합니다.
+   또한 보정된 반경 280~320 mm에서 손목을 바깥쪽으로 0~5도 점진적으로 펴
+   원거리의 `wrist_flex=95도` 포화를 줄입니다. `task1.pick_tilt_*`로 조절하며
+   기존 `pick_lift_lower`와 근거리 파지에는 적용하지 않습니다.
+   모든 파지는 반경 접선의 그리퍼 상대 좌측으로 10 mm 보정됩니다. 다섯 배치
+   슬롯 모두 실기 under-reach를 보상하도록 명목 내부 중심보다 반경상 20 mm 더
+   멀리 명령합니다.
 
 ### 9.4 이미 만들어져 있는 것
 
 구역을 등록해두면 아래가 자동으로 따라옵니다.
 
-- **놓은 블록은 다시 고르지 않습니다.** `perception/select.py`의 `_in_zone()`이
-  구역 안(또는 `select.zone_margin_mm=20mm` 이내)의 검출을 후보에서 제외합니다.
-  "모으기" 작업에서 이미 옮긴 블록을 다시 집는 것을 막아줍니다.
+- **놓은 블록은 다시 고르지 않습니다.** 구역 안 블록은 색 이름을 배정하기 전에
+  detector의 active 영역에서 제거됩니다. 따라서 구역 안 빨강 블록이 외부 빨강
+  블록의 한 색 슬롯을 선점하지 않습니다.
 - **시각 확인.** `view_detect.py`와 `calibrate_homography.py`가 구역 다각형을
   오버레이로 그려줍니다.
 
-### 9.5 아직 없는 것
+### 9.5 Task 1 완료 조건
 
-- **여러 블록을 순차 처리하는 루프.** 현재 도구는 색 하나를 한 번 옮기고
-  끝납니다. `fsm/` 상태머신이 이 역할을 하도록 설계되어 있으나
-  (`SELECT → PICK → VERIFY → TRANSPORT → PLACE`), CV+IK 경로용
-  `fsm/ik_handlers.py`는 **아직 없습니다**(AGENTS.md §14.1에 따라
-  `fsm/handlers.py`는 수정 금지, 추가로만 작업).
-  `control/grasp.py`는 그때 `IkPickState`가 그대로 재사용할 수 있도록
-  도구에서 분리해 둔 것입니다.
-- **놓을 자리가 비었는지 확인.** 같은 칸에 두 번 놓는 것을 막는 로직이 없습니다.
-- **블록 각도 정렬.** `grasp_yaw_deg()`는 구현되어 있으나 호출자가 없습니다.
+`so101-run --task 1`은 매 PLACE 또는 파지 실패 뒤 반드시 HOME으로 돌아와 다시
+검사합니다. `placed_count==5`로 끝내지 않으며, fresh camera frame에서
+`부채꼴 내부 AND zone 외부` 검출이 연속 5초 동안 0개일 때만 DONE입니다.
+카메라 오류·stale frame·같은 frame sequence 반복은 이 5초에 포함하지 않습니다.
+색별 재시도 한도를 넘긴 블록은 현재 순회에서만 뒤로 미루고 다음 순회에서 다시
+시도하므로 영구 포기하지 않습니다.
 
 ---
 

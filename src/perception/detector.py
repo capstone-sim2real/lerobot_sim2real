@@ -17,6 +17,7 @@ import numpy as np
 
 from config import PerceptionConfig
 from perception.homography import PlaneCalibration
+from perception.zone import point_in_zone
 
 
 @dataclass
@@ -207,6 +208,14 @@ def detect_blocks_with_rejects(
         detections = [d for d in detections if _in_workspace(d.center_mm, cfg, base_xy)]
         rejects = [r for r in rejects if _in_workspace(r.center_mm, cfg, base_xy)]
 
+    # The fixed target zone is outside the detector's active region, just as
+    # the area beyond the reach sector is. Do this before colour assignment:
+    # an already-placed block must not consume the one allowed slot for its
+    # colour and hide another block of that colour outside the zone.
+    if calib.zone_polygon_mm:
+        detections = [d for d in detections if not point_in_zone(d.center_mm, calib)]
+        rejects = [r for r in rejects if not point_in_zone(r.center_mm, calib)]
+
     # One physical block can trip several gates (they overlap on purpose), so
     # merge coincident blobs into one candidate BEFORE naming it. Merging
     # after would let the same block hold two colour slots.
@@ -359,5 +368,4 @@ def _blockiness(detection: BlockDetection) -> tuple[float, float]:
     bigger (its side faces show) and must not lose to a smaller artefact.
     """
     return (detection.fill * detection.solidity, detection.area_mm2)
-
 

@@ -76,6 +76,19 @@ CV/IK 파지 flow 실행 (카메라 서버를 먼저 띄워둔 채로):
 so101-run --task 1 --flow pick_lift_lower --color green
 ```
 
+고정 빨강 테이프 구역은 기존 homography를 보존하는 전용 도구로 한 번 등록함.
+
+```bash
+so101-zone-calibrate                         # preview only
+so101-zone-calibrate --write                 # zone_polygon_mm 저장
+so101-run --task 1 --dry-run                 # 모터 연결 없이 슬롯/IK 확인
+so101-run --task 1                           # 외부 블록이 5초간 없을 때까지 수집
+```
+
+Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인 부분임. PLACE 횟수나
+색상 개수로 종료하지 않고, 홈 자세에서 fresh frame 기준 외부 검출이 5초 동안
+연속 0개일 때만 완료함.
+
 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
 
 ## Repository Layout
