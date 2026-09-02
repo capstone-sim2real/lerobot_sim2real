@@ -94,7 +94,11 @@ class _FakeIk:
         return IkResult({"shoulder_pan": 0.0, "shoulder_lift": -20.0, "elbow_flex": 30.0, "wrist_flex": 10.0, "wrist_roll": 0.0}, 0.1, 0.1)
 
     def grasp_yaw_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
-        return block_angle_deg
+        return self.grasp_yaw_and_rotation_deg(x_mm, y_mm, z_mm, block_angle_deg)[0]
+
+    def grasp_yaw_and_rotation_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
+        # stub neutral yaw is 0, so the block angle *is* the jaw rotation
+        return block_angle_deg, block_angle_deg
 
 
 class _FakePlayer:

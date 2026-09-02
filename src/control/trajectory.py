@@ -77,6 +77,27 @@ class TrajectoryPlayer:
             self._robot.send_joints(goal)
             self._tick_sleep()
 
+    def settle(self, goal: Pose, *, tol: float, timeout_s: float) -> tuple[float, bool]:
+        """Hold ``goal`` for up to ``timeout_s``, trying to tighten onto ``tol``.
+
+        Unlike ``move_to`` this neither interpolates nor raises: it is the
+        "wait a moment longer" step for a pose the arm has already reached
+        loosely. ``move_to`` would spend the whole ``move_timeout_s`` on a
+        tolerance the servos may simply not have the resolution to hit, which
+        is seconds of dead time before every grasp descent.
+
+        Returns ``(residual_error, reached_tol)``.
+        """
+        deadline = time.monotonic() + timeout_s
+        while True:
+            err = max(abs(self._robot.read_joints()[j] - goal[j]) for j in goal)
+            if err <= tol:
+                return err, True
+            if time.monotonic() > deadline:
+                return err, False
+            self._robot.send_joints(goal)
+            self._tick_sleep()
+
     def descend(
         self,
         goal: Pose,

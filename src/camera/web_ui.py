@@ -138,6 +138,7 @@ _PAGE = """<!doctype html>
     .detail-row.b span:first-child { color: #ffa500; }
     .detail-row.retry span:first-child { color: #ff00ff; }
     .detail-row.angle span:first-child { color: #ffff00; }
+    .detail-row.reject span:first-child { color: #9aa0a6; }
     select {
       color: #f5f5f5;
       background: #111;
@@ -184,6 +185,24 @@ _PAGE = """<!doctype html>
       return (state.latest?.detections || []).filter(
         (detection) => !color || detection.color === color
       );
+    };
+
+    const visibleRejects = (state) => {
+      const color = selectedColor();
+      if (color === 'none') return [];
+      return (state.latest?.rejects || []).filter(
+        (reject) => !color || reject.color === color
+      );
+    };
+
+    const rejectText = (reject) => {
+      const value = {
+        area: `${reject.area_mm2} mm²`,
+        aspect: reject.aspect,
+        fill: reject.fill,
+        solidity: reject.solidity
+      }[reject.reason];
+      return `${reject.color} ✕ ${reject.reason} ${value}`;
     };
 
     const drawPolyline = (context, points, color, width, close = false) => {
@@ -255,6 +274,19 @@ _PAGE = """<!doctype html>
       });
     };
 
+    const drawReject = (context, reject) => {
+      context.save();
+      context.setLineDash([6, 4]);
+      drawPolyline(context, reject.box_px, '#9aa0a6', 1.5, true);
+      context.restore();
+      drawText(
+        context,
+        rejectText(reject),
+        [reject.center_px[0] + 8, reject.center_px[1] + 4],
+        '#9aa0a6'
+      );
+    };
+
     const renderDetails = (state) => {
       const panel = state.layout.querySelector('.details');
       if (!panel) return;
@@ -284,7 +316,29 @@ _PAGE = """<!doctype html>
         });
         panel.append(block);
       });
-      if (!detections.length) panel.textContent = 'No matching block.';
+      const rejects = visibleRejects(state);
+      if (!detections.length && !rejects.length) {
+        panel.textContent = 'No matching block.';
+        return;
+      }
+      rejects.forEach((reject) => {
+        const block = document.createElement('div');
+        block.className = 'detail-block';
+        const name = document.createElement('div');
+        name.className = 'detail-name';
+        name.textContent = `${reject.color} (rejected)`;
+        block.append(name);
+        addDetailRow(block, 'gate', reject.reason, 'reject');
+        addDetailRow(block, 'C', pointText(reject.center_mm), 'reject');
+        addDetailRow(block, 'area', `${reject.area_mm2} mm²`, 'reject');
+        addDetailRow(
+          block,
+          'shape',
+          `asp ${reject.aspect} · fill ${reject.fill} · sol ${reject.solidity}`,
+          'reject'
+        );
+        panel.append(block);
+      });
     };
 
     const connect = (state) => {
@@ -337,10 +391,20 @@ _PAGE = """<!doctype html>
         if (selectedColor() === 'none') return;
         const boundary = state.config.workspace_boundary;
         if (boundary) {
-          drawPolyline(context, boundary.points_px, '#ff9800', 2.5);
-          const middle = boundary.points_px[Math.floor(boundary.points_px.length / 2)];
+          const arc = boundary.points_px;
+          drawPolyline(context, arc, '#ff9800', 2.5);
+          const middle = arc[Math.floor(arc.length / 2)];
           drawText(context, `${Number(boundary.radius_mm).toFixed(0)} mm`, [middle[0] + 8, middle[1] - 8], '#ff9800');
+          if (boundary.base_px && arc.length >= 2) {
+            const first = arc[0];
+            const last = arc[arc.length - 1];
+            drawPolyline(context, [boundary.base_px, first], '#ff9800', 2.5);
+            drawPolyline(context, [boundary.base_px, last], '#ff9800', 2.5);
+            drawText(context, `${Number(boundary.angle_min_deg).toFixed(0)}°`, [first[0] + 6, first[1] - 6], '#ff9800');
+            drawText(context, `${Number(boundary.angle_max_deg).toFixed(0)}°`, [last[0] + 6, last[1] - 6], '#ff9800');
+          }
         }
+        visibleRejects(state).forEach((reject) => drawReject(context, reject));
         visibleDetections(state).forEach((detection) => drawDetection(context, detection));
       });
       requestAnimationFrame(paint);

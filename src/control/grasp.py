@@ -32,6 +32,24 @@ from control.sensing import GraspCheck, check_grasp
 from control.trajectory import TrajectoryPlayer
 
 
+def _in_jaw_frame(
+    cfg: MotionConfig, radial: float, tangential: float, jaw_rot_deg: float
+) -> tuple[float, float]:
+    """Re-express a (radial, tangential) offset for the jaws' actual frame.
+
+    ``gripper_frame_offset`` lays its axes on the NEUTRAL yaw. When the jaws
+    turn by ``jaw_rot_deg`` to meet a block's faces, an offset the operator
+    thinks of as "to the block's left" has turned with them, so it has to be
+    rotated back into the neutral axes before it is applied. Off by default
+    (``grasp_offsets_follow_jaw_yaw``), in which case this is the identity.
+    """
+    if not cfg.grasp_offsets_follow_jaw_yaw or not jaw_rot_deg:
+        return radial, tangential
+    r = math.radians(jaw_rot_deg)
+    c, s = math.cos(r), math.sin(r)
+    return radial * c - tangential * s, radial * s + tangential * c
+
+
 def _offset_label(radial: float, tangential: float) -> str:
     """Name a retry point from the signs of its offset.
 
@@ -110,7 +128,7 @@ def highest_reachable_hover(
 
 
 def biased_grasp_xy(
-    cfg: MotionConfig, x_mm: float, y_mm: float, *, scale: float = 1.0
+    cfg: MotionConfig, x_mm: float, y_mm: float, *, scale: float = 1.0, jaw_rot_deg: float = 0.0
 ) -> tuple[float, float]:
     """Where the arm should aim for a block detected at ``(x_mm, y_mm)``.
 
@@ -143,11 +161,12 @@ def biased_grasp_xy(
         from_centre = (y_mm - cfg.left_half_y_mm) / 100.0
         radial += cfg.left_ramp_radial_mm_per_100mm * from_centre
         tangential += cfg.left_ramp_tangential_mm_per_100mm * from_centre
-    return gripper_frame_offset(x_mm, y_mm, radial * scale, tangential)
+    radial, tangential = _in_jaw_frame(cfg, radial * scale, tangential, jaw_rot_deg)
+    return gripper_frame_offset(x_mm, y_mm, radial, tangential)
 
 
 def grasp_candidate_points(
-    cfg: MotionConfig, x_mm: float, y_mm: float, *, scale: float = 1.0
+    cfg: MotionConfig, x_mm: float, y_mm: float, *, scale: float = 1.0, jaw_rot_deg: float = 0.0
 ) -> list[tuple[str, tuple[float, float]]]:
     """Return the board-frame points shown and tried for one detected block.
 
@@ -155,14 +174,19 @@ def grasp_candidate_points(
     offsets.  Keeping this independent of IK lets the camera overlay show
     the exact plan without solving kinematics for every browser refresh.
     """
-    base_xy = biased_grasp_xy(cfg, x_mm, y_mm, scale=scale)
+    base_xy = biased_grasp_xy(cfg, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
     points = [("centre", base_xy)]
     for offset in cfg.grasp_retry_offsets_mm:
         radial, tangential = float(offset[0]), float(offset[1])
+        # Label from the configured signs, not the rotated values: the label
+        # names the direction the operator asked for, which is the whole
+        # point of expressing it in the jaws' frame.
         points.append(
             (
                 _offset_label(radial, tangential),
-                gripper_frame_offset(base_xy[0], base_xy[1], radial, tangential),
+                gripper_frame_offset(
+                    base_xy[0], base_xy[1], *_in_jaw_frame(cfg, radial, tangential, jaw_rot_deg)
+                ),
             )
         )
     return points
@@ -177,8 +201,11 @@ def _solve_attempt(
     grasp_z: float,
     hover_z: float,
     yaw_deg: float | None = None,
+    jaw_rot_deg: float = 0.0,
 ) -> GraspAttempt:
-    x_mm, y_mm = gripper_frame_offset(base_xy[0], base_xy[1], offset[0], offset[1])
+    x_mm, y_mm = gripper_frame_offset(
+        base_xy[0], base_xy[1], *_in_jaw_frame(cfg.motion, offset[0], offset[1], jaw_rot_deg)
+    )
     hover = ik.solve(x_mm, y_mm, hover_z, yaw_deg=yaw_deg)
     grasp = ik.solve(x_mm, y_mm, grasp_z, yaw_deg=yaw_deg)
     reachable = all(
@@ -207,18 +234,20 @@ def _plan_at_scale(
     grasp_z: float,
     scale: float,
     yaw_deg: float | None = None,
+    jaw_rot_deg: float = 0.0,
 ) -> GraspPlan:
-    base_xy = biased_grasp_xy(cfg.motion, x_mm, y_mm, scale=scale)
+    base_xy = biased_grasp_xy(cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
     # Search the hover at the aim point, not at the detection: that is where
     # the arm actually holds station, and the envelope shrinks fast with
     # reach, so a height found 12mm further in can be unreachable here.
     hover_z = highest_reachable_hover(ik, *base_xy, grasp_z, cfg, yaw_deg)
-    candidate_points = grasp_candidate_points(cfg.motion, x_mm, y_mm, scale=scale)
+    candidate_points = grasp_candidate_points(cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
     attempts = [_solve_attempt(ik, cfg, "centre", base_xy, (0.0, 0.0), grasp_z, hover_z, yaw_deg)]
     for (label, _xy), offset in zip(candidate_points[1:], cfg.motion.grasp_retry_offsets_mm, strict=True):
         attempts.append(
             _solve_attempt(
-                ik, cfg, label, base_xy, (float(offset[0]), float(offset[1])), grasp_z, hover_z, yaw_deg
+                ik, cfg, label, base_xy, (float(offset[0]), float(offset[1])), grasp_z, hover_z,
+                yaw_deg, jaw_rot_deg,
             )
         )
     return GraspPlan(
@@ -261,17 +290,20 @@ def plan_grasp_attempts(
     +-45 deg of neutral, and it is holding a *fixed base-frame* yaw that
     overheated that servo on 2026-08-31 (AGENTS.md §7).
     """
-    yaw_deg = None
+    yaw_deg, jaw_rot_deg = None, 0.0
     if block_angle_deg is not None:
-        # Once, outside the scale loop: grasp_yaw_deg costs a probe solve.
-        yaw_deg = ik.grasp_yaw_deg(x_mm, y_mm, grasp_z, block_angle_deg)
+        # Once, outside the scale loop: this costs a probe solve.
+        yaw_deg, jaw_rot_deg = ik.grasp_yaw_and_rotation_deg(x_mm, y_mm, grasp_z, block_angle_deg)
 
     for yaw in ([yaw_deg, None] if yaw_deg is not None else [None]):
         if yaw is None and yaw_deg is not None and log is not None:
             log("  rotated jaws unreachable here — falling back to the neutral yaw")
+        # The neutral fallback puts the jaws back on the neutral axes, so the
+        # offsets must not be rotated for it either.
+        rot = jaw_rot_deg if yaw is not None else 0.0
         plan = None
         for scale in (1.0, 0.5, 0.0):
-            plan = _plan_at_scale(ik, cfg, x_mm, y_mm, grasp_z, scale, yaw)
+            plan = _plan_at_scale(ik, cfg, x_mm, y_mm, grasp_z, scale, yaw, rot)
             if plan.attempts[0].reachable:
                 if scale < 1.0 and log is not None:
                     log(
@@ -280,6 +312,8 @@ def plan_grasp_attempts(
                     )
                 if yaw is not None and log is not None:
                     log(f"  jaws turned to {yaw % 90.0:.0f} deg for the block's faces")
+                    if cfg.motion.grasp_offsets_follow_jaw_yaw:
+                        log(f"  grasp offsets rotated {rot:+.0f} deg to follow them")
                 return plan
     if log is not None:
         log("  no bias setting puts this block in reach")
@@ -302,7 +336,19 @@ def attempt_grasp(
     """
     log(f"      open jaws, move to hover z={attempt.hover_z_mm:.0f}mm")
     player.set_gripper(cfg.sensing.gripper_open_pos)
+    # Arrive at the loose transit tolerance (fast), then spend a short bounded
+    # moment tightening. descend() interpolates from the measured pose, so any
+    # error left here is closed on the way down and drags the jaws sideways
+    # through the block instead of landing on it from above.
     player.move_to(attempt.hover.joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+    drift, tight = player.settle(
+        attempt.hover.joints,
+        tol=cfg.motion.grasp_hover_arrival_tol,
+        timeout_s=cfg.motion.grasp_hover_settle_s,
+    )
+    if not tight:
+        log(f"      hover settled at {drift:.1f} deg, short of the "
+            f"{cfg.motion.grasp_hover_arrival_tol:.1f} deg target — descending anyway")
     log(f"      descend to grasp z={attempt.grasp_z_mm:.0f}mm")
     _, blocked = player.descend(attempt.grasp.joints)
 

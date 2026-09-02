@@ -16,9 +16,14 @@ from typing import Any
 import cv2
 import numpy as np
 
-from config import AppConfig, WorkspaceBoundaryConfig, load_config
+from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_config
 from control.grasp import biased_grasp_xy, grasp_candidate_points
-from perception import BlockDetection, PlaneCalibration, detect_blocks
+from perception import (
+    BlockDetection,
+    PlaneCalibration,
+    RejectedCandidate,
+    detect_blocks_with_rejects,
+)
 
 
 def _point_list(
@@ -31,37 +36,44 @@ def _point_list(
 def workspace_boundary_metadata(
     calibration: PlaneCalibration,
     cfg: WorkspaceBoundaryConfig,
+    perception: PerceptionConfig,
 ) -> dict[str, Any] | None:
-    """Project the configured base-frame arc into the calibrated image."""
+    """Project the detector's workspace sector into the calibrated image.
+
+    The radius and angles come from ``perception`` rather than from the
+    display config, so the outline on the page is exactly the region the
+    detector reports blocks in — an arc that could drift away from the gate
+    would be worse than no arc.
+    """
     if not cfg.enabled:
         return None
-    if cfg.outer_radius_mm <= 0:
-        raise ValueError("workspace outer_radius_mm must be positive")
+    if perception.workspace_radius_mm <= 0:
+        raise ValueError("perception.workspace_radius_mm must be positive to draw the arc")
     if cfg.sample_step_deg <= 0:
         raise ValueError("workspace sample_step_deg must be positive")
-    if cfg.angle_max_deg <= cfg.angle_min_deg:
-        raise ValueError("workspace angle_max_deg must be greater than angle_min_deg")
 
-    count = max(
-        2,
-        int(math.ceil((cfg.angle_max_deg - cfg.angle_min_deg) / cfg.sample_step_deg)) + 1,
-    )
-    angles_deg = np.linspace(cfg.angle_min_deg, cfg.angle_max_deg, count)
+    lo, hi = perception.workspace_angle_min_deg, perception.workspace_angle_max_deg
+    radius = perception.workspace_radius_mm
+    count = max(2, int(math.ceil((hi - lo) / cfg.sample_step_deg)) + 1)
+    angles_deg = np.linspace(lo, hi, count)
     angles_rad = np.radians(angles_deg)
     base_x, base_y = calibration.base_xy_mm or (0.0, 0.0)
     points_mm = np.column_stack(
         [
-            base_x + cfg.outer_radius_mm * np.cos(angles_rad),
-            base_y + cfg.outer_radius_mm * np.sin(angles_rad),
+            base_x + radius * np.cos(angles_rad),
+            base_y + radius * np.sin(angles_rad),
         ]
     )
     points_px = calibration.board_to_pixel(points_mm)
+    base_px = calibration.board_to_pixel(np.asarray([[base_x, base_y]], dtype=np.float64))
     return {
         "kind": "nominal_topdown_outer",
-        "radius_mm": float(cfg.outer_radius_mm),
-        "angle_min_deg": float(cfg.angle_min_deg),
-        "angle_max_deg": float(cfg.angle_max_deg),
+        "radius_mm": float(radius),
+        "angle_min_deg": float(lo),
+        "angle_max_deg": float(hi),
         "points_px": _point_list(points_px),
+        # the two radial legs back to the base close the arc into a sector
+        "base_px": _point_list(base_px)[0],
     }
 
 
@@ -128,6 +140,30 @@ def detection_metadata(
     }
 
 
+def reject_metadata(
+    reject: RejectedCandidate,
+    calibration: PlaneCalibration,
+) -> dict[str, Any]:
+    """Convert one near-miss candidate into browser-drawable geometry.
+
+    Carries the measured values as well as the gate name so the operator can
+    read *how far off* a candidate was, not just that something was dropped.
+    """
+    centre = np.asarray([reject.center_mm], dtype=np.float64)
+    box_mm = np.asarray(reject.box_mm, dtype=np.float64).reshape(-1, 2)
+    return {
+        "color": reject.color,
+        "reason": reject.reason,
+        "center_mm": [float(value) for value in reject.center_mm],
+        "center_px": [float(value) for value in calibration.board_to_pixel(centre)[0]],
+        "box_px": _point_list(calibration.board_to_pixel(box_mm)) if len(box_mm) else [],
+        "area_mm2": round(reject.area_mm2, 1),
+        "aspect": round(reject.aspect, 2),
+        "fill": round(reject.fill, 2),
+        "solidity": round(reject.solidity, 2),
+    }
+
+
 class OverlayAnalyzer:
     """Detect blocks and publish geometry, without IK or JPEG re-encoding."""
 
@@ -146,6 +182,7 @@ class OverlayAnalyzer:
             "workspace_boundary": workspace_boundary_metadata(
                 self.calibration,
                 self.cfg.camera.overlay.workspace_boundary,
+                self.cfg.perception,
             ),
             "display_only": True,
         }
@@ -162,7 +199,14 @@ class OverlayAnalyzer:
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise RuntimeError("Camera returned an invalid JPEG")
-        detections = detect_blocks(frame, self.calibration, self.cfg.perception, is_rgb=False)
+        report_rejects = self.cfg.camera.overlay.report_rejects
+        detections, rejects = detect_blocks_with_rejects(
+            frame,
+            self.calibration,
+            self.cfg.perception,
+            is_rgb=False,
+            collect_rejects=report_rejects,
+        )
         return {
             "camera": camera_name,
             "ready": True,
@@ -175,4 +219,5 @@ class OverlayAnalyzer:
             "detections": [
                 detection_metadata(item, self.calibration, self.cfg) for item in detections
             ],
+            "rejects": [reject_metadata(item, self.calibration) for item in rejects],
         }

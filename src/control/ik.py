@@ -192,9 +192,23 @@ class TopDownIK:
         A square block grasps identically every 90 deg, so this aligns the
         jaws with a pair of block faces while keeping wrist_roll within
         +-45 deg of neutral (AGENTS.md §9)."""
+        return self.grasp_yaw_and_rotation_deg(x_mm, y_mm, z_mm, block_angle_deg)[0]
+
+    def grasp_yaw_and_rotation_deg(
+        self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float
+    ) -> tuple[float, float]:
+        """``grasp_yaw_deg`` plus how far it turns the jaws off neutral.
+
+        The rotation is what ``gripper_frame_offset`` does *not* know about:
+        that function's radial/tangential axes are the neutral-yaw ones, so
+        once the jaws turn to meet a block's faces the two frames differ by
+        this angle (bounded to +-45 deg by the mod-90 fold). Returned from
+        the same probe solve because the caller that wants one wants both.
+        """
         neutral = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
         candidates = [block_angle_deg + 90.0 * k for k in range(4)]
-        return min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
+        yaw = min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
+        return yaw, ((yaw - neutral) + 180.0) % 360.0 - 180.0
 
     def solve(self, x_mm: float, y_mm: float, z_mm: float, yaw_deg: float | None = None) -> IkResult:
         """Best-effort top-down IK solve. Check ``position_error_mm`` /
