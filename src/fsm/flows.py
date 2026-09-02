@@ -34,11 +34,12 @@ def _common_states(
     pick_state: State,
     sensing_cfg: SensingConfig,
     after_verified: StateName,
+    select_state: State | None = None,
 ) -> dict[StateName, State]:
     if pick_state.name is not StateName.PICK:
         raise ValueError("pick_state must implement the PICK state")
     return {
-        StateName.SELECT: SelectState(motion, perceive),
+        StateName.SELECT: select_state or SelectState(motion, perceive),
         StateName.PICK: pick_state,
         StateName.VERIFY: VerifyState(
             robot, sensing_cfg, motion, on_grasped=after_verified
@@ -53,6 +54,7 @@ def build_task1_states(
     perceive: PerceiveFn,
     pick_state: State,
     sensing_cfg: SensingConfig,
+    select_state: State | None = None,
 ) -> dict[StateName, State]:
     """Production transport flow: SELECT → PICK → VERIFY → TRANSPORT → PLACE."""
     states = _common_states(
@@ -62,6 +64,7 @@ def build_task1_states(
         pick_state=pick_state,
         sensing_cfg=sensing_cfg,
         after_verified=StateName.TRANSPORT,
+        select_state=select_state,
     )
     states.update(
         {
@@ -79,6 +82,7 @@ def build_task2_states(
     perceive: PerceiveFn,
     pick_state: State,
     sensing_cfg: SensingConfig,
+    select_state: State | None = None,
 ) -> dict[StateName, State]:
     """Production stacking flow: SELECT → PICK → VERIFY → TRANSPORT → PLACE."""
     states = _common_states(
@@ -88,6 +92,7 @@ def build_task2_states(
         pick_state=pick_state,
         sensing_cfg=sensing_cfg,
         after_verified=StateName.TRANSPORT,
+        select_state=select_state,
     )
     states.update(
         {
@@ -112,6 +117,7 @@ def build_pick_lift_lower_states(
     perceive: PerceiveFn,
     pick_state: State,
     cfg: AppConfig,
+    select_state: State | None = None,
 ) -> dict[StateName, State]:
     """One-block smoke test with no destination poses.
 
@@ -126,6 +132,7 @@ def build_pick_lift_lower_states(
         pick_state=pick_state,
         sensing_cfg=cfg.sensing,
         after_verified=StateName.LIFT,
+        select_state=select_state,
     )
     player = TrajectoryPlayer(robot, cfg.motion)
     transit = {"max_step": 1.0, "tol": cfg.motion.transit_arrival_tol}

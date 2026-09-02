@@ -35,7 +35,7 @@ from camera.client import fetch_snapshot
 from control import MotionController, PoseRegistry, So101RobotIO
 from fsm.act_handler import ActPickState
 from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_states
-from fsm.ik_handler import CvIkPickState
+from fsm.ik_handler import CvIkPickState, CvIkSelectState
 from fsm.machine import StateMachine, TransitionLogger
 from fsm.states import RunContext
 from perception import PlaneCalibration, detect_blocks, select_target
@@ -140,17 +140,24 @@ def run(
         )
 
         perceive = make_perceive(calib, cfg, target_color=target_color)
+        # The CV+IK pick opens the jaws itself, so its SELECT homes without
+        # commanding the gripper; the ACT path keeps the recorded home pose
+        # intact so the policy starts in distribution.
+        select_state = CvIkSelectState(motion, perceive) if pick_mode == "cv_ik" else None
         if flow == "pick_lift_lower":
             states = build_pick_lift_lower_states(
-                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, cfg=cfg
+                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, cfg=cfg,
+                select_state=select_state,
             )
         elif task == 1:
             states = build_task1_states(
-                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, sensing_cfg=cfg.sensing
+                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, sensing_cfg=cfg.sensing,
+                select_state=select_state,
             )
         else:
             states = build_task2_states(
-                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, sensing_cfg=cfg.sensing
+                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, sensing_cfg=cfg.sensing,
+                select_state=select_state,
             )
 
         log_dir = Path(cfg.logging.log_dir)

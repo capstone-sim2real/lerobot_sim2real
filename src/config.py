@@ -186,18 +186,21 @@ class MotionConfig:
     left_half_radial_offset_mm: float = 10.0
     left_half_tangential_offset_mm: float = 10.0
     # Retry grasp points as (radial, tangential) mm from the biased centre,
-    # tried in order. The default four are front-left, front-right,
-    # back-left, back-right. Empty disables retrying.
+    # tried in order: front, back, left, right. Labels are derived from the
+    # signs, so diagonals work here too. Empty disables retrying.
     grasp_retry_offsets_mm: list[list[float]] = field(
-        default_factory=lambda: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
+        default_factory=lambda: [[10.0, 0.0], [-10.0, 0.0], [0.0, 10.0], [0.0, -10.0]]
     )
-    # Tried first when the descent is blocked: the depth was right and only
-    # the lateral position was off, so nudge tangentially (left, then right).
-    blocked_descent_offsets_mm: list[float] = field(default_factory=lambda: [10.0, -10.0])
     # A descent that ends this far short of its goal (action units) counts as
     # blocked rather than arrived. Only reorders the retries — the jaws are
     # closed and checked either way.
     descent_blocked_tol: float = 4.0
+    # Abort the descent once the measured pose trails the pose just commanded
+    # by this much (action units). Without it, a gripper that lands on a block
+    # keeps receiving deeper commands and then a re-sent unreachable goal,
+    # which shoves the block away and binds the arm. Raise it if normal
+    # descents are misread as blocked; set it very high to disable the watch.
+    descent_max_lag: float = 8.0
     # How long the grasp descent may settle against its goal. The loop exits
     # the moment it is within arrival_tol, so this only bounds the blocked
     # case: it costs a normal descent nothing, and stops the servos leaning

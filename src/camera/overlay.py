@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 
 from config import load_config
-from control.grasp import biased_grasp_xy, grasp_candidate_points, highest_reachable_hover, plan_grasp_attempts
+from control.grasp import biased_grasp_xy, grasp_candidate_points, plan_grasp_attempts
 from control.ik import TopDownIK
 from perception import PlaneCalibration, detect_blocks
 
@@ -79,7 +79,9 @@ class OverlayRenderer:
         self._cross_label(frame, centre_px, "C", (255, 255, 0), (10, -10))
         self._cross_label(frame, biased_px, "B", (0, 165, 255), (8, 16))
         for (label, xy), point_px in zip(candidates[1:], retry_px, strict=True):
-            short = {"front-left": "FL", "front-right": "FR", "back-left": "BL", "back-right": "BR"}.get(label, label)
+            # initials of the direction words, so cardinals ("front" -> F) and
+            # diagonals ("front-left" -> FL) both render without a lookup table
+            short = "".join(word[0].upper() for word in label.split("-"))
             self._cross_label(frame, point_px, short, (255, 0, 255), (7, -7))
         if target_label is not None:
             target_xy = dict(candidates).get(target_label)
@@ -97,8 +99,7 @@ class OverlayRenderer:
                     self._target_labels[key] = None
                 else:
                     self._ik = self._ik or TopDownIK(self._cfg.ik, project_root=self._project_root)
-                    hover_z = highest_reachable_hover(self._ik, *centre, float(grasp_z), self._cfg)
-                    plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z), hover_z)
+                    plan = plan_grasp_attempts(self._ik, self._cfg, *centre, float(grasp_z))
                     self._target_labels[key] = next((attempt.label for attempt in plan.attempts if attempt.reachable), None)
             return self._target_labels[key]
 

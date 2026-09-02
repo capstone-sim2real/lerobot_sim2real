@@ -72,12 +72,11 @@ def plan(cfg: AppConfig, color: str, dest_name: str, snapshot_url: str, points_c
     # search the hover height at the biased aim point, not the raw detection:
     # that is where the arm will actually hold station.
     aim_x, aim_y = biased_grasp_xy(cfg.motion, det_x, det_y)
-    pick_hover_z = highest_reachable_hover(ik, aim_x, aim_y, grasp_z, cfg)
     place_hover_z = highest_reachable_hover(ik, place_x, place_y, place_z, cfg)
     return {
         "color": detection.color,
         "area_mm2": detection.area_mm2,
-        "grasp_plan": plan_grasp_attempts(ik, cfg, det_x, det_y, grasp_z, pick_hover_z),
+        "grasp_plan": plan_grasp_attempts(ik, cfg, det_x, det_y, grasp_z, log=print),
         "place_xy_mm": (place_x, place_y),
         "place_z_mm": place_z,
         "place_hover_z_mm": place_hover_z,
@@ -138,7 +137,7 @@ def print_plan(cfg: AppConfig, p: dict) -> None:
               f"(folded to r={cfg.motion.transit_apex_radius_mm:.0f}mm, where the envelope is tallest)")
     print()
     print(f"{'grasp point':14s} {'radial':>7s} {'tangnt':>7s} {'x_mm':>8s} {'y_mm':>8s} {'pos_err':>8s} {'tilt':>6s}  ")
-    for a in list(gp.attempts) + list(gp.lateral):
+    for a in gp.attempts:
         worst = max((a.hover, a.grasp), key=lambda r: r.position_error_mm)
         flag = "" if a.reachable else "  <-- UNREACHABLE, will be skipped"
         print(
@@ -239,8 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nABORT: a required waypoint exceeds the IK error gate — check the printout above.", file=sys.stderr)
         return 1
     usable = sum(1 for a in gp.attempts if a.reachable)
-    print(f"\n{usable} of {len(gp.attempts)} grasp points usable, "
-          f"{sum(1 for a in gp.lateral if a.reachable)} sideways fallbacks held in reserve.")
+    print(f"\n{usable} of {len(gp.attempts)} grasp points usable.")
 
     if input("\nAbout to move the real arm. Enter to proceed, 'n' to cancel: ").strip().lower() in ("n", "no"):
         print("cancelled.")

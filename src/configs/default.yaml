@@ -81,10 +81,10 @@ motion:
   left_half_y_mm: 0.0
   left_half_radial_offset_mm: 10.0
   left_half_tangential_offset_mm: 10.0
-  # (radial, tangential) mm: front-left, front-right, back-left, back-right
-  grasp_retry_offsets_mm: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
-  blocked_descent_offsets_mm: [10.0, -10.0]
+  # (radial, tangential) mm: front, back, left, right
+  grasp_retry_offsets_mm: [[10.0, 0.0], [-10.0, 0.0], [0.0, 10.0], [0.0, -10.0]]
   descent_blocked_tol: 4.0
+  descent_max_lag: 8.0
   descent_settle_s: 5.0
 
 ik:

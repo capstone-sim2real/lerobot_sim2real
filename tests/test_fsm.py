@@ -141,10 +141,9 @@ def test_cv_ik_pick_uses_a_reachable_offset_when_centre_is_unreachable(monkeypat
     motion, player, ctx = _FakeMotion(), _FakePlayer(), _cv_ik_context()
     solved = IkResult({"shoulder_pan": 0.0}, 0.1, 0.1)
     centre = GraspAttempt("centre", (0.0, 0.0), (220.0, -20.0), solved, solved, False)
-    offset = GraspAttempt("back-left", (-10.0, 10.0), (210.0, -10.0), solved, solved, True)
-    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset], [])
-    monkeypatch.setattr(ik_handler, "highest_reachable_hover", lambda *_args: 48.0)
-    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args: plan)
+    offset = GraspAttempt("left", (0.0, 10.0), (210.0, -10.0), solved, solved, True)
+    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset])
+    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args, **_kw: plan)
     attempted = []
 
     def run(_player, _robot, _cfg, received_plan, **_kwargs):

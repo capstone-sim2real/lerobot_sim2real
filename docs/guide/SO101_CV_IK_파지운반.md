@@ -142,11 +142,14 @@ so101-run --task 1 --flow pick_lift_lower --color green
 | 순서 | 이름 | (반경, 접선) mm |
 |---|---|---|
 | 1 | centre | (0, 0) |
-| 2 | front-left | (+10, +10) |
-| 3 | front-right | (+10, −10) |
-| 4 | back-left | (−10, +10) |
-| 5 | back-right | (−10, −10) |
-| 예비 | lateral-left / lateral-right | (0, ±10) |
+| 2 | front | (+10, 0) |
+| 3 | back | (−10, 0) |
+| 4 | left | (0, +10) |
+| 5 | right | (0, −10) |
+
+라벨은 오프셋 부호에서 파생됩니다(`_offset_label`). 설정을 대각선으로 되돌리면
+`front-left` 같은 이름이 자동으로 다시 나오므로, 이름이 실제 위치와 어긋날 일이
+없습니다.
 
 **하강이 짧게 끝나면**(`blocked`) 좌우 후보가 대각 후보들보다 **앞으로**
 끼어듭니다. 높이는 맞았고 좌우만 틀렸다는 뜻이기 때문입니다. 한 번만
@@ -174,7 +177,18 @@ so101-run --task 1 --flow pick_lift_lower --color green
 2. **짧게 끝난 것을 예외가 아니라 반환값으로 알립니다.** 그리퍼가 블록
    위에 얹히는 것은 재시도할 정상 상황이지 에러가 아닙니다.
 
-판정은 하강 후 **목표 대비 관절 미달량**(`descent_blocked_tol`)입니다.
+3. **팔이 명령을 못 따라오면 즉시 중단합니다**(`descent_max_lag`). 이게 없으면
+   그리퍼가 블록 위에 얹혀도 남은 명령이 계속 더 깊은 위치를 지시하고, 이어서
+   정착 루프가 도달 불가능한 목표를 재전송합니다. 실측으로 **명령 201회 / 6.7초
+   동안 서보가 블록을 밀어붙였고**, 감시를 켜면 **31회 / 1.0초**로 줄어듭니다.
+   블록이 밀려나 더 멀어지던 현상의 직접 원인이었습니다.
+
+   판정 기준이 "틱당 이동량"이 아니라 **"명령 대비 뒤처진 거리"**인 이유: 하강
+   시작 직후 서보가 가속하는 동안은 틱당 이동량이 작아 오탐합니다. 정상적으로
+   지연되는 팔은 격차가 일정하게 유지되고, 걸린 팔만 격차가 계속 벌어집니다.
+
+판정은 하강 후 **목표 대비 관절 미달량**(`descent_blocked_tol`)과 위 추종 감시
+둘 중 하나라도 걸리면 "막힘"입니다.
 정착 예산(`descent_settle_s`)은 tol에 들어오는 즉시 빠져나오므로 정상
 하강에는 비용이 없고, 진짜 막혔을 때만 서보가 버티는 시간을 제한합니다.
 
@@ -241,8 +255,8 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 | `left_half_radial_offset_mm` | 10.0 | 좌측 절반 추가 전방 보정 |
 | `left_half_tangential_offset_mm` | 10.0 | 좌측 절반 추가 좌측 보정 |
 | `grasp_retry_offsets_mm` | 대각 4개 | 재시도 위치 (반경, 접선). `[]` 로 비활성화 |
-| `blocked_descent_offsets_mm` | `[10, -10]` | 하강 막힘 시 우선 시도할 좌우 보정 |
 | `descent_blocked_tol` | 4.0 | 이만큼 못 미치면 "막힘" 판정 |
+| `descent_max_lag` | 8.0 | 하강 중 명령 대비 이만큼 뒤처지면 걸린 것으로 보고 즉시 중단. 매우 크게 주면 감시 해제 |
 | `descent_settle_s` | 5.0 | 하강 정착 예산 |
 | `hover_search_step_mm` | 5.0 | 높이 탐색 격자 |
 | `transit_apex_radius_mm` | 195.0 | 운반 시 접을 반경. 0이면 비활성화 |
@@ -297,7 +311,9 @@ so101-run --task 1 --flow pick_lift_lower --color green \
 | `No <color> block found` | 블록이 화면 밖이거나 HSV 범위 밖. `view_detect`로 확인 (아래) |
 | `ABORT: a required waypoint exceeds the IK error gate` | 목표가 도달 범위 밖. 5절의 반경-높이 표 확인 |
 | 바닥까지 안 내려감 | `--set motion.descent_settle_s=8`. 서보 정착이 느린 것이지 조기 정지가 아님 |
-| 닫지 않고 계속 옆으로만 이동 | `descend()`가 매 틱 센서를 읽던 시절의 버그. 재발 시 `tests/test_carry.py`, `tests/test_grasp.py` 회귀 테스트부터 확인 |
+| 정상 하강인데 자꾸 "막힘" 판정 | `--set motion.descent_max_lag=15` 로 올림. 되돌리려면 `=1000` |
+| 재시도할수록 블록이 밀려남 | 추종 감시가 꺼졌거나 임계값이 큼. `--set motion.descent_max_lag=5` |
+| 실패 후 홈 복귀 때 그리퍼가 여닫힘 | `home` 포즈에 `gripper` 값이 있어서 발생. CV+IK 경로는 `CvIkSelectState`가 `go_home(include_gripper=False)`로 회피 |
 | 운반 중 블록이 끌림 | `--set motion.transit_apex_radius_mm=170` 으로 더 접기. 단 90mm가 천장 |
 | `Relative goal position magnitude had to be clamped` | lerobot의 `max_relative_target` 안전 클램프. 그리퍼 닫힘 시 정상 동작 |
 
@@ -320,8 +336,9 @@ uv run --extra hardware --extra dev pytest -q
 
 | 파일 | 범위 |
 |---|---|
-| `tests/test_grasp.py` | 그리퍼 로컬 오프셋, 좌/우 판정, 후보 순서, 재시도 큐, **항상 닫기** |
-| `tests/test_carry.py` | 반경 접기, 높이 탐색, 바닥값 검증 |
+| `tests/test_motion.py` | 그리퍼 로컬 오프셋, 좌/우 판정, 후보 순서·라벨, 재시도 큐, 하강 추종 감시, `go_home` |
+| `tests/test_fsm.py` | FSM 예산·VERIFY 게이트, CV+IK PICK 어댑터 |
+| `tests/test_core.py` | 설정 로딩, homography, 검출, 타깃 선택, 카메라 |
 | `tests/test_trajectory.py` | `descend()` 도달/막힘 판정, **보간 루프에서 센서 미읽기** |
 | `tests/test_ik.py` | 실제 URDF 기반 IK (placo 필요, 없으면 스킵) |
 
