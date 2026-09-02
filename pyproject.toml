@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pick-stack"
 version = "0.1.0"
-description = "SO-101 pick & stack hybrid FSM (ACT pick + rule-based transport/place)"
-requires-python = ">=3.10"
+description = "SO-101 CV+IK pick-and-place FSM"
+requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
     "numpy>=2.0.0,<2.3.0",
@@ -17,12 +17,34 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+hardware = [
+    "lerobot[feetech,kinematics]",
+]
+
+[project.scripts]
+so101-run = "runners.run_task:main"
+so101-camera = "camera.server:main"
+so101-detect = "tools.view_detect:main"
+so101-calibrate = "tools.calibrate_homography:main"
+so101-robot-calibrate = "tools.calibrate_robot:main"
+so101-scan-motors = "tools.scan_motors:main"
+so101-fk = "tools.fk_probe:main"
+so101-gripper = "tools.gripper_probe:main"
+so101-gripper-move = "tools.gripper_move_probe:main"
+so101-ik = "tools.ik_move:main"
+so101-keyboard = "tools.keyboard_control:main"
+so101-record-calibration-point = "tools.record_calibration_point:main"
+so101-capture-calibration-point = "tools.capture_calibration_point:main"
+so101-torque-off = "tools.torque_off:main"
+
+[tool.uv.sources]
+lerobot = { path = "third_party/lerobot", editable = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-pick_stack = ["configs/*.yaml"]
+[tool.setuptools]
+py-modules = ["config"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

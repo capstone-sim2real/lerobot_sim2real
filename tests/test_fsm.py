@@ -1,28 +1,34 @@
-import csv
+"""FSM budget/verification rules and CV+IK PICK adapter contracts."""
 
-import pytest
+import numpy as np
 
-from pick_stack.config import FsmConfig
-from pick_stack.fsm import RunContext, State, StateMachine, StateName, TransitionLogger
+from config import AppConfig, FsmConfig, SensingConfig
+from control import MockRobotIO
+from control.grasp import GraspAttempt, GraspPlan
+from control.ik import IkResult
+from fsm import ik_handler
+from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_states
+from fsm.handlers import VerifyState
+from fsm.ik_handler import CvIkPickState
+from fsm.machine import StateMachine
+from fsm.states import RunContext, State, StateName
+from perception.detector import BlockDetection
+from perception.homography import PlaneCalibration
+from perception.select import SelectionResult
+from runners.run_task import make_pick_state
 
 
-class SelectMock(State):
+class _Select(State):
     name = StateName.SELECT
 
     def step(self, ctx):
-        if ctx.all_blocks_done():
-            ctx.last_note = "all_blocks_placed"
+        if ctx.extras.get("placed"):
             return StateName.DONE
-        candidates = [f"block{i}" for i in range(ctx.fsm.num_blocks)]
-        remaining = [c for c in candidates if not ctx.should_skip(c) and c not in ctx.extras.get("placed", set())]
-        if not remaining:
-            ctx.last_note = "no_targets_left"
-            return StateName.DONE
-        ctx.target_id = remaining[0]
+        ctx.target_id = "block"
         return StateName.PICK
 
 
-class PickMock(State):
+class _Pick(State):
     name = StateName.PICK
 
     def step(self, ctx):
@@ -30,105 +36,156 @@ class PickMock(State):
         return StateName.VERIFY
 
 
-class VerifyMock(State):
-    """Fails the grasp check the first `fail_first` times per target."""
-
+class _Verify(State):
     name = StateName.VERIFY
 
-    def __init__(self, fail_first=0):
-        self.fail_first = fail_first
-
     def step(self, ctx):
-        if ctx.attempts[ctx.target_id] <= self.fail_first:
-            if ctx.should_skip(ctx.target_id):
-                ctx.skip(ctx.target_id)
-                ctx.last_note = "grasp_failed_skip"
-                return StateName.SELECT
-            ctx.last_note = "grasp_failed_retry"
-            return StateName.PICK
+        if ctx.should_skip(ctx.target_id):
+            ctx.skip(ctx.target_id)
+            return StateName.DONE
         return StateName.TRANSPORT
 
 
-class TransportMock(State):
+class _Transport(State):
     name = StateName.TRANSPORT
 
     def step(self, ctx):
         return StateName.PLACE
 
 
-class PlaceMock(State):
+class _Place(State):
     name = StateName.PLACE
 
     def step(self, ctx):
         ctx.placed_count += 1
-        ctx.extras.setdefault("placed", set()).add(ctx.target_id)
+        ctx.extras["placed"] = True
         return StateName.SELECT
 
 
-class StuckState(State):
-    name = StateName.PICK
-
-    def step(self, ctx):
-        return None  # never transitions on its own
+def _states():
+    return {StateName.SELECT: _Select(), StateName.PICK: _Pick(), StateName.VERIFY: _Verify(), StateName.TRANSPORT: _Transport(), StateName.PLACE: _Place()}
 
 
-def make_states(verify=None):
-    return {
-        StateName.SELECT: SelectMock(),
-        StateName.PICK: PickMock(),
-        StateName.VERIFY: verify or VerifyMock(),
-        StateName.TRANSPORT: TransportMock(),
-        StateName.PLACE: PlaceMock(),
+def test_fsm_places_a_block_and_stops_at_time_budget():
+    ctx = RunContext(fsm=FsmConfig(num_blocks=1, reserve_time_s=0.0))
+    assert StateMachine(_states(), ctx).run().placed_count == 1
+    expired = RunContext(fsm=FsmConfig(time_budget_s=-1.0))
+    assert StateMachine(_states(), expired).run().placed_count == 0
+
+
+def test_verify_never_transports_an_empty_gripper():
+    class Motion:
+        opened = 0
+
+        def open_gripper(self):
+            self.opened += 1
+
+    robot, motion = MockRobotIO(initial_joints={"gripper": 3.0}), Motion()
+    robot.loads["gripper"] = 10
+    ctx = RunContext(fsm=FsmConfig(max_retries_per_block=1))
+    ctx.target_id = "block"
+    ctx.record_attempt("block")
+    assert VerifyState(robot, SensingConfig(grasp_settle_s=0.0, sample_interval_s=0.0, grasp_samples=1), motion).step(ctx) is StateName.SELECT
+    assert ctx.target_id in ctx.skipped and motion.opened == 1
+
+
+class _FakeIk:
+    def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
+        return IkResult({"shoulder_pan": 0.0, "shoulder_lift": -20.0, "elbow_flex": 30.0, "wrist_flex": 10.0, "wrist_roll": 0.0}, 0.1, 0.1)
+
+
+class _FakePlayer:
+    def __init__(self):
+        self.goals = []
+
+    def move_to(self, goal, **kwargs):
+        self.goals.append(dict(goal))
+
+
+class _FakeMotion:
+    def __init__(self):
+        self.opened = 0
+
+    def open_gripper(self):
+        self.opened += 1
+
+
+def _cv_ik_context():
+    target = BlockDetection("green", (220.0, -20.0), 1600.0, 1.0, 1.0, 1.0, [])
+    ctx = RunContext(fsm=FsmConfig(max_retries_per_block=1))
+    ctx.target_id = "green:6,0"
+    ctx.extras["selection"] = SelectionResult(target, ctx.target_id, 1, [target])
+    return ctx
+
+
+def _cv_ik_state(motion, player):
+    return CvIkPickState(robot=object(), motion=motion, cfg=AppConfig(), grasp_z_mm=8.0,
+                          retreat_pose={"shoulder_pan": 5.0, "gripper": 2.0}, ik=_FakeIk(), player=player)
+
+
+def test_cv_ik_pick_holds_then_retreats_without_opening_gripper(monkeypatch):
+    motion, player, ctx = _FakeMotion(), _FakePlayer(), _cv_ik_context()
+    monkeypatch.setattr(ik_handler, "run_grasp_attempts", lambda _p, _r, _c, plan, **_kw: plan.attempts[0])
+    assert _cv_ik_state(motion, player).step(ctx) is StateName.VERIFY
+    assert motion.opened == 0 and player.goals[1] == {"shoulder_pan": 5.0}
+
+
+def test_cv_ik_pick_skips_after_empty_attempt(monkeypatch):
+    motion, ctx = _FakeMotion(), _cv_ik_context()
+    monkeypatch.setattr(ik_handler, "run_grasp_attempts", lambda *_args, **_kwargs: None)
+    assert _cv_ik_state(motion, _FakePlayer()).step(ctx) is StateName.SELECT
+    assert ctx.target_id in ctx.skipped and motion.opened == 1
+
+
+def test_cv_ik_pick_uses_a_reachable_offset_when_centre_is_unreachable(monkeypatch):
+    motion, player, ctx = _FakeMotion(), _FakePlayer(), _cv_ik_context()
+    solved = IkResult({"shoulder_pan": 0.0}, 0.1, 0.1)
+    centre = GraspAttempt("centre", (0.0, 0.0), (220.0, -20.0), solved, solved, False)
+    offset = GraspAttempt("back-left", (-10.0, 10.0), (210.0, -10.0), solved, solved, True)
+    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset], [])
+    monkeypatch.setattr(ik_handler, "highest_reachable_hover", lambda *_args: 48.0)
+    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args: plan)
+    attempted = []
+
+    def run(_player, _robot, _cfg, received_plan, **_kwargs):
+        attempted.extend(received_plan.attempts)
+        return offset
+
+    monkeypatch.setattr(ik_handler, "run_grasp_attempts", run)
+    assert _cv_ik_state(motion, player).step(ctx) is StateName.VERIFY
+    assert attempted == [centre, offset] and motion.opened == 0
+
+
+def test_runner_builds_cv_ik_pick_without_policy_server():
+    state = make_pick_state(
+        "cv_ik",
+        robot=object(),
+        motion=_FakeMotion(),
+        cfg=AppConfig(),
+        calib=PlaneCalibration(H=np.eye(3), image_size=(1, 1), square_mm=25.0, meta={"grasp_z_mm_mean": 8.0}),
+        retreat_pose={"shoulder_pan": 0.0},
+    )
+    assert isinstance(state, CvIkPickState)
+
+
+def test_flows_compose_only_the_states_each_workflow_needs():
+    pick = _Pick()
+    robot, motion = object(), _FakeMotion()
+    perceive = lambda _skipped: SelectionResult(None, None, 0, [])
+
+    task1 = build_task1_states(
+        robot=robot, motion=motion, perceive=perceive, pick_state=pick, sensing_cfg=SensingConfig()
+    )
+    task2 = build_task2_states(
+        robot=robot, motion=motion, perceive=perceive, pick_state=pick, sensing_cfg=SensingConfig()
+    )
+    smoke = build_pick_lift_lower_states(
+        robot=robot, motion=motion, perceive=perceive, pick_state=pick, cfg=AppConfig()
+    )
+
+    assert set(task1) == {StateName.SELECT, StateName.PICK, StateName.VERIFY, StateName.TRANSPORT, StateName.PLACE}
+    assert set(task2) == set(task1)
+    assert set(smoke) == {
+        StateName.SELECT, StateName.PICK, StateName.VERIFY, StateName.LIFT,
+        StateName.LOWER, StateName.RELEASE, StateName.RETURN,
     }
-
-
-def make_ctx(**kwargs):
-    fsm = FsmConfig(**{"num_blocks": 3, "time_budget_s": 60.0, "reserve_time_s": 0.0, **kwargs})
-    return RunContext(fsm=fsm)
-
-
-def test_happy_path_places_all_blocks():
-    ctx = StateMachine(make_states(), make_ctx()).run()
-    assert ctx.placed_count == 3
-    assert ctx.extras["placed"] == {"block0", "block1", "block2"}
-
-
-def test_verify_failure_retries_then_succeeds():
-    ctx = StateMachine(make_states(VerifyMock(fail_first=1)), make_ctx()).run()
-    assert ctx.placed_count == 3
-    assert all(count == 2 for count in ctx.attempts.values())
-
-
-def test_target_skipped_after_max_retries():
-    # every grasp fails -> each target gets max_retries_per_block attempts, then skipped
-    ctx = StateMachine(make_states(VerifyMock(fail_first=100)), make_ctx(max_retries_per_block=2)).run()
-    assert ctx.placed_count == 0
-    assert ctx.skipped == {"block0", "block1", "block2"}
-    assert all(count == 2 for count in ctx.attempts.values())
-
-
-def test_time_budget_forces_done():
-    ctx = make_ctx(time_budget_s=-1.0)
-    states = make_states()
-    states[StateName.PICK] = StuckState()
-    result = StateMachine(states, ctx).run()
-    assert result.placed_count == 0
-
-
-def test_missing_handler_rejected():
-    states = make_states()
-    del states[StateName.PLACE]
-    with pytest.raises(ValueError, match="place"):
-        StateMachine(states, make_ctx())
-
-
-def test_transition_log_written(tmp_path):
-    log_path = tmp_path / "transitions.csv"
-    StateMachine(
-        make_states(), make_ctx(num_blocks=1), transition_logger=TransitionLogger(log_path)
-    ).run()
-    with open(log_path) as f:
-        rows = list(csv.DictReader(f))
-    assert [r["to_state"] for r in rows] == ["pick", "verify", "transport", "place", "select", "done"]
-    assert rows[-1]["note"] == "all_blocks_placed"
-    assert rows[-1]["placed_count"] == "1"

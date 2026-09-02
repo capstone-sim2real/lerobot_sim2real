@@ -28,9 +28,10 @@ dist/
 # Logs
 *.log
 logs/pick_stack/
+logs/camera/
 
 # Regenerable IK seed table (control/ik.py rebuilds it in ~13s from the URDF)
-src/pick_stack/configs/calib/ik_seed_table.npz
+src/configs/calib/ik_seed_table.npz
 
 # Scratch/throwaway previews (the leading underscore marks intent: never commit)
 **/_preview_*

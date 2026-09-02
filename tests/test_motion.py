@@ -1,110 +1,95 @@
+"""CV+IK grasp planning and motion safety contracts."""
+
+import math
+
 import pytest
 
-from pick_stack.config import MotionConfig, SensingConfig
-from pick_stack.control import MockRobotIO, MotionController, PoseRegistry
-from pick_stack.control.robot_io import JOINT_NAMES
+from config import AppConfig, MotionConfig, SensingConfig
+from control import MockRobotIO, TrajectoryPlayer, check_grasp, interpolate
+from control import grasp as grasp_mod
+from control.grasp import GraspAttempt, GraspOutcome, GraspPlan, biased_grasp_xy, grasp_candidate_points, highest_reachable_hover, plan_grasp_attempts, run_grasp_attempts
+from control.ik import IkResult, gripper_frame_offset
 
 
-def full_pose(**kwargs):
-    pose = {j: 0.0 for j in JOINT_NAMES}
-    pose.update(kwargs)
-    return pose
+class StubIk:
+    def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
+        return IkResult({"shoulder_pan": 0.0}, 0.5, 0.1)
 
 
-def make_registry():
-    return PoseRegistry(
-        {
-            "home": full_pose(),
-            "retreat": full_pose(shoulder_lift=-20.0),
-            "zone_approach": full_pose(shoulder_pan=30.0, shoulder_lift=-10.0),
-            "slot_0": full_pose(shoulder_pan=30.0, shoulder_lift=-40.0),
-            "slot_1": full_pose(shoulder_pan=35.0, shoulder_lift=-40.0),
-            "slot_2": full_pose(shoulder_pan=40.0, shoulder_lift=-40.0),
-            "slot_3": full_pose(shoulder_pan=30.0, shoulder_lift=-45.0),
-            "slot_4": full_pose(shoulder_pan=35.0, shoulder_lift=-45.0),
-            "tower_approach": full_pose(shoulder_pan=-30.0),
-            "tower_descent_0": full_pose(shoulder_pan=-30.0, shoulder_lift=-10.0),
-            "tower_descent_1": full_pose(shoulder_pan=-30.0, shoulder_lift=-30.0),
-        }
-    )
+def test_gripper_frame_bias_and_candidate_order():
+    assert gripper_frame_offset(0.0, 100.0, 0.0, 10.0) == pytest.approx((-10.0, 100.0))
+    cfg = AppConfig()
+    right = biased_grasp_xy(cfg.motion, 200.0, -80.0)
+    left = biased_grasp_xy(cfg.motion, 200.0, 80.0)
+    assert math.hypot(left[0] - 200.0, left[1] - 80.0) > math.hypot(right[0] - 200.0, right[1] + 80.0)
+    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, 80.0)
+    assert [a.label for a in plan.attempts] == ["centre", "front-left", "front-right", "back-left", "back-right"]
+    assert [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, -80.0)] == [
+        "centre", "front-left", "front-right", "back-left", "back-right"
+    ]
 
 
-def make_controller(robot, sensing_kwargs=None):
-    motion_cfg = MotionConfig(fps=0.0, gripper_action_wait_s=0.0, place_settle_s=0.0)
-    sensing_cfg = SensingConfig(
-        sample_interval_s=0.0, contact_baseline_samples=1, gripper_open_pos=50.0,
-        **(sensing_kwargs or {}),
-    )
-    return MotionController(robot, make_registry(), motion_cfg, sensing_cfg)
+def _attempt(label):
+    solved = IkResult({"shoulder_pan": 0.0}, 0.5, 0.1)
+    return GraspAttempt(label, (0.0, 0.0), (200.0, 0.0), solved, solved, True)
 
 
-def test_validate_poses():
-    robot = MockRobotIO()
-    controller = make_controller(robot)
-    controller.validate_poses(task=1)
-    controller.validate_poses(task=2)
+def test_blocked_descent_promotes_lateral_retry(monkeypatch):
+    plan = GraspPlan((200, 0), (212, 0), 9.0, 80.0, [_attempt("centre"), _attempt("diagonal")], [_attempt("left"), _attempt("right")])
+    tried = []
 
-    empty = MotionController(
-        robot, PoseRegistry(), MotionConfig(), SensingConfig()
-    )
-    with pytest.raises(KeyError, match="home"):
-        empty.validate_poses(task=1)
+    def fake_attempt(_player, _robot, _cfg, attempt):
+        tried.append(attempt.label)
+        return (GraspOutcome.HELD if attempt.label == "right" else GraspOutcome.BLOCKED), None
+
+    monkeypatch.setattr(grasp_mod, "attempt_grasp", fake_attempt)
+    held = run_grasp_attempts(None, None, AppConfig(), plan, log=lambda _message: None)
+    assert held is not None and held.label == "right"
+    assert tried == ["centre", "left", "right"]
 
 
-def test_place_in_slot_sequence():
-    robot = MockRobotIO()
+def _fast_motion(**overrides):
+    return MotionConfig(**{"fps": 0.0, "gripper_action_wait_s": 0.0, "descent_settle_s": 0.01, **overrides})
+
+
+def test_trajectory_bounds_steps_and_reports_blocked_descent_without_sensor_reads():
+    class StallingRobot(MockRobotIO):
+        def send_joints(self, positions):
+            positions = dict(positions)
+            if "shoulder_lift" in positions:
+                positions["shoulder_lift"] = max(positions["shoulder_lift"], -1.0)
+            return super().send_joints(positions)
+
+    steps = interpolate({"shoulder_pan": 0.0}, {"shoulder_pan": 10.0}, 2.0)
+    previous = {"shoulder_pan": 0.0}
+    for step in steps:
+        assert abs(step["shoulder_pan"] - previous["shoulder_pan"]) <= 2.0
+        previous = step
+    robot = StallingRobot()
     robot.connect()
-    controller = make_controller(robot)
-    controller.place_in_slot(0)
-
-    # descended to the slot, released, lifted back out. set_gripper steps
-    # toward the target rather than sending it in one shot (that single send
-    # was silently capped by max_relative_target), so assert where it ended
-    # up, not how many commands it took.
-    gripper_cmds = [a["gripper"] for a in robot.sent_actions if set(a) == {"gripper"}]
-    assert gripper_cmds, "expected the gripper to be opened for the release"
-    assert gripper_cmds[-1] == pytest.approx(50.0)
-    assert gripper_cmds == sorted(gripper_cmds), "release should only open, never re-close"
-    assert robot.read_joints()["shoulder_lift"] == pytest.approx(-10.0)  # back at zone_approach
-
-    with pytest.raises(IndexError):
-        controller.place_in_slot(5)
+    reads = []
+    robot.read_loads = lambda: reads.append(True) or {}
+    _, blocked = TrajectoryPlayer(robot, _fast_motion()).descend({"shoulder_lift": -6.0})
+    assert blocked and not reads
 
 
-class ContactAfterNSteps(MockRobotIO):
-    """Load spike on elbow_flex after the arm has descended n steps."""
-
-    def __init__(self, n_steps):
-        super().__init__()
-        self.n_steps = n_steps
-        self._descent_steps = 0
-
-    def send_joints(self, positions):
-        if set(positions) != {"gripper"}:
-            self._descent_steps += 1
-            if self._descent_steps >= self.n_steps:
-                self.loads["elbow_flex"] = 500
-        return super().send_joints(positions)
+def test_grasp_sensor_distinguishes_held_from_empty():
+    cfg = SensingConfig(grasp_settle_s=0.0, sample_interval_s=0.0, grasp_samples=1)
+    held = MockRobotIO(initial_joints={"gripper": 25.0})
+    held.loads["gripper"] = 300
+    empty = MockRobotIO(initial_joints={"gripper": 3.0})
+    empty.loads["gripper"] = 15
+    assert check_grasp(held, cfg).grasped
+    assert not check_grasp(empty, cfg).grasped
 
 
-def test_stack_place_stops_on_contact():
-    robot = ContactAfterNSteps(n_steps=25)
-    robot.connect()
-    controller = make_controller(robot, {"contact_load_delta": 80.0})
-    assert controller.stack_place() is True
-    # released after contact, and returned to the approach pose
-    assert any(set(a) == {"gripper"} for a in robot.sent_actions)
-    assert robot.read_joints()["shoulder_pan"] == pytest.approx(-30.0)
-    # contact fired mid-ladder: it never commanded the ladder bottom (-30)
-    lifts = [a["shoulder_lift"] for a in robot.sent_actions if "shoulder_lift" in a]
-    assert min(lifts) > -30.0
+def test_retracting_arm_increases_reachable_hover():
+    class EnvelopeIk:
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
+            ceiling = 90.0 - max(0.0, math.hypot(x_mm, y_mm) - 195.0) * 0.45
+            return IkResult({}, 0.5 if z_mm <= ceiling else 80.0, 0.1)
 
-
-def test_stack_place_without_contact_releases_at_bottom():
-    robot = MockRobotIO()  # loads never change
-    robot.connect()
-    controller = make_controller(robot, {"contact_load_delta": 80.0})
-    assert controller.stack_place() is False
-    lifts = [a["shoulder_lift"] for a in robot.sent_actions if "shoulder_lift" in a]
-    assert min(lifts) == pytest.approx(-30.0)  # reached ladder bottom
-    assert any(set(a) == {"gripper"} for a in robot.sent_actions)
+    cfg = AppConfig()
+    far = highest_reachable_hover(EnvelopeIk(), 285.0, 0.0, 10.0, cfg)
+    near = highest_reachable_hover(EnvelopeIk(), 195.0, 0.0, 10.0, cfg)
+    assert near > far + 20.0

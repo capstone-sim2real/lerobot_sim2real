@@ -1,8 +1,8 @@
 # SO-101 CV+IK 파지·운반 가이드
 
 탑다운 카메라로 블록을 찾아 역기구학으로 집고, 지정한 좌표로 옮기는 경로의
-실행 방법과 설계를 정리합니다. ACT 정책 경로(`fsm/handlers.py`)와는 별개이며,
-현재 통합 지점은 `tools/demo_pick_and_place.py` 하나입니다.
+실행 방법과 설계를 정리함. 현재 정식 실행 경로는 `so101-run`과
+`fsm/ik_handler.py`임.
 
 ## 1. 실행 방법
 
@@ -13,7 +13,7 @@
 
 ```bash
 cd ~/lerobot_sim2real
-./scripts/so101_camera_web.sh
+so101-camera --host 0.0.0.0 --port 8090
 ```
 
 `http://<호스트>:8090` 에서 화면을 확인할 수 있습니다. 이 서버가 없으면
@@ -23,30 +23,20 @@ cd ~/lerobot_sim2real
 
 ```bash
 cd ~/lerobot_sim2real
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_place \
-  --color green --to P13
+so101-run --task 1 --flow pick_lift_lower --color green
 ```
 
 - `--color` : `red` `yellow` `green` `blue` `wood`
-- `--to` : `docs/calibration/points.csv` 의 점 이름 (`P1`~`P15`)
-- `--dry-run` : 계획만 출력. 하드웨어에 연결하지 않고 모터도 움직이지 않음
 - `--set a.b=c` : 설정 임시 오버라이드 (여러 번 사용 가능)
 
-계획을 출력한 뒤 확인을 받습니다. **엔터를 누르면 팔이 움직입니다.**
-`n` + 엔터면 취소입니다.
-
-```
-About to move the real arm. Enter to proceed, 'n' to cancel:
-```
-
-**반드시 좌표를 눈으로 확인하고 누르세요.** 오타 방어가 없습니다.
+실행 전에는 웹 오버레이의 `T`와 작업공간을 확인해야 함.
 
 ### 실행 전 점검
 
 | 항목 | 확인 방법 |
 |---|---|
-| 카메라가 흔들리지 않았는가 | `python -m pick_stack.tools.camera_drift_check --watch 600` (p95 < 2px) |
-| 팔에 토크가 걸려 있는가 | 손으로 밀리면 `./scripts/so101_torque_off.sh` 의 반대 — 재연결 필요 |
+| 카메라가 흔들리지 않았는가 | `python -m tools.camera_drift_check --watch 600` (p95 < 2px) |
+| 팔에 토크가 걸려 있는가 | 손으로 밀리면 `so101-torque-off` 의 반대 — 재연결 필요 |
 | 작업영역이 비어 있는가 | 운반 경로에 장애물이 없어야 함 |
 
 ---
@@ -238,7 +228,7 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 
 ## 6. 설정값
 
-전부 `src/pick_stack/configs/default.yaml`의 `motion:` 아래에 있고,
+전부 `src/configs/default.yaml`의 `motion:` 아래에 있고,
 `--set motion.<이름>=<값>` 으로 임시 변경할 수 있습니다.
 **dataclass(`config.py`)와 yaml을 반드시 함께 수정해야 합니다** —
 로더가 모르는 키를 거부합니다.
@@ -267,8 +257,7 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 **(a) 전역 반경 보정 — 우측 블록으로**
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_place \
-  --color green --to P8 \
+so101-run --task 1 --flow pick_lift_lower --color green \
   --set motion.left_half_radial_offset_mm=0 \
   --set motion.left_half_tangential_offset_mm=0 \
   --set motion.grasp_retry_offsets_mm='[]' \
@@ -304,7 +293,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_plac
 
 | 증상 | 원인 / 조치 |
 |---|---|
-| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `./scripts/so101_camera_web.sh` |
+| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera --host 0.0.0.0 --port 8090` |
 | `No <color> block found` | 블록이 화면 밖이거나 HSV 범위 밖. `view_detect`로 확인 (아래) |
 | `ABORT: a required waypoint exceeds the IK error gate` | 목표가 도달 범위 밖. 5절의 반경-높이 표 확인 |
 | 바닥까지 안 내려감 | `--set motion.descent_settle_s=8`. 서보 정착이 느린 것이지 조기 정지가 아님 |
@@ -316,9 +305,8 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.demo_pick_and_plac
 한 번에 처리합니다).
 
 ```bash
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.view_detect \
-    --camera /dev/video0 \
-    --calib src/pick_stack/configs/calib/venue_lab.json \
+so101-detect --snapshot http://127.0.0.1:8090/snapshot/shoulder.jpg \
+    --calib src/configs/calib/venue_lab.json \
     --out /tmp/detect.png
 ```
 
@@ -327,8 +315,7 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.view_detect \
 하드웨어·placo 없이 도는 테스트입니다.
 
 ```bash
-cd ~/lerobot_sim2real
-PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
+uv run --extra hardware --extra dev pytest -q
 ```
 
 | 파일 | 범위 |
@@ -402,16 +389,16 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
 
 1. **드리프트 재검사** — 테이프 작업 중 카메라를 건드렸을 수 있음
    ```bash
-   python -m pick_stack.tools.camera_drift_check --watch 600
+   uv run python -m tools.camera_drift_check --watch 600
    ```
 2. **구역 좌표 등록** — 전용 도구가 이미 있습니다. 저장된 프레임에서 테이프
    안쪽 네 모서리의 픽셀 좌표를 읽어 다시 실행하면 됩니다.
    ```bash
-   python -m pick_stack.tools.calibrate_homography \
-       --image src/pick_stack/configs/calib/venue_lab.json.frame.png \
+   so101-calibrate \
+       --image src/configs/calib/venue_lab.json.frame.png \
        --square-mm 25 --venue lab \
        --base-px <bx,by> --zone-px "x1,y1 x2,y2 x3,y3 x4,y4" \
-       --out src/pick_stack/configs/calib/venue_lab.json
+       --out src/configs/calib/venue_lab.json
    ```
    `PlaneCalibration.zone_polygon_mm`(캘리브레이션 JSON 안, 현재 `null`)에
    mm 좌표로 저장됩니다. `PerceptionConfig`가 아니라 캘리브레이션 파일입니다.
@@ -419,9 +406,8 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
    고르지 않고 `perception.hsv_ranges`의 전 색을 한 번에 검출해 주석 이미지를
    남깁니다. 빨간 블록만 잡히고 테이프는 빠져야 합니다.
    ```bash
-   PYTHONPATH=src ~/lerobot/.venv/bin/python -m pick_stack.tools.view_detect \
-       --camera /dev/video0 \
-       --calib src/pick_stack/configs/calib/venue_lab.json \
+   so101-detect --snapshot http://127.0.0.1:8090/snapshot/shoulder.jpg \
+       --calib src/configs/calib/venue_lab.json \
        --out /tmp/detect.png
    ```
    게이트를 바꿔가며 시험할 때는 YAML을 고치지 말고
@@ -460,4 +446,4 @@ PYTHONPATH=src ~/lerobot/.venv/bin/python -m pytest tests/ -q
 - `docs/report/CV_IK_전환_정리.md` — 전환 배경, 캘리브레이션 정확도 측정,
   배제한 가설 4가지
 - `AGENTS.md` §6(좌표계) §7(IK·yaw 중립) §10(파지 검증) §12(설정) §14.1(수정 금지 범위)
-- `src/pick_stack/README.md` — 패키지 전체 구조
+- `src/README.md` — 패키지 전체 구조
