@@ -52,8 +52,21 @@ class MotionController:
                 )
         self._poses.require(required)
 
-    def go_home(self) -> None:
-        self._player.move_to(self._poses.get(self._cfg.home_pose))
+    def go_home(self, *, include_gripper: bool = True) -> None:
+        """Return to the recorded home pose.
+
+        The recorded home carries a nearly-closed gripper value (it has to
+        match the teleop/episode convention the ACT policy was trained on —
+        AGENTS.md §7), and ``interpolate`` commands every joint present in
+        the goal. So homing between CV+IK picks would close the jaws only for
+        the next attempt to reopen them, a pointless open/close on every
+        retry. Those callers pass ``include_gripper=False``; the ACT path
+        keeps the default so its start pose stays in distribution.
+        """
+        home = self._poses.get(self._cfg.home_pose)
+        if not include_gripper:
+            home = {joint: value for joint, value in home.items() if joint != "gripper"}
+        self._player.move_to(home)
 
     def open_gripper(self) -> None:
         self._player.set_gripper(self._sensing_cfg.gripper_open_pos)

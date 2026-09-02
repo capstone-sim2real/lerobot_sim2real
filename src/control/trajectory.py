@@ -77,6 +77,27 @@ class TrajectoryPlayer:
             self._robot.send_joints(goal)
             self._tick_sleep()
 
+    def settle(self, goal: Pose, *, tol: float, timeout_s: float) -> tuple[float, bool]:
+        """Hold ``goal`` for up to ``timeout_s``, trying to tighten onto ``tol``.
+
+        Unlike ``move_to`` this neither interpolates nor raises: it is the
+        "wait a moment longer" step for a pose the arm has already reached
+        loosely. ``move_to`` would spend the whole ``move_timeout_s`` on a
+        tolerance the servos may simply not have the resolution to hit, which
+        is seconds of dead time before every grasp descent.
+
+        Returns ``(residual_error, reached_tol)``.
+        """
+        deadline = time.monotonic() + timeout_s
+        while True:
+            err = max(abs(self._robot.read_joints()[j] - goal[j]) for j in goal)
+            if err <= tol:
+                return err, True
+            if time.monotonic() > deadline:
+                return err, False
+            self._robot.send_joints(goal)
+            self._tick_sleep()
+
     def descend(
         self,
         goal: Pose,
@@ -85,18 +106,26 @@ class TrajectoryPlayer:
         tol: float | None = None,
         settle_s: float | None = None,
     ) -> tuple[Pose, bool]:
-        """Descend toward ``goal``; report whether something stopped it short.
+        """Descend toward ``goal``, and stop the moment the arm stops following.
 
-        The command stream is byte-for-byte what ``move_to`` sends — no
-        sensor read inside the interpolation loop. A per-tick bus read at
-        fps=30 is a serial round trip that slows the loop enough to eat the
-        whole ``move_timeout_s`` budget, which strands the arm partway down.
+        Unlike ``move_to``, falling short is *returned* rather than raised: a
+        grasp descent that lands on the block instead of beside it is a
+        normal outcome for the caller to retry, not an error.
 
-        The two differences from ``move_to`` are that it settles against a
-        short budget of its own rather than the full timeout, and that
-        falling short is *returned* rather than raised: a grasp descent that
-        lands on the block instead of beside it is a normal outcome for the
-        caller to retry, not an error.
+        The descent watches how far the measured pose trails the pose just
+        commanded. Without that watch, a gripper that lands on top of a block
+        a third of the way down still gets the remaining (deeper) commands,
+        and then the settle loop re-sends an unreachable goal for the whole
+        ``descent_settle_s`` — seconds of servos leaning on the block, which
+        shoves it out of position and binds the arm against it.
+
+        Trailing distance, not per-tick movement, is the signal: a servo
+        accelerating at the start of a descent moves little per tick but its
+        gap to the command stays bounded, whereas a jammed one's gap only
+        grows. (An earlier attempt used a per-tick ``read_loads`` instead;
+        that extra bus round trip slowed the loop enough to strand the arm
+        partway down. ``read_joints`` is the same cost ``move_to``'s settle
+        loop and ``set_gripper`` already pay every tick.)
 
         Returns ``(measured_pose, blocked)``. ``blocked`` is a hint for
         ordering retries — it is never a reason to skip closing the jaws,
@@ -107,24 +136,30 @@ class TrajectoryPlayer:
         settle_s = settle_s if settle_s is not None else self._cfg.descent_settle_s
         start = self._robot.read_joints()
         deadline = time.monotonic() + self._cfg.move_timeout_s
+        jammed = False
         for step in interpolate(start, goal, max_step):
             if time.monotonic() > deadline:
                 break
             self._robot.send_joints(step)
             self._tick_sleep()
-        # settle until within tolerance (the arm lags the command stream),
-        # but give up quickly: if it is stuck on the block, holding the
-        # command against it for the full timeout only leans on the servos.
-        settle_deadline = min(time.monotonic() + settle_s, deadline)
-        while time.monotonic() <= settle_deadline:
-            current = self._robot.read_joints()
-            if max(abs(current[j] - goal[j]) for j in goal) <= tol:
+            measured = self._robot.read_joints()
+            if max(abs(measured[j] - step[j]) for j in goal) > self._cfg.descent_max_lag:
+                jammed = True  # the arm is no longer following: something is in the way
                 break
-            self._robot.send_joints(goal)
-            self._tick_sleep()
+        if not jammed:
+            # settle until within tolerance (the arm lags the command stream),
+            # but give up quickly: if it is stuck on the block, holding the
+            # command against it for the full timeout only leans on the servos.
+            settle_deadline = min(time.monotonic() + settle_s, deadline)
+            while time.monotonic() <= settle_deadline:
+                current = self._robot.read_joints()
+                if max(abs(current[j] - goal[j]) for j in goal) <= tol:
+                    break
+                self._robot.send_joints(goal)
+                self._tick_sleep()
         current = self._robot.read_joints()
         shortfall = max(abs(current[j] - goal[j]) for j in goal)
-        return current, shortfall > self._cfg.descent_blocked_tol
+        return current, jammed or shortfall > self._cfg.descent_blocked_tol
 
     def follow(self, waypoints: list[Pose], *, max_step: float | None = None) -> Pose:
         current: Pose = {}

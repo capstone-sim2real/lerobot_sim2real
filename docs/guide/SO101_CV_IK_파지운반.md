@@ -13,7 +13,7 @@
 
 ```bash
 cd ~/lerobot_sim2real
-so101-camera --host 0.0.0.0 --port 8090
+so101-camera
 ```
 
 `http://<호스트>:8090` 에서 화면을 확인할 수 있습니다. 이 서버가 없으면
@@ -106,6 +106,22 @@ so101-run --task 1 --flow pick_lift_lower --color green
 접선   = grasp_tangential_offset_mm  (+ 좌측이면 left_half_tangential_offset_mm)
 ```
 
+### 도달 범위에 걸리면 반경만 물러난다
+
+보정은 조준점을 **바깥으로** 밀기 때문에 작업영역 가장자리에서는 도달 가능한 블록을
+hover조차 못 하는 위치로 밀어낼 수 있습니다. 이때 **반경 성분만** 100% → 50% → 0%로
+줄입니다(`bias_scale`, 로그에 표시).
+
+**접선은 절대 줄이지 않습니다.** 반경 300mm에서 접선 10mm는 반경을
+`hypot(300,10)−300 = 0.17mm`밖에 안 바꿉니다. 0.17mm를 벌려고 좌우 보정 전체를 버릴
+이유가 없고, 하필 **좌측이 반경 보정을 10mm 더 받아 폴백에 먼저 걸리므로** 예전 방식은
+좌측 보정을 정확히 필요한 곳에서 지워버렸습니다.
+
+| 방위각 | 전체 보정 유지 | 절반 | 소멸 |
+|---|---|---|---|
+| +30° (좌) | ~274mm | 276–286mm | 288mm~ |
+| −30° (우) | ~284mm | 286–296mm | 298mm~ |
+
 좌/우 판정은 **보정 전 검출 좌표**로 합니다. 블록이 어느 쪽에 있는지는
 블록의 성질이지, 보정의 결과가 아니기 때문입니다.
 
@@ -142,11 +158,16 @@ so101-run --task 1 --flow pick_lift_lower --color green
 | 순서 | 이름 | (반경, 접선) mm |
 |---|---|---|
 | 1 | centre | (0, 0) |
-| 2 | front-left | (+10, +10) |
-| 3 | front-right | (+10, −10) |
-| 4 | back-left | (−10, +10) |
-| 5 | back-right | (−10, −10) |
-| 예비 | lateral-left / lateral-right | (0, ±10) |
+| 2 | back | (−10, 0) |
+| 3 | left | (0, +10) |
+| 4 | right | (0, −10) |
+| 5 | front | (+10, 0) |
+
+가까운 쪽(`back`)이 먼저인 이유: 첫 파지가 실패하면 블록이 대개 로봇 쪽으로 밀립니다.
+
+라벨은 오프셋 부호에서 파생됩니다(`_offset_label`). 설정을 대각선으로 되돌리면
+`front-left` 같은 이름이 자동으로 다시 나오므로, 이름이 실제 위치와 어긋날 일이
+없습니다.
 
 **하강이 짧게 끝나면**(`blocked`) 좌우 후보가 대각 후보들보다 **앞으로**
 끼어듭니다. 높이는 맞았고 좌우만 틀렸다는 뜻이기 때문입니다. 한 번만
@@ -174,11 +195,53 @@ so101-run --task 1 --flow pick_lift_lower --color green
 2. **짧게 끝난 것을 예외가 아니라 반환값으로 알립니다.** 그리퍼가 블록
    위에 얹히는 것은 재시도할 정상 상황이지 에러가 아닙니다.
 
-판정은 하강 후 **목표 대비 관절 미달량**(`descent_blocked_tol`)입니다.
+3. **팔이 명령을 못 따라오면 즉시 중단합니다**(`descent_max_lag`). 이게 없으면
+   그리퍼가 블록 위에 얹혀도 남은 명령이 계속 더 깊은 위치를 지시하고, 이어서
+   정착 루프가 도달 불가능한 목표를 재전송합니다. 실측으로 **명령 201회 / 6.7초
+   동안 서보가 블록을 밀어붙였고**, 감시를 켜면 **31회 / 1.0초**로 줄어듭니다.
+   블록이 밀려나 더 멀어지던 현상의 직접 원인이었습니다.
+
+   판정 기준이 "틱당 이동량"이 아니라 **"명령 대비 뒤처진 거리"**인 이유: 하강
+   시작 직후 서보가 가속하는 동안은 틱당 이동량이 작아 오탐합니다. 정상적으로
+   지연되는 팔은 격차가 일정하게 유지되고, 걸린 팔만 격차가 계속 벌어집니다.
+
+판정은 하강 후 **목표 대비 관절 미달량**(`descent_blocked_tol`)과 위 추종 감시
+둘 중 하나라도 걸리면 "막힘"입니다.
 정착 예산(`descent_settle_s`)은 tol에 들어오는 즉시 빠져나오므로 정상
 하강에는 비용이 없고, 진짜 막혔을 때만 서보가 버티는 시간을 제한합니다.
 
 ---
+
+## 4-2. 블록 각도에 조우 맞추기
+
+정사각형 블록이 조우와 평행하면 두 **변**을 잡아 잘 물리지만, 다이아몬드 방향이면 두
+**꼭짓점**을 눌러 미끄러집니다. 그래서 검출된 블록 각도만큼 그리퍼를 돌립니다.
+
+**각도 출처**: `minAreaRect`의 각도가 아니라 `box_mm`의 **인접 두 꼭짓점**에서 구합니다.
+`rectify()`가 양수 균일 스케일 + 평행이동뿐이라 정류 이미지의 각도가 곧 board 프레임
+각도이고(부호 변환 불필요), OpenCV 버전별 각도 범위 차이도 우회됩니다.
+
+**안전**: 절대 yaw를 직접 명령하지 않고 반드시 `TopDownIK.grasp_yaw_deg()`를 거칩니다.
+정사각형의 90도 대칭을 이용해 중립에서 가장 가까운 정렬을 고르므로 `wrist_roll`이
+±45도 안에 묶입니다. AGENTS.md §7의 규칙은 "돌리지 말라"가 아니라 **"베이스 기준
+고정값으로 두지 말라"**이며(그게 2026-08-31 과열의 원인), `grasp_yaw_deg()`를 그
+용도로 명시하고 있습니다.
+
+실제 URDF/placo로 6위치 × 9각도를 확인한 결과:
+
+| 항목 | 측정값 |
+|---|---|
+| yaw 달성 오차 | 0.000도 |
+| 위치 오차 | 0.00mm (회전해도 수렴 손해 없음) |
+| 최대 \|wrist_roll\| | 43.7도 (과열사고는 125도) |
+
+회전 자세로 풀리지 않으면 **중립 yaw로 자동 폴백**하고 로그에 남깁니다.
+
+> **알려진 비용**: 캘리브레이션은 전부 `wrist_roll`≈0에서 기록됐는데
+> `gripper_frame_link`가 그 회전축에서 약 8mm 벗어나 있습니다(AGENTS.md §6).
+> ±45도로 돌리면 약 6mm의 계통 오차가 새로 들어옵니다(계산값, 실측 아님).
+> 허용오차 ±15mm 안이고 재시도가 흡수할 크기지만, **좌우 보정을 튜닝할 때는 각도
+> 정렬과 분리해서 측정**해야 합니다.
 
 ## 5. 파지 후 들어올리기와 운반
 
@@ -240,9 +303,11 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 | `left_half_y_mm` | 0.0 | 이 값보다 y가 크면 좌측 절반 |
 | `left_half_radial_offset_mm` | 10.0 | 좌측 절반 추가 전방 보정 |
 | `left_half_tangential_offset_mm` | 10.0 | 좌측 절반 추가 좌측 보정 |
+| `left_ramp_radial_mm_per_100mm` | **0.0** | y 100mm당 추가 반경 보정. 기본 꺼짐 |
+| `left_ramp_tangential_mm_per_100mm` | **0.0** | y 100mm당 추가 좌측 보정. 기본 꺼짐 |
 | `grasp_retry_offsets_mm` | 대각 4개 | 재시도 위치 (반경, 접선). `[]` 로 비활성화 |
-| `blocked_descent_offsets_mm` | `[10, -10]` | 하강 막힘 시 우선 시도할 좌우 보정 |
 | `descent_blocked_tol` | 4.0 | 이만큼 못 미치면 "막힘" 판정 |
+| `descent_max_lag` | 8.0 | 하강 중 명령 대비 이만큼 뒤처지면 걸린 것으로 보고 즉시 중단. 매우 크게 주면 감시 해제 |
 | `descent_settle_s` | 5.0 | 하강 정착 예산 |
 | `hover_search_step_mm` | 5.0 | 높이 탐색 격자 |
 | `transit_apex_radius_mm` | 195.0 | 운반 시 접을 반경. 0이면 비활성화 |
@@ -293,11 +358,13 @@ so101-run --task 1 --flow pick_lift_lower --color green \
 
 | 증상 | 원인 / 조치 |
 |---|---|
-| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera --host 0.0.0.0 --port 8090` |
+| `URLError: Connection refused` | 카메라 서버 미실행. 터미널 1에서 `so101-camera` |
 | `No <color> block found` | 블록이 화면 밖이거나 HSV 범위 밖. `view_detect`로 확인 (아래) |
 | `ABORT: a required waypoint exceeds the IK error gate` | 목표가 도달 범위 밖. 5절의 반경-높이 표 확인 |
 | 바닥까지 안 내려감 | `--set motion.descent_settle_s=8`. 서보 정착이 느린 것이지 조기 정지가 아님 |
-| 닫지 않고 계속 옆으로만 이동 | `descend()`가 매 틱 센서를 읽던 시절의 버그. 재발 시 `tests/test_carry.py`, `tests/test_grasp.py` 회귀 테스트부터 확인 |
+| 정상 하강인데 자꾸 "막힘" 판정 | `--set motion.descent_max_lag=15` 로 올림. 되돌리려면 `=1000` |
+| 재시도할수록 블록이 밀려남 | 추종 감시가 꺼졌거나 임계값이 큼. `--set motion.descent_max_lag=5` |
+| 실패 후 홈 복귀 때 그리퍼가 여닫힘 | `home` 포즈에 `gripper` 값이 있어서 발생. CV+IK 경로는 `CvIkSelectState`가 `go_home(include_gripper=False)`로 회피 |
 | 운반 중 블록이 끌림 | `--set motion.transit_apex_radius_mm=170` 으로 더 접기. 단 90mm가 천장 |
 | `Relative goal position magnitude had to be clamped` | lerobot의 `max_relative_target` 안전 클램프. 그리퍼 닫힘 시 정상 동작 |
 
@@ -320,8 +387,9 @@ uv run --extra hardware --extra dev pytest -q
 
 | 파일 | 범위 |
 |---|---|
-| `tests/test_grasp.py` | 그리퍼 로컬 오프셋, 좌/우 판정, 후보 순서, 재시도 큐, **항상 닫기** |
-| `tests/test_carry.py` | 반경 접기, 높이 탐색, 바닥값 검증 |
+| `tests/test_motion.py` | 그리퍼 로컬 오프셋, 좌/우 판정, 후보 순서·라벨, 재시도 큐, 하강 추종 감시, `go_home` |
+| `tests/test_fsm.py` | FSM 예산·VERIFY 게이트, CV+IK PICK 어댑터 |
+| `tests/test_core.py` | 설정 로딩, homography, 검출, 타깃 선택, 카메라 |
 | `tests/test_trajectory.py` | `descend()` 도달/막힘 판정, **보간 루프에서 센서 미읽기** |
 | `tests/test_ik.py` | 실제 URDF 기반 IK (placo 필요, 없으면 스킵) |
 
@@ -391,17 +459,15 @@ uv run --extra hardware --extra dev pytest -q
    ```bash
    uv run python -m tools.camera_drift_check --watch 600
    ```
-2. **구역 좌표 등록** — 전용 도구가 이미 있습니다. 저장된 프레임에서 테이프
-   안쪽 네 모서리의 픽셀 좌표를 읽어 다시 실행하면 됩니다.
+2. **구역 좌표 등록** — FK 기반 homography를 다시 맞추지 않고 빨강 테이프의
+   안쪽 사각형만 등록하는 전용 도구를 사용합니다. 기본 실행은 preview만 만들며,
+   확인 뒤 `--write`로 저장합니다.
    ```bash
-   so101-calibrate \
-       --image src/configs/calib/venue_lab.json.frame.png \
-       --square-mm 25 --venue lab \
-       --base-px <bx,by> --zone-px "x1,y1 x2,y2 x3,y3 x4,y4" \
-       --out src/configs/calib/venue_lab.json
+   so101-zone-calibrate
+   so101-zone-calibrate --write
    ```
-   `PlaneCalibration.zone_polygon_mm`(캘리브레이션 JSON 안, 현재 `null`)에
-   mm 좌표로 저장됩니다. `PerceptionConfig`가 아니라 캘리브레이션 파일입니다.
+   5개 프레임의 모서리 중앙값이 `PlaneCalibration.zone_polygon_mm`에 로봇 베이스
+   mm 좌표로 저장됩니다. 기존 `H`, base 원점, grasp-z 메타데이터는 보존됩니다.
 3. **빨강 검출 재확인** — 테이프가 실제로 걸러지는지. `view_detect`는 색을
    고르지 않고 `perception.hsv_ranges`의 전 색을 한 번에 검출해 주석 이미지를
    남깁니다. 빨간 블록만 잡히고 테이프는 빠져야 합니다.
@@ -412,32 +478,40 @@ uv run --extra hardware --extra dev pytest -q
    ```
    게이트를 바꿔가며 시험할 때는 YAML을 고치지 말고
    `--set perception.area_mm2_max=2600` 처럼 넘깁니다.
-4. **내려놓기 슬롯 정의** — 구역 안에 블록 5개 자리를 잡습니다. 블록 40mm에
-   그리퍼 조우 70mm이므로 **중심 간격 최소 70~80mm**가 필요합니다.
-   가로 20cm(테이프 안쪽 16cm)면 한 줄에 2개가 한계이니, 2×2+1 또는
-   2열 배치를 검토하세요.
+4. **슬롯·IK dry-run** — 등록된 사각형 안에 먼쪽 3개, 가까운쪽 2개 슬롯을
+   만들고 모든 drop/hover IK가 gate 안인지 확인합니다. 모터에는 연결하지 않습니다.
+   ```bash
+   so101-run --task 1 --dry-run
+   ```
+   Task 1 파지 좌표는 사선 top-down 카메라의 원거리 편향을 보정합니다.
+   기본값은 반경 200 mm까지 0 mm, 320 mm에서 로봇 바깥 방향 20 mm이며
+   `task1.pick_correction_*` 세 값으로 조절합니다. 이 보정은 PICK에만 적용되고,
+   적재 구역 제외 및 5초 완료 판정에는 보정 전 검출 좌표를 사용합니다.
+   또한 보정된 반경 280~320 mm에서 손목을 바깥쪽으로 0~5도 점진적으로 펴
+   원거리의 `wrist_flex=95도` 포화를 줄입니다. `task1.pick_tilt_*`로 조절하며
+   기존 `pick_lift_lower`와 근거리 파지에는 적용하지 않습니다.
+   모든 파지는 반경 접선의 그리퍼 상대 좌측으로 10 mm 보정됩니다. 다섯 배치
+   슬롯 모두 실기 under-reach를 보상하도록 명목 내부 중심보다 반경상 20 mm 더
+   멀리 명령합니다.
 
 ### 9.4 이미 만들어져 있는 것
 
 구역을 등록해두면 아래가 자동으로 따라옵니다.
 
-- **놓은 블록은 다시 고르지 않습니다.** `perception/select.py`의 `_in_zone()`이
-  구역 안(또는 `select.zone_margin_mm=20mm` 이내)의 검출을 후보에서 제외합니다.
-  "모으기" 작업에서 이미 옮긴 블록을 다시 집는 것을 막아줍니다.
+- **놓은 블록은 다시 고르지 않습니다.** 구역 안 블록은 색 이름을 배정하기 전에
+  detector의 active 영역에서 제거됩니다. 따라서 구역 안 빨강 블록이 외부 빨강
+  블록의 한 색 슬롯을 선점하지 않습니다.
 - **시각 확인.** `view_detect.py`와 `calibrate_homography.py`가 구역 다각형을
   오버레이로 그려줍니다.
 
-### 9.5 아직 없는 것
+### 9.5 Task 1 완료 조건
 
-- **여러 블록을 순차 처리하는 루프.** 현재 도구는 색 하나를 한 번 옮기고
-  끝납니다. `fsm/` 상태머신이 이 역할을 하도록 설계되어 있으나
-  (`SELECT → PICK → VERIFY → TRANSPORT → PLACE`), CV+IK 경로용
-  `fsm/ik_handlers.py`는 **아직 없습니다**(AGENTS.md §14.1에 따라
-  `fsm/handlers.py`는 수정 금지, 추가로만 작업).
-  `control/grasp.py`는 그때 `IkPickState`가 그대로 재사용할 수 있도록
-  도구에서 분리해 둔 것입니다.
-- **놓을 자리가 비었는지 확인.** 같은 칸에 두 번 놓는 것을 막는 로직이 없습니다.
-- **블록 각도 정렬.** `grasp_yaw_deg()`는 구현되어 있으나 호출자가 없습니다.
+`so101-run --task 1`은 매 PLACE 또는 파지 실패 뒤 반드시 HOME으로 돌아와 다시
+검사합니다. `placed_count==5`로 끝내지 않으며, fresh camera frame에서
+`부채꼴 내부 AND zone 외부` 검출이 연속 5초 동안 0개일 때만 DONE입니다.
+카메라 오류·stale frame·같은 frame sequence 반복은 이 5초에 포함하지 않습니다.
+색별 재시도 한도를 넘긴 블록은 현재 순회에서만 뒤로 미루고 다음 순회에서 다시
+시도하므로 영구 포기하지 않습니다.
 
 ---
 

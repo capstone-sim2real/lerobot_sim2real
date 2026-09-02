@@ -26,7 +26,7 @@ import numpy as np
 
 from config import AppConfig, load_config
 from camera.client import DEFAULT_SHOULDER_SNAPSHOT_URL, fetch_snapshot
-from control.grasp import biased_grasp_xy, highest_reachable_hover, plan_grasp_attempts
+from control.grasp import highest_reachable_hover, plan_grasp_attempts
 from control.ik import IkResult, TopDownIK
 from perception import detect_blocks
 from perception.homography import PlaneCalibration
@@ -69,15 +69,19 @@ def plan(cfg: AppConfig, color: str, dest_name: str, snapshot_url: str, points_c
     place_x, place_y, place_z = load_named_point(points_csv, dest_name)
 
     ik = TopDownIK(cfg.ik, project_root=".")
-    # search the hover height at the biased aim point, not the raw detection:
-    # that is where the arm will actually hold station.
-    aim_x, aim_y = biased_grasp_xy(cfg.motion, det_x, det_y)
-    pick_hover_z = highest_reachable_hover(ik, aim_x, aim_y, grasp_z, cfg)
     place_hover_z = highest_reachable_hover(ik, place_x, place_y, place_z, cfg)
+    grasp_plan = plan_grasp_attempts(
+        ik, cfg, det_x, det_y, grasp_z, block_angle_deg=detection.angle_deg, log=print
+    )
+    # The carry starts from the point the plan settled on, which may carry a
+    # reduced radial bias -- recomputing it here would fold from a different
+    # place than the arm actually lifts from.
+    aim_x, aim_y = grasp_plan.biased_xy_mm
     return {
         "color": detection.color,
         "area_mm2": detection.area_mm2,
-        "grasp_plan": plan_grasp_attempts(ik, cfg, det_x, det_y, grasp_z, pick_hover_z),
+        "block_angle_deg": detection.angle_deg,
+        "grasp_plan": grasp_plan,
         "place_xy_mm": (place_x, place_y),
         "place_z_mm": place_z,
         "place_hover_z_mm": place_hover_z,
@@ -131,6 +135,8 @@ def print_plan(cfg: AppConfig, p: dict) -> None:
         f"(gripper-frame bias, shifted {np.hypot(aim_x - det_x, aim_y - det_y):.1f}mm)"
     )
     print(f"grasp_z    : {gp.grasp_z_mm:.1f}mm   hover_z: {gp.hover_z_mm:.0f}mm (highest top-down reachable)")
+    jaws = "neutral (radial)" if gp.yaw_deg is None else f"{gp.yaw_deg % 90.0:.0f} deg to the block's faces"
+    print(f"block angle: {p['block_angle_deg']:.0f} deg   jaws: {jaws}   radial bias: {gp.bias_scale:.0%}")
     print(f"place      : x={p['place_xy_mm'][0]:7.1f}mm y={p['place_xy_mm'][1]:7.1f}mm z={p['place_z_mm']:.1f}mm "
           f"(hover {p['place_hover_z_mm']:.0f}mm)")
     if p["carry_waypoints"]:
@@ -138,7 +144,7 @@ def print_plan(cfg: AppConfig, p: dict) -> None:
               f"(folded to r={cfg.motion.transit_apex_radius_mm:.0f}mm, where the envelope is tallest)")
     print()
     print(f"{'grasp point':14s} {'radial':>7s} {'tangnt':>7s} {'x_mm':>8s} {'y_mm':>8s} {'pos_err':>8s} {'tilt':>6s}  ")
-    for a in list(gp.attempts) + list(gp.lateral):
+    for a in gp.attempts:
         worst = max((a.hover, a.grasp), key=lambda r: r.position_error_mm)
         flag = "" if a.reachable else "  <-- UNREACHABLE, will be skipped"
         print(
@@ -239,8 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nABORT: a required waypoint exceeds the IK error gate — check the printout above.", file=sys.stderr)
         return 1
     usable = sum(1 for a in gp.attempts if a.reachable)
-    print(f"\n{usable} of {len(gp.attempts)} grasp points usable, "
-          f"{sum(1 for a in gp.lateral if a.reachable)} sideways fallbacks held in reserve.")
+    print(f"\n{usable} of {len(gp.attempts)} grasp points usable.")
 
     if input("\nAbout to move the real arm. Enter to proceed, 'n' to cancel: ").strip().lower() in ("n", "no"):
         print("cancelled.")

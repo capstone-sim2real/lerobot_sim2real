@@ -51,7 +51,7 @@ class TransitionLogger:
 
 
 class StateMachine:
-    """Runs states until DONE is reached or the time budget is exhausted.
+    """Runs states until DONE or, when enabled, the time budget is exhausted.
 
     DONE is terminal — there is no DONE handler here. Hardware cleanup
     (return home, disconnect) belongs in the runner's finally block so it
@@ -64,6 +64,7 @@ class StateMachine:
         ctx: RunContext,
         initial: StateName = StateName.SELECT,
         transition_logger: TransitionLogger | None = None,
+        enforce_time_budget: bool = True,
     ):
         if initial not in states:
             raise ValueError(f"Initial state {initial.value!r} has no handler")
@@ -71,6 +72,7 @@ class StateMachine:
         self._ctx = ctx
         self._initial = initial
         self._logger = transition_logger or TransitionLogger(None)
+        self._enforce_time_budget = enforce_time_budget
 
     def run(self) -> RunContext:
         current_name = self._initial
@@ -79,7 +81,7 @@ class StateMachine:
             state.enter(self._ctx)
             next_name: StateName | None = None
             while next_name is None:
-                if self._ctx.budget_exhausted():
+                if self._enforce_time_budget and self._ctx.budget_exhausted():
                     self._ctx.last_note = self._ctx.last_note or "time_budget_exhausted"
                     next_name = StateName.DONE
                     break
