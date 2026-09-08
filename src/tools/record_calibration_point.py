@@ -9,17 +9,17 @@ It saves the current top-camera image and appends the follower FK pose to CSV.
 from __future__ import annotations
 
 import argparse
-import csv
 import os
 import sys
 from pathlib import Path
-from urllib.request import urlopen
+from typing import TYPE_CHECKING
+from config import SessionToolsConfig
+from tools.session_io import snapshot_bytes
+
+if TYPE_CHECKING:
+    from lerobot.model.kinematics import RobotKinematics
 
 import numpy as np
-
-from lerobot.model.kinematics import RobotKinematics
-from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
-from lerobot.robots.so_follower.so_follower import SOFollower
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -30,11 +30,7 @@ ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wris
 # wrist_roll axis, so the same jaw placement yields different recorded xyz
 # depending on wrist_roll, and without the joints that offset cannot be
 # reconstructed or corrected for (AGENTS.md §6/§7).
-CSV_FIELDS = [
-    "name", "image", "u_px", "v_px", "x_m", "y_m", "z_m",
-    "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll",
-    "notes",
-]
+from tools.calibration_records import CSV_FIELDS, update_csv
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,7 +55,9 @@ def parse_args() -> argparse.Namespace:
         ),
         help="Follower serial port",
     )
-    parser.add_argument("--robot-id", default=os.environ.get("SO101_FOLLOWER_ID", "my_follower"))
+    parser.add_argument(
+        "--robot-id", default=os.environ.get("SO101_FOLLOWER_ID", "my_follower")
+    )
     parser.add_argument("--urdf-path", type=Path, default=DEFAULT_URDF)
     parser.add_argument("--target-frame", default="gripper_frame_link")
     parser.add_argument(
@@ -71,18 +69,27 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_kinematics(urdf_path: Path, target_frame: str) -> RobotKinematics:
+    from lerobot.model.kinematics import RobotKinematics
+
     urdf_path = urdf_path.expanduser().resolve()
     if not urdf_path.is_file():
         raise FileNotFoundError(f"URDF not found: {urdf_path}")
     old_cwd = Path.cwd()
     os.chdir(urdf_path.parent)
     try:
-        return RobotKinematics(str(urdf_path), target_frame_name=target_frame, joint_names=ARM_MOTORS)
+        return RobotKinematics(
+            str(urdf_path), target_frame_name=target_frame, joint_names=ARM_MOTORS
+        )
     finally:
         os.chdir(old_cwd)
 
 
-def read_follower_xyz(port: str, robot_id: str, kinematics: RobotKinematics) -> tuple[np.ndarray, np.ndarray]:
+def read_follower_xyz(
+    port: str, robot_id: str, kinematics: RobotKinematics
+) -> tuple[np.ndarray, np.ndarray]:
+    from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
+    from lerobot.robots.so_follower.so_follower import SOFollower
+
     robot = SOFollower(
         SOFollowerRobotConfig(
             id=robot_id,
@@ -107,29 +114,7 @@ def read_follower_xyz(port: str, robot_id: str, kinematics: RobotKinematics) -> 
 
 
 def fetch_snapshot(url: str) -> bytes:
-    with urlopen(url, timeout=5) as response:  # nosec B310 -- user-controlled local camera URL
-        data = response.read()
-    if not data.startswith(b"\xff\xd8"):
-        raise RuntimeError(f"Snapshot from {url} is not a JPEG")
-    return data
-
-
-def update_csv(csv_path: Path, row: dict[str, str], overwrite: bool) -> None:
-    rows: list[dict[str, str]] = []
-    if csv_path.exists():
-        with csv_path.open(newline="", encoding="utf-8") as file:
-            rows = list(csv.DictReader(file))
-
-    exists = any(existing["name"] == row["name"] for existing in rows)
-    if exists and not overwrite:
-        raise RuntimeError(f"Point {row['name']} already exists; use --overwrite to replace it")
-    rows = [existing for existing in rows if existing["name"] != row["name"]]
-    rows.append(row)
-
-    with csv_path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
+    return snapshot_bytes(url, SessionToolsConfig().snapshot_timeout_s)
 
 
 def main() -> int:
@@ -139,7 +124,9 @@ def main() -> int:
     csv_path = args.output_dir / "points.csv"
 
     if image_path.exists() and not args.overwrite:
-        raise RuntimeError(f"Image already exists: {image_path}; use --overwrite to replace it")
+        raise RuntimeError(
+            f"Image already exists: {image_path}; use --overwrite to replace it"
+        )
 
     print("Capturing top-camera frame...")
     image_path.write_bytes(fetch_snapshot(args.snapshot_url))
@@ -162,7 +149,10 @@ def main() -> int:
         },
         args.overwrite,
     )
-    print("joint_degrees=" + ", ".join(f"{motor}={value:.3f}" for motor, value in zip(ARM_MOTORS, joints)))
+    print(
+        "joint_degrees="
+        + ", ".join(f"{motor}={value:.3f}" for motor, value in zip(ARM_MOTORS, joints))
+    )
     print(f"saved={image_path}")
     print(f"gripper_xyz_m=x={xyz[0]:.6f}, y={xyz[1]:.6f}, z={xyz[2]:.6f}")
     print(f"csv={csv_path}")

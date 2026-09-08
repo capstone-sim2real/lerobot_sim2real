@@ -2,6 +2,14 @@
 # Every key mirrors a dataclass field in pick_stack/config.py — unknown keys
 # are rejected at load time. Override at runtime with --set key.path=value.
 
+calibration_capture:
+  # Raw-image pixel gates, provisional; review the marked block top before accepting.
+  color: yellow
+  point_count: 9
+  area_px2_min: 400.0
+  area_px2_max: 16000.0
+  morph_kernel_px: 5
+
 robot:
   port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
   id: my_follower
@@ -226,3 +234,20 @@ camera:
     workspace_boundary:
       enabled: true
       sample_step_deg: 2.0
+
+# Operator-session defaults; existing CLI arguments override these values.
+session_tools:
+  runtime_dir: var/so101
+  snapshot_url: http://127.0.0.1:8090/snapshot/shoulder.jpg
+  snapshot_timeout_s: 5.0
+  poll_interval_s: 0.1
+  telemetry_stale_s: 3.0
+  capture_stale_s: 5.0
+  capture_timeout_s: 15.0
+  wrist_limit_deg: 8.0
+  temperature_limit_c: 65.0
+  telemetry_interval_s: 1.0
+  startup_poll_s: 0.1
+  startup_ramp_s: 0.0
+  expected_motor_model: 777
+  telemetry_tail_bytes: 16384
