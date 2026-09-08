@@ -41,3 +41,6 @@ src/configs/calib/ik_seed_table.npz
 
 # Docker build staging (model checkpoints)
 models/
+
+# Live session IPC and telemetry
+/var/

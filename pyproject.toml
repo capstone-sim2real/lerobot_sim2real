@@ -37,7 +37,11 @@ so101-keyboard = "tools.keyboard_control:main"
 so101-record-calibration-point = "tools.record_calibration_point:main"
 so101-capture-calibration-point = "tools.capture_calibration_point:main"
 so101-torque-off = "tools.torque_off:main"
+so101-teleop-session = "tools.teleop_session:main"
+so101-capture-teleop-points = "tools.capture_teleop_points:main"
+so101-live-fk = "tools.live_fk_overlay:main"
 
+# Session tools: existing calibration commands remain supported.
 [tool.uv.sources]
 lerobot = { path = "third_party/lerobot", editable = true }
 
