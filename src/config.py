@@ -225,7 +225,7 @@ class MotionConfig:
     invalid after recalibration and must be re-recorded."""
 
     poses_path: str = "src/configs/poses.yaml"
-    fps: float = 30.0
+    fps: float = 45.0
     # per-tick joint delta cap for interpolation (action units); the robot's
     # own max_relative_target clamp stays on as a second net
     max_step_per_tick: float = 2.0

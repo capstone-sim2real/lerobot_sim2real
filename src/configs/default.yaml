@@ -111,7 +111,7 @@ sensing:
 
 motion:
   poses_path: src/configs/poses.yaml
-  fps: 30.0
+  fps: 45.0
   max_step_per_tick: 2.0
   descent_step_per_tick: 0.6
   arrival_tol: 3.0
