@@ -1,0 +1,25 @@
+{
+  "available": true,
+  "frame": "gripper_frame_link",
+  "source": "V1 FK snapshot",
+  "projection": "XY on calibrated block plane; not an image detection",
+  "xyz_mm": [
+    162.23542656073445,
+    -231.033662572382,
+    43.052087188507365
+  ],
+  "pixel": [
+    933.8451411156997,
+    502.7532700958451
+  ],
+  "measured_at": 1788805591.554188,
+  "joint_degrees": {
+    "shoulder_pan": 61.582417582417584,
+    "shoulder_lift": 11.076923076923077,
+    "elbow_flex": 2.8131868131868134,
+    "wrist_flex": 54.94505494505494,
+    "wrist_roll": 10.241758241758241,
+    "gripper": 1.1118378024852846
+  },
+  "plane_z_mm": 16.15411111111111
+}

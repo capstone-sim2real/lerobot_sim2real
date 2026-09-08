@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", help="point label, e.g. P1")
     parser.add_argument("--snapshot-url", default="http://127.0.0.1:8090/snapshot/shoulder.jpg")
-    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "docs/calibration")
+    parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "experiments/current/calibration")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 

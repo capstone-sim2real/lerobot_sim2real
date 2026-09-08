@@ -125,7 +125,7 @@ def make_handler(csv_path: Path, image_dir: Path):
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
+    ap.add_argument("--points", type=Path, default=Path("experiments/legacy/calibration/points.csv"))
     ap.add_argument("--image-dir", type=Path, default=None, help="default: the points.csv directory")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8091)

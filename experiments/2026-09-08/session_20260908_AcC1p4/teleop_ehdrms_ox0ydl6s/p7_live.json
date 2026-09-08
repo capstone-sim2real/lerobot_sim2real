@@ -1,0 +1,23 @@
+{
+  "name": "P7",
+  "time": 1788804093.9223845,
+  "joints": {
+    "shoulder_pan": -55.16483516483517,
+    "shoulder_lift": 34.989010989010985,
+    "elbow_flex": -25.75824175824176,
+    "wrist_flex": 79.38461538461539,
+    "wrist_roll": -1.978021978021978,
+    "gripper": 23.54480052321779
+  },
+  "joints_after": {
+    "shoulder_pan": -55.16483516483517,
+    "shoulder_lift": 34.989010989010985,
+    "elbow_flex": -25.75824175824176,
+    "wrist_flex": 79.38461538461539,
+    "wrist_roll": -1.978021978021978,
+    "gripper": 23.54480052321779
+  },
+  "max_joint_delta": 0.0,
+  "image": "p7_live.jpg",
+  "pixel_pending": true
+}

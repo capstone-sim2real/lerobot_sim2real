@@ -1,0 +1,23 @@
+{
+  "name": "P8",
+  "time": 1788804136.3061352,
+  "joints": {
+    "shoulder_pan": -49.45054945054945,
+    "shoulder_lift": -1.6703296703296704,
+    "elbow_flex": 30.32967032967033,
+    "wrist_flex": 61.362637362637365,
+    "wrist_roll": 4.8791208791208796,
+    "gripper": 26.55330281229562
+  },
+  "joints_after": {
+    "shoulder_pan": -49.45054945054945,
+    "shoulder_lift": -1.6703296703296704,
+    "elbow_flex": 30.32967032967033,
+    "wrist_flex": 61.362637362637365,
+    "wrist_roll": 4.8791208791208796,
+    "gripper": 26.55330281229562
+  },
+  "max_joint_delta": 0.0,
+  "image": "p8_live.jpg",
+  "pixel_pending": true
+}

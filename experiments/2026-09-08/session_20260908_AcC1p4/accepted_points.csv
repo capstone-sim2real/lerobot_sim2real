@@ -1,0 +1,10 @@
+name,image,u_px,v_px,x_m,y_m,z_m,shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,notes
+P1_retry,p1_retry_clean.jpg,783.343,608.338,0.080485,-0.080427,-0.016877,62.198,-16.879,62.681,52.835,4.791,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P2,p2_clean.jpg,911.049,559.566,0.134021,-0.201791,0.004057,64.571,19.165,4.923,61.626,4.879,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P3_retry1,p3_retry1_clean.jpg,820.067,441.127,0.207148,-0.130000,0.002809,37.495,32.879,-14.769,80.703,4.967,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P4,p4_clean.jpg,835.615,405.577,0.248142,-0.154378,0.010560,36.264,57.319,-61.714,96.703,4.791,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P5,p5_clean.jpg,666.000,353.500,0.244394,-0.040459,-0.016541,10.945,24.703,6.154,60.571,4.967,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P6_retry1,p6_retry1_clean.jpg,508.691,390.804,0.214029,0.044491,-0.008904,-14.462,15.560,17.231,62.681,4.791,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P7,p7_clean.jpg,358.500,389.500,0.219294,0.141159,0.003318,-38.198,48.527,-41.143,93.802,4.703,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P8,p8_clean.jpg,246.052,489.679,0.153598,0.202458,0.000694,-60.615,50.549,-43.780,93.802,4.703,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal
+P9,p9_clean.jpg,310.119,627.073,0.062147,0.119287,-0.011571,-79.253,-2.901,44.923,57.758,4.703,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal

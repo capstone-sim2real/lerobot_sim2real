@@ -56,7 +56,7 @@ def find_block_centroid(frame_bgr: np.ndarray, color: str, min_area_px: float = 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
+    ap.add_argument("--points", type=Path, default=Path("experiments/legacy/calibration/points.csv"))
     ap.add_argument("--color", required=True, choices=sorted(_HSV_BANDS))
     ap.add_argument("--min-area-px", type=float, default=200.0)
     args = ap.parse_args(argv)

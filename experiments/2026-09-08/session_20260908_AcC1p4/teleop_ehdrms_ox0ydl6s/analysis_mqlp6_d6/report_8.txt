@@ -1,0 +1,20 @@
+8 points: ['P1_retry2', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8']
+name     resid_mm     loo_mm
+P1_retry2       5.93      29.21 <-- LOO exceeds gate
+P2           7.03      20.55 <-- LOO exceeds gate
+P3           4.63       7.66
+P4          14.75      22.09 <-- LOO exceeds gate
+P5           6.48      10.89 <-- LOO exceeds gate
+P6           7.07      17.00 <-- LOO exceeds gate
+P7           4.25       7.42
+P8           9.24      17.26 <-- LOO exceeds gate
+
+fit RMS      : 8.05 mm  (gate < 5.0 mm)
+fit max      : 14.75 mm
+LOO max      : 29.21 mm  (gate < 8.0 mm)
+LOO mean     : 16.51 mm
+grasp z (mm) : mean=15.8 std=7.2 range=[1.2, 26.3]
+
+FAIL
+
+saved: /home/ehdrms/lerobot_sim2real-task1-zone-gather/docs/calibration/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/analysis_mqlp6_d6/venue_8.json

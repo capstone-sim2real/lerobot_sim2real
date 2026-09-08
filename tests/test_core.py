@@ -188,7 +188,7 @@ def test_camera_page_keeps_mjpeg_source_while_canvas_overlay_is_enabled():
 
 
 def test_vision_worker_returns_metadata_without_blocking_the_caller():
-    frame = cv2.imread("docs/calibration/p1_top.jpg")
+    frame = cv2.imread("tests/fixtures/p1_top.jpg")
     assert frame is not None
     ok, encoded = cv2.imencode(".jpg", frame)
     assert ok

@@ -1,0 +1,40 @@
+{
+  "H": [
+    [
+      0.022238115295580643,
+      -0.9833393274506522,
+      802.4680436746178
+    ],
+    [
+      -1.382756869943134,
+      -0.10126929946764399,
+      873.8794320454086
+    ],
+    [
+      -0.00016612254230030806,
+      0.0023514002919121286,
+      1.0
+    ]
+  ],
+  "image_size": [
+    1280,
+    720
+  ],
+  "square_mm": 1.0,
+  "base_xy_mm": [
+    0.0,
+    0.0
+  ],
+  "zone_polygon_mm": null,
+  "meta": {
+    "mode": "fk_direct_pairs",
+    "num_points": 9,
+    "rms_mm": 8.176778037830106,
+    "loo_max_mm": 26.64206040648548,
+    "grasp_z_mm_mean": 16.15411111111111,
+    "grasp_z_mm_std": 6.817846848846122,
+    "points_csv": "/home/ehdrms/lerobot_sim2real-task1-zone-gather/docs/calibration/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/analysis_mqlp6_d6/provisional_9.csv",
+    "calibrated_at": "2026-09-08T03:04:47",
+    "saved_at": "2026-09-08T03:04:47"
+  }
+}

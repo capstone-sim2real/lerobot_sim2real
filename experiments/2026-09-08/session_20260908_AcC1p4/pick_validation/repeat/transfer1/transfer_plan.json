@@ -1,0 +1,42 @@
+[
+  [
+    "source_lift",
+    {
+      "shoulder_pan": 58.47383587827808,
+      "shoulder_lift": 34.15856158059233,
+      "elbow_flex": -39.30632445205276,
+      "wrist_flex": 94.99984017946129,
+      "wrist_roll": -0.8057120486853747
+    }
+  ],
+  [
+    "source_apex",
+    {
+      "shoulder_pan": 61.69406464442705,
+      "shoulder_lift": -5.657109150467538,
+      "elbow_flex": 0.6406098280516216,
+      "wrist_flex": 94.99984017946129,
+      "wrist_roll": -1.0294970010119258
+    }
+  ],
+  [
+    "dest_hover",
+    {
+      "shoulder_pan": 34.67980095362933,
+      "shoulder_lift": -21.489812456001395,
+      "elbow_flex": 16.479227122349688,
+      "wrist_flex": 94.99984017946129,
+      "wrist_roll": -2.3135740758033334
+    }
+  ],
+  [
+    "dest_drop",
+    {
+      "shoulder_pan": 34.67973780852386,
+      "shoulder_lift": -16.943369969106307,
+      "elbow_flex": 41.83454002444962,
+      "wrist_flex": 65.1092676129799,
+      "wrist_roll": -2.31341977618476
+    }
+  ]
+]

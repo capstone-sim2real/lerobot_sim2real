@@ -32,7 +32,7 @@ import numpy as np
 from perception.board import detect_corners, match_corners, median_square_px
 from tools._capture import grab
 
-DEFAULT_REFERENCE = Path("docs/calibration/camera_reference.json")
+DEFAULT_REFERENCE = Path("experiments/legacy/calibration/camera_reference.json")
 DEFAULT_SOURCE = "http://127.0.0.1:8090/snapshot/shoulder.jpg"
 
 
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--watch", type=float, default=0.0, help="monitor for N seconds instead of one check")
     parser.add_argument("--interval", type=float, default=10.0, help="seconds between samples while watching")
     parser.add_argument("--max-drift-px", type=float, default=2.0, help="fail above this drift")
-    parser.add_argument("--csv", type=Path, default=None, help="append samples here (default: docs/calibration/drift_<ts>.csv)")
+    parser.add_argument("--csv", type=Path, default=None, help="append samples here (default: experiments/current/calibration/drift_<ts>.csv)")
     args = parser.parse_args(argv)
 
     frame = grab(args.source)
@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'PASS' if ok else 'FAIL'} (threshold {args.max_drift_px:.1f} px, match radius {max_match_px:.1f} px)")
         return 0 if ok else 1
 
-    csv_path = args.csv or Path("docs/calibration") / f"drift_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+    csv_path = args.csv or Path("experiments/current/calibration") / f"drift_{time.strftime('%Y%m%d_%H%M%S')}.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + args.watch
     worst = 0.0

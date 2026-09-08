@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "docs/calibration",
+        default=PROJECT_ROOT / "experiments/current/calibration",
         help="Directory for point images and points.csv",
     )
     parser.add_argument(
