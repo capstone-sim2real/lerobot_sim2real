@@ -1,6 +1,6 @@
 """End-to-end smoke test: detect one block by colour, pick it, move it to a
 named calibration point. This is the manual rehearsal for what
-fsm/ik_handlers.py will do automatically — everything here is glue over
+fsm/ik_handler.py will do automatically — everything here is glue over
 already-existing pieces (perception detector/homography, TopDownIK,
 TrajectoryPlayer, control/grasp.py), nothing new is implemented.
 

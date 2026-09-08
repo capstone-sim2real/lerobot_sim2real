@@ -32,6 +32,11 @@ so101-scan-motors
 
 자세한 설치 절차와 `uv`, `fish`, 권한 문제는 [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)를 봅니다.
 
+## 세션 도구와 실험 기록
+
+- [텔레옵·점 기록·실시간 FK 권장 실행법](docs/guide/SO101_세션도구.md)
+- [날짜별 실험 기록](experiments/README.md)
+
 ## Common Commands
 
 모터 응답 확인:
