@@ -1,0 +1,150 @@
+{
+  "generated_with": "built-in image_gen",
+  "created": "2026-09-11",
+  "count": 10,
+  "layout": {
+    "columns": 3,
+    "rows": 2,
+    "slides_per_image": 6
+  },
+  "slides": [
+    "표지",
+    "시스템 구성",
+    "비전 검출",
+    "캘리브레이션",
+    "파지/FSM",
+    "실험 결과"
+  ],
+  "assets": [
+    {
+      "id": "01_academic_blue",
+      "name_ko": "학술 청색",
+      "file": "final/01_academic_blue.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "b5a493ed0826266fbf4d410b0aafe89cdfab65673cbf570b59b73edec938b419",
+      "selected_source": "01_academic_blue.png",
+      "description": "흰색/남색, 단정한 학술 발표",
+      "use": "가장 무난한 기본안",
+      "prompt": "prompts/01_academic_blue.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "02_swiss_red",
+      "name_ko": "스위스 주홍",
+      "file": "final/02_swiss_red.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "2f27f52706e45479e4e8efeaf2f5474011534aa6ef12c821a070e75f3d6b4136",
+      "selected_source": "02_swiss_red.png",
+      "description": "먹색/주홍, 큰 제목과 숫자",
+      "use": "멀리서도 잘 읽히는 강조형",
+      "prompt": "prompts/02_swiss_red.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "03_editorial_sand",
+      "name_ko": "미색 편집",
+      "file": "final/03_editorial_sand.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "e78c93830894c915d3f77d8a3a006ca2d9cd3877969f5ff1717d7ad8315dcf2b",
+      "selected_source": "03_editorial_sand.png",
+      "description": "미색/차콜/구리색, 잡지 편집",
+      "use": "차분한 설명과 여백",
+      "prompt": "prompts/03_editorial_sand.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "04_midnight_cyan",
+      "name_ko": "미드나이트 시안",
+      "file": "final/04_midnight_cyan.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "7d28b907f6948cd914e0f507cc329d148257cd385ef4e7ea3ce36ce6d78d8e5d",
+      "selected_source": "04_midnight_cyan.png",
+      "description": "짙은 남색/시안, 어두운 키노트",
+      "use": "어두운 무대와 화면 발표",
+      "prompt": "prompts/04_midnight_cyan.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "05_blueprint",
+      "name_ko": "블루프린트",
+      "file": "final/05_blueprint.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "91ece33d426ee1f6fb731d84b6746a631dc042f2225e3e74e83a638664523079",
+      "selected_source": "05_blueprint.png",
+      "description": "도면 그리드/남색/주황",
+      "use": "좌표와 공학 도식의 분위기",
+      "prompt": "prompts/05_blueprint.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "06_industrial_mono",
+      "name_ko": "산업 모노톤",
+      "file": "final/06_industrial_mono.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "08a81b7f69d2ef22eb0d837d8ab83c37d7317af2d38a198ebf914910ca74ee37",
+      "selected_source": "06_industrial_mono_v2.png",
+      "description": "백색/차콜/안전노랑",
+      "use": "대담한 분할과 큰 수치",
+      "prompt": "prompts/06_industrial_mono.txt",
+      "revision_prompt": "prompts/06_industrial_mono_revision.txt"
+    },
+    {
+      "id": "07_teal_research",
+      "name_ko": "청록 연구 발표",
+      "file": "final/07_teal_research.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "9139df7865ead498f65f565d07aeeca7207538af43a6698b7da7111c333d0633",
+      "selected_source": "07_teal_research.png",
+      "description": "민트/청록, 부드러운 모듈",
+      "use": "가독성과 현대적인 인상",
+      "prompt": "prompts/07_teal_research.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "08_plum_gallery",
+      "name_ko": "자주 갤러리",
+      "file": "final/08_plum_gallery.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "cd0a41528261d1e77fe17068c8464cdef558904adbbf5cd006743b5ea64d3019",
+      "selected_source": "08_plum_gallery_v2.png",
+      "description": "아이보리/자주, 세로 라벨",
+      "use": "편집 구성과 색상의 개성",
+      "prompt": "prompts/08_plum_gallery.txt",
+      "revision_prompt": "prompts/08_plum_gallery_revision.txt"
+    },
+    {
+      "id": "09_cobalt_keynote",
+      "name_ko": "코발트 키노트",
+      "file": "final/09_cobalt_keynote.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "bb8baaa2cd739d192ee4ee1006f6354d572e70a394739b96b1789f8469111240",
+      "selected_source": "09_cobalt_keynote.png",
+      "description": "코발트 전면 색상과 흰색",
+      "use": "강한 첫인상과 큰 타이포",
+      "prompt": "prompts/09_cobalt_keynote.txt",
+      "revision_prompt": null
+    },
+    {
+      "id": "10_lab_notebook",
+      "name_ko": "공학 노트",
+      "file": "final/10_lab_notebook.png",
+      "width": 2048,
+      "height": 768,
+      "sha256": "b00718a5298a3dc05e6444866e25ff0d825ccd72732f61ee014bf76303b06940",
+      "selected_source": "10_lab_notebook.png",
+      "description": "종이/흑연/황토색, 기술 스케치",
+      "use": "제작 과정과 연구의 분위기",
+      "prompt": "prompts/10_lab_notebook.txt",
+      "revision_prompt": null
+    }
+  ]
+}

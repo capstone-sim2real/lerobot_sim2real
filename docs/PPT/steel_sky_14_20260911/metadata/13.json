@@ -1,0 +1,39 @@
+{
+  "number": 13,
+  "slug": "appendix_conditions",
+  "seconds": 0,
+  "referenced_image_paths": [
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/01_design_reference.png"
+  ],
+  "prompt": "Use case: productivity-visual.\nCreate ONE finished Korean academic presentation slide, a single 16:9 landscape image at 2048x1152 if available. NOT a six-panel sheet, NOT a mockup on a desk, no external border.\nImage 1 is ONLY the chosen Steel / Sky visual style reference: its six tiles demonstrate a style, not your output layout. Rebuild just the requested individual slide at full size.\nSTYLE LOCK: #355872 dark steel for text/lines; #7AAACE secondary blue; #9CD5FF sky accents; #F7F8F0 ivory background. Flat clean colors, no extra accent colors. Actual inserted photographs retain natural colors. Match the reference's strong oversized Korean sans-serif headings, thin open diagrams, generous negative space, restrained square corner motifs. Use one consistent Noto Sans KR-like sans family, bold headline around 58px, main text 32-38px at 2048 width, captions at least 23px. Main content left/right margins 110px, heading baseline near y180. One headline and one dominant composition. Slide number small top left. No random English decor, slogans, logos, middle-dot separators, neon, glossy cards, shadows, repetitive rounded cards or stock robot renders. Use commas or slashes.\nCONTENT LOCK: render supplied Korean text accurately and keep all numbers/units. Do not add empirical facts, percentages, rankings or unprovided claims. A concept drawing must be labeled 개념도. Do not conflate implemented features with validated mission success. Real image inputs are supporting inserts: preserve their robot pose, actual blocks, colors and boundaries, do not reimagine or synthesize their content. Crop only for readability, retaining the evidence context. No fabricated experimental scenes.\nOnly the explicitly listed on-screen text should appear. Presenter notes are not to be printed. Use readable large labels, not dense report paragraphs. Produce a clean full-bleed slide.\n\nSLIDE SPECIFICATION:\nIvory background. Title \"부록 / 실험 조건과 수치의 의미\". Left half a clear spacious two-column table headed \"캘리브레이션 구성\" and \"적합 RMS\" with rows \"초기 5점 | 20.11 mm\", \"확장 9점 | 13.46 mm\", \"확장 15점 | 11.98 mm\", \"재수집 9점 | 8.18 mm\". Below table \"서로 다른 수집 조건 / 점 수만의 효과를 뜻하지 않음\". Right half three short open sections: \"실행 조건\" with \"전체 시험 30 Hz / 이후 단일 블록 45 Hz\", \"45 Hz 전체 미션 재평가 없음\"; \"카메라 재검사\" with \"약 60.5초 / p95 최댓값 0.514 px\", \"10분 검증 결과가 아님\"; \"결과 판정\" with \"HELD / EMPTY는 센서 판정\", \"미션 성공은 실제 블록 상태로 별도 판단\". Footer \"실행 ID: task1_20260908_030956\". Number \"13\". No downward improvement arrow joining the different calibration sessions.",
+  "output": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png",
+  "tool": "built-in image_gen",
+  "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-c86d3884-cd34-40a1-b9fb-75fdf372d6a6.png",
+  "review": {
+    "status": "passed_content_review",
+    "method": "view_image visual inspection",
+    "checks": [
+      "Calibration 5/9/15/9 points with RMS 20.11 / 13.46 / 11.98 / 8.18 mm",
+      "Separate collection conditions caveat, no causal trend arrows",
+      "30/45 Hz and absence of 45 Hz full-mission retest stated",
+      "60.5 seconds, p95 max 0.514 px, not a 10-minute result",
+      "Sensor judgement versus physical mission success stated",
+      "Execution ID task1_20260908_030956 exact"
+    ],
+    "limitations": [
+      "Native generated dimensions 1672x941 approximate 16:9; no pixel resizing applied."
+    ]
+  },
+  "generation_history": [
+    {
+      "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-c86d3884-cd34-40a1-b9fb-75fdf372d6a6.png",
+      "prompt": "Use case: productivity-visual.\nCreate ONE finished Korean academic presentation slide, a single 16:9 landscape image at 2048x1152 if available. NOT a six-panel sheet, NOT a mockup on a desk, no external border.\nImage 1 is ONLY the chosen Steel / Sky visual style reference: its six tiles demonstrate a style, not your output layout. Rebuild just the requested individual slide at full size.\nSTYLE LOCK: #355872 dark steel for text/lines; #7AAACE secondary blue; #9CD5FF sky accents; #F7F8F0 ivory background. Flat clean colors, no extra accent colors. Actual inserted photographs retain natural colors. Match the reference's strong oversized Korean sans-serif headings, thin open diagrams, generous negative space, restrained square corner motifs. Use one consistent Noto Sans KR-like sans family, bold headline around 58px, main text 32-38px at 2048 width, captions at least 23px. Main content left/right margins 110px, heading baseline near y180. One headline and one dominant composition. Slide number small top left. No random English decor, slogans, logos, middle-dot separators, neon, glossy cards, shadows, repetitive rounded cards or stock robot renders. Use commas or slashes.\nCONTENT LOCK: render supplied Korean text accurately and keep all numbers/units. Do not add empirical facts, percentages, rankings or unprovided claims. A concept drawing must be labeled 개념도. Do not conflate implemented features with validated mission success. Real image inputs are supporting inserts: preserve their robot pose, actual blocks, colors and boundaries, do not reimagine or synthesize their content. Crop only for readability, retaining the evidence context. No fabricated experimental scenes.\nOnly the explicitly listed on-screen text should appear. Presenter notes are not to be printed. Use readable large labels, not dense report paragraphs. Produce a clean full-bleed slide.\n\nSLIDE SPECIFICATION:\nIvory background. Title \"부록 / 실험 조건과 수치의 의미\". Left half a clear spacious two-column table headed \"캘리브레이션 구성\" and \"적합 RMS\" with rows \"초기 5점 | 20.11 mm\", \"확장 9점 | 13.46 mm\", \"확장 15점 | 11.98 mm\", \"재수집 9점 | 8.18 mm\". Below table \"서로 다른 수집 조건 / 점 수만의 효과를 뜻하지 않음\". Right half three short open sections: \"실행 조건\" with \"전체 시험 30 Hz / 이후 단일 블록 45 Hz\", \"45 Hz 전체 미션 재평가 없음\"; \"카메라 재검사\" with \"약 60.5초 / p95 최댓값 0.514 px\", \"10분 검증 결과가 아님\"; \"결과 판정\" with \"HELD / EMPTY는 센서 판정\", \"미션 성공은 실제 블록 상태로 별도 판단\". Footer \"실행 ID: task1_20260908_030956\". Number \"13\". No downward improvement arrow joining the different calibration sessions.",
+      "referenced_image_paths": [
+        "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/01_design_reference.png"
+      ]
+    }
+  ],
+  "width": 1672,
+  "height": 941,
+  "current_image_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png"
+}

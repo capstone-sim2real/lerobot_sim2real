@@ -1,0 +1,54 @@
+{
+  "number": 12,
+  "slug": "conclusion",
+  "seconds": 45,
+  "referenced_image_paths": [
+    "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-d60b1da7-05ca-4999-848c-1d8b1abeb84c.png"
+  ],
+  "prompt": "Make one surgical content restoration to this calm Korean research presentation slide. Preserve the same canvas, modest main title '구현 성과와 후속 검증', light header rule, regular body typography, existing three rows, all icons, all footer wording, colors and overall calm layout. Add the missing substantive line exactly '인식 / 좌표 / IK / FSM을 실제 장비에 통합' as a plain regular-weight body-sized sentence (about 28-30px at this canvas width), left-aligned below the header rule and above the first row, using the existing empty space around y250. This must NOT be a second giant title or a banner: use the same size and weight as ordinary body prose. If needed nudge the three rows downward very slightly while preserving their readability and the bottom footer. Do not remove or change any existing content: preserve '확보한 성과', '파지 확인과 실패 대응, 관제 도구와 실행 기록', '이동 미션', '동일 조건 반복 평가 / 재시도 시간 관리', '적재 미션', '자세 등록 / 통합 실행 / 5초 유지 검증', '다음 단계: 관측과 행동, 검증된 결과를 연결한 학습용 실행 기록', and '이동 미션 미완료 / 적재 실기 미수행'. Do not add photos, robots, decoration, new claims, shadows or corner squares. The result remains a single slide with a restrained academic presentation tone.\n",
+  "output": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/12_conclusion.png",
+  "previous_slide": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/12_conclusion.png",
+  "title": "구현 성과와 후속 검증",
+  "edit_image_paths": [
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/12_conclusion.png",
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/02_mission.png"
+  ],
+  "tool": "built-in image_gen",
+  "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-f9489c49-5f0e-4685-9687-8c16a4cba1a6.png",
+  "generation_history": [
+    {
+      "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-d60b1da7-05ca-4999-848c-1d8b1abeb84c.png",
+      "prompt": "Use case: style-transfer, precise presentation typography edit.\nInput image 1 is the existing slide to EDIT. Preserve its substantive Korean content, evidence photos, data, diagram logic and all caveats. The user dislikes the giant bold promotional headlines. Redesign this as a QUIET UNIVERSITY RESEARCH PRESENTATION.\nTypography and composition, mandatory:\n- SINGLE 16:9 slide, same dimensions as input. Use restrained Noto Sans KR-like sans-serif typography.\n- At 1672px canvas width the title is ONLY 40-44px tall font size, medium/semibold weight 500-600, NOT black/heavy. About 45% of the old title size. Never stretch a short title across the page. A title may occupy less than half the slide width. Title left edge x=92, top y=80. Place a thin subtle rule at y=145 separating header from body. Start body near y=190. Keep ample clear margins.\n- Body text around 27-32px regular weight, section labels 31-35px medium. The title is only about 1.35 times body size. Key numbers at most 44-50px medium; never giant 100px+ numerals. Team names around 35px medium. Preserve legibility; do NOT shrink everything indiscriminately.\n- Convert huge bottom slogans and full-width sky promotional banners into modest regular-weight concluding lines (28-30px) with a thin rule, no big filled banner. Avoid shouting, all-heavy typography, huge KPI numerals, campaign-poster layout, ornate icons and thick decorations.\n- Remove large decorative corner square clusters. Use at most a single tiny 12px sky square or short thin blue rule as a subtle accent. No new illustrations or decoration.\n- Keep Steel / Sky palette: #355872 text/lines, #7AAACE secondary, #9CD5FF small accents, #F7F8F0 background. Keep slide 07 dark steel with ivory text. All other body slides ivory. Flat colors, no gradients/shadows.\n- Rebalance the newly freed title space with comfortable whitespace and an orderly content grid. Existing photos/diagrams remain the visual focus. Preserve or enlarge image readability rather than filling space with bigger text.\nCONTENT INVARIANTS:\nDo not invent or remove results, units, dates, model names or limitations. Keep all supplied numbers exactly. Photographs must preserve robot poses, blocks and boundaries; do not synthesize extra images. Keep arrow directions and decision labels semantically identical. No stock robot photos, fake experimental scenes, invented charts, invented performance claims or new slogans. Use commas/slashes, not middle dots. Existing source photos and text can move together for layout but substantive content stays the same.\nOnly replace the main headline with the exact calm section title below. Other exact wording can remain. Retain the small slide number near the upper left, unobtrusively. This is an edited slide, not an extra image inside a collage.\n\nEXACT NEW MAIN TITLE: \"구현 성과와 후속 검증\"\nSLIDE NUMBER: 12\n\nINPUT IMAGE 2 is ONLY the now-approved internal typography reference for this revision: match its modest heading, thin header rule, regular-weight body, quiet numeric values and absence of oversized corner decorations. Do NOT copy its photos, mission content or slide number. The slide-specific content comes entirely from image 1. For dark slide07 apply equivalent scale and weight using ivory text. The new heading must be no larger than the heading in image2.",
+      "referenced_image_paths": [
+        "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/12_conclusion.png",
+        "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/02_mission.png"
+      ]
+    },
+    {
+      "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-f9489c49-5f0e-4685-9687-8c16a4cba1a6.png",
+      "prompt": "Make one surgical content restoration to this calm Korean research presentation slide. Preserve the same canvas, modest main title '구현 성과와 후속 검증', light header rule, regular body typography, existing three rows, all icons, all footer wording, colors and overall calm layout. Add the missing substantive line exactly '인식 / 좌표 / IK / FSM을 실제 장비에 통합' as a plain regular-weight body-sized sentence (about 28-30px at this canvas width), left-aligned below the header rule and above the first row, using the existing empty space around y250. This must NOT be a second giant title or a banner: use the same size and weight as ordinary body prose. If needed nudge the three rows downward very slightly while preserving their readability and the bottom footer. Do not remove or change any existing content: preserve '확보한 성과', '파지 확인과 실패 대응, 관제 도구와 실행 기록', '이동 미션', '동일 조건 반복 평가 / 재시도 시간 관리', '적재 미션', '자세 등록 / 통합 실행 / 5초 유지 검증', '다음 단계: 관측과 행동, 검증된 결과를 연결한 학습용 실행 기록', and '이동 미션 미완료 / 적재 실기 미수행'. Do not add photos, robots, decoration, new claims, shadows or corner squares. The result remains a single slide with a restrained academic presentation tone.\n",
+      "referenced_image_paths": [
+        "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-d60b1da7-05ca-4999-848c-1d8b1abeb84c.png"
+      ]
+    }
+  ],
+  "review": {
+    "status": "passed",
+    "method": "view_image inspection compared with previous slide and calm 02 reference",
+    "checks": [
+      "Short section title and regular integration statement retained",
+      "Integration statement restored after initial generation omitted it",
+      "Achievements, movement retesting, retry time management and stack verification rows preserved",
+      "5-second retention and mission-incomplete / stack-unperformed caveats preserved",
+      "Learning-record future-use line preserved without large banner",
+      "Corner clusters removed"
+    ],
+    "limitations": [
+      "Generated raster typography is visually checked, not editable text or exact measured font sizing.",
+      "Native 1672x941 dimensions retained without pixel resampling."
+    ]
+  },
+  "width": 1672,
+  "height": 941,
+  "current_image_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/12_conclusion.png"
+}
