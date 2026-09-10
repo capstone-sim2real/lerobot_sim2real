@@ -1,0 +1,1 @@
+run_id,target_id,pick_entry_index,candidate_index,candidate_name,is_first_candidate_for_target,is_reselection,start_time,result_time,sensor_pick_result,sensor_verify_result,video_grasp_result,video_time_range,slot_release_time,placement_video_result,interrupted,notes

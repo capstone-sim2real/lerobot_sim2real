@@ -7,6 +7,8 @@
 
 SmolVLA는 목표 근처로 팔을 이동하였으나 안정적인 파지에는 도달하지 못하였다. ACT는 제한된 위치 범위에서 단일 블록 파지·이동을 수행하였으며, 액션 청크 갱신과 혼합 옵션을 조정하였다. 팀 집계에 따른 \textbf{튜닝 후 ACT의 단일 블록 이동 성공률은 50회 중 29회, 58\%}였다.
 
+이 집계는 개발 경위를 설명하는 초기 결과이다. 개별 시행의 위치와 방향, 재시도 허용 여부 및 체크포인트를 함께 대조할 자료가 없어 최종 CV+IK와의 성능 비교에는 사용하지 않았다.
+
 \begin{table}[htbp]
 \centering
 \caption{초기 접근법의 수행 내용과 결과}\label{tab:early}
@@ -23,11 +25,11 @@ ACT--CV/IK & 학습 파지와 규칙 배치의 연결 구조 설계 & 설계 검
 \end{table}
 
 \subsection{CV+IK로의 전환 근거}
-중간 단계에서는 여러 정책 후보를 동시에 완성하는 방향을 검토했지만, 데이터 수집과 학습, 실제 로봇 튜닝 및 배치 로직을 함께 진행해야 했다. 초기 실험에서 파지 위치와 동작 복구가 충분히 안정적이지 않았고, 카메라 구성 변화에 따른 데이터 정비도 필요하였다. 팀은 제한된 일정과 과제의 고정된 물체·평면 조건을 고려하여 최종 실행 경로를 고전 CV+IK로 정리하였다.
+초기 실험의 문제는 목표 근처로 이동하는 동작과 실제로 블록을 잡는 동작의 성공 여부가 일치하지 않는 것이었다. ACT의 청크 갱신과 혼합 옵션을 조정했으나 표~\ref{tab:early}와 같이 실패가 남았다. 또한 시연 데이터 수집, 학습과 실기 실행을 반복하는 동안 카메라 구성이 달라지면 관측 조건도 다시 맞춰야 했다. 이 과정에서 동작 영상만으로 실패가 관측 입력, 정책 출력 또는 실제 접촉 중 어느 단계에서 발생했는지를 분리하기 어려웠다.
 
-이 방식에서는 블록 중심과 각도를 영상에서 명시적으로 계산하고, 각 단계의 입력과 출력 좌표를 관찰할 수 있다. 따라서 검출 실패, 좌표 변환의 편차, IK 계획 불가, 빈손 파지를 단계별로 구분할 수 있다. 이미 구축한 모터 제어, 캘리브레이션 경험과 상태별 파지 확인 구조는 전환 후에도 활용하였다. 반면 시연 학습을 생략하는 대신 카메라 고정, 색 임계값, 좌표 변환과 기구 보정에 노력이 필요하게 되었다.
+이에 팀은 크기와 색상이 정해진 블록, 고정된 작업 평면이라는 조건을 활용하여 인식과 실행의 중간 결과를 명시적으로 확인하는 방식으로 전환하였다. 고전 CV는 블록 중심과 방향을, 캘리브레이션은 로봇 좌표를, IK는 후보 자세와 도달성 결과를 제공한다. 파지 후에는 그리퍼 위치와 부하를 확인한다. 이처럼 단계별 판단을 분리하면 검출 실패, 좌표 편차, 계획 불가와 빈손 파지를 각각 다른 조건으로 처리할 수 있다.
 
-최종 방식의 선정은 초기 실험 관찰, 단계별 진단 가능성과 개발 일정에 근거하였다. 후보 전체에 대한 동일 조건 비교는 수행하지 못하였다. 최종 실행에서는 고전 영상 처리와 기구학 계산으로 행동을 구성하며, 외부 GPU 서버의 정책 추론에 의존하지 않는다.
+기존 모터 제어와 파지 확인 구조를 재사용하여 CV+IK를 최종 실행 경로로 통합하였다. 선택의 근거는 실기 관찰, 단계별 진단 가능성 및 개발 일정이며, 모방학습 실패의 원인을 데이터 양이나 특정 모델의 한계로 확정한 것은 아니다. 동일 조건의 접근법 비교는 수행하지 못하였다. 전환 후에도 카메라 고정, 색 임계값과 기구학 보정을 유지해야 하는 부담은 남았으며, 각 문제에 적용한 설계와 결과를 다음 절부터 설명한다.
 
 \section{최종 시스템 아키텍처}
 최종 경로는 카메라 서비스, 인식 모듈, 기구학·동작 모듈, 상태 제어기, 로봇 입출력으로 구성된다. 카메라 서비스가 USB 장치를 단독으로 읽고 최신 프레임을 제공한다. 미션 실행기는 HTTP snapshot을 받아 제어 대상 블록을 검출한다. 브라우저 관제 화면은 MJPEG 영상과 별도 분석 결과를 표시하며, 표시용 오버레이 좌표는 SELECT나 IK의 입력으로 다시 사용되지 않는다.
@@ -57,18 +59,16 @@ arr/.style={-{Latex},thick}]
 
 \begin{table}[htbp]
 \centering
-\caption{최종 시스템의 모듈별 책임}
-\begin{tabularx}{\linewidth}{@{}L{0.25\linewidth}Y@{}}
+\caption{외부 기술의 활용과 팀의 설계 및 구현}
+\begin{tabularx}{\linewidth}{@{}L{0.16\linewidth}L{0.29\linewidth}Y@{}}
 \toprule
-모듈 & 주요 책임 \\
+구성 & 활용한 기반 기능 & 팀의 설계 및 구현 \\
 \midrule
-카메라 & 프레임 획득, 최신 프레임 제공, 관제 영상과 표시용 분석 \\
-인식 & 평면 정사영, 색·형상 후보 생성, 영역 필터, 색 할당 \\
-IK·파지 계획 & 중립 손목 방향, 목표 보정, 파지 후보와 접근 높이 계산 \\
-운반 계획 & 지정 영역 슬롯과 운반 웨이포인트 계산 \\
-상태 제어 & 대상 선택, 검증, 미션별 전이와 재시도 기록 \\
-로봇 입출력 & 관절 명령, 관절 상태·부하 읽기, 상대 목표 제한 \\
-설정·기록 & YAML 설정, 캘리브레이션·자세, 상태 전이와 실험 원본 보관 \\
+인식 & OpenCV 색 변환, 윤곽선과 평면 변환 & 미터법 형상 필터, 색 기준점 할당, 영역 밖 대상 선택 \\
+기구학 & PlaCo의 URDF 기반 FK/IK 풀이 & 시드와 중립 손목 방향, 후보 보정, 접근 높이 탐색 \\
+장비 제어 & LeRobot 장비 통신과 관절 명령 제한 & 입출력 추상화, 측정 자세 기반 보간, 파지 판정 연결 \\
+미션 실행 & Python 상태 및 자료 구조 & FSM, 후보 재시도와 순회 보류, 동적 슬롯, 적재 PLACE 전략 \\
+관제·기록 & 영상 입출력과 HTTP 기본 기능 & 카메라 단독 소유, 최신 프레임 전달, FK 표시, 실험 이력 관리 \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -103,7 +103,7 @@ IK·파지 계획 & 중립 손목 방향, 목표 보정, 파지 후보와 접근
 \end{tabularx}
 \end{table}
 
-형상 필터는 길쭉한 테이프와 내부가 빈 경계의 배제에 사용한다. 반면 맞닿은 블록의 윤곽이 병합되거나 팔에 가려져 면적이 줄어들면 실제 블록도 탈락할 수 있다. 이를 고려하여 대상 선택 단계에서 시야를 확보하고 매 사이클 새 영상으로 검출한다.
+형상 필터의 도입으로 색상이 겹치는 후보를 면적, 종횡비와 채움 비율에 따라 판별하도록 구성하였다. 반면 맞닿은 블록의 윤곽이 병합되거나 팔에 가려져 면적이 줄어들면 실제 블록도 탈락할 수 있다. 이에 대상 선택 단계에서 HOME으로 복귀해 시야를 확보하고 매 사이클 새 영상으로 검출한다. 필터 적용 전후의 검출 정확도를 정량 비교한 실험은 수행하지 않았으며, 검출 누락과 완료 판정의 관계는 4장에서 분석한다.
 
 \subsection{색 기준점 할당과 영역 필터}
 후보의 대표 색상·채도를 $(H,S)$, 기준점을 $(H_c,S_c)$라고 하면 구현의 거리 함수는 다음과 같다.
@@ -120,12 +120,14 @@ d=\sqrt{\left(\frac{2\Delta H}{128}\right)^2+
 
 \section{캘리브레이션과 좌표 관리}
 \subsection{대응점 수집 절차}
+영상에서 얻은 블록 중심과 실제 그리퍼의 접근 위치가 어긋나는 문제에 대응하여, 변환 행렬뿐 아니라 대응점을 수집하는 조건을 함께 관리하였다. 블록 윗면과 빈 테이블은 높이가 다르고, 같은 턱 접촉 위치에서도 손목 회전에 따라 FK 기준점의 좌표가 달라질 수 있다. 따라서 대응점의 개수 증가와 함께 기준 평면, 손목 자세 및 기록 항목을 정비하였다.
+
 캘리브레이션에서는 작업 공간의 여러 위치에 블록을 놓고 윗면 중앙에 그리퍼 기준점을 맞춘 뒤, 영상의 픽셀 좌표와 관절 상태로 계산한 FK 좌표를 함께 기록한다. 베이스 좌표는 밀리미터로 유지하고 IK 라이브러리의 단위와 경계에서 변환한다. 각 점의 이름, 픽셀 좌표, 로봇 좌표, 관절값과 사진을 함께 보관하면 잘못 기록한 점을 사후에 검토할 수 있다.
 
 손목 회전은 중립 근처로 유지한다. 같은 턱 접촉 상태라도 회전축과 URDF 그리퍼 기준점의 위치 관계 때문에 기록되는 FK 좌표가 바뀔 수 있기 때문이다. 따라서 좌표값만 남기는 대신 관절각을 보관하고, 캘리브레이션 자세와 런타임 파지 자세의 차이를 줄이는 절차를 사용하였다. 카메라를 다시 고정한 경우에는 이전 대응점을 그대로 활성화하지 않고 새 세션의 자료와 구분하였다.
 
 \subsection{좌표 품질과 카메라 안정성 평가}
-좌표 변환의 품질은 적합 RMS와 최대 LOO 오차로 평가하였다. 목표 기준은 RMS 5\,mm 미만, 최대 LOO 8\,mm 미만으로 설정하였다. 9월 8일에는 텔레오퍼레이션으로 수집한 아홉 점을 사용하였다. 이 세트는 목표 기준에 미달한 상태로 후속 파지 시험에 적용되었으며, 측정 결과는 4장에 제시하였다.
+좌표 변환의 품질은 적합 RMS와 최대 LOO 오차로 평가하였다. 목표 기준은 RMS 5\,mm 미만, 최대 LOO 8\,mm 미만으로 설정하였다. 대응점 구성은 5점, 9점, 15점, 재수집한 9점으로 변경하였으며 결과는 표~\ref{tab:calibration-history}에 제시하였다. 마지막 세트도 목표 기준에 미달하여 좌표 오차가 남은 상태에서 파지 시험을 수행하였다. 따라서 절차 정비만으로 위치 문제를 해결했다고 판단하지 않고, 파지 후보 보정과 센서 확인을 추가하였다.
 
 카메라 안정성은 기준 영상과 현재 영상의 대응 코너 이동량으로 평가한다. 개별 코너의 검출 변동에 민감한 최댓값 대신 p95를 주요 지표로 사용하며, 설계 기준은 10분간 2\,pixel 미만이다. 9월 8일에는 약 1분의 단축 검사를 수행하였다.
 \FloatBarrier
@@ -148,6 +150,8 @@ d=\sqrt{\left(\frac{2\Delta H}{128}\right)^2+
 
 \subsection{도달성 검사와 접근 높이}
 IK 결과는 모델 좌표에서의 위치 오차와 기울기 오차를 확인한 후 사용한다. 실행 전 계획의 허용 오차는 위치 15\,mm, 기울기 $6^\circ$로 설정하였다. 높은 접근점이 관절 한계에 걸릴 수 있으므로 최소 높이와 탐색 간격을 두고 가능한 접근 높이를 찾는다.
+
+위치 15\,mm는 모델 내 계획 후보를 거르는 허용값이며, 앞 절의 RMS 5\,mm와 최대 LOO 8\,mm는 대응점 정합의 개발 목표이다. 세 값은 평가 대상이 다르고 실제 파지 가능 여유에서 실측으로 도출한 기준은 아니다. 그리퍼 개방 명령도 정규화 위치값이므로 실제 턱 간격으로 바로 환산할 수 없다. 따라서 이 기준들을 더하여 총 오차로 해석하거나, IK 통과만으로 폭 40\,mm 블록의 파지를 보장하지 않는다.
 
 인식 경로는 반경 320\,mm의 작업 영역 필터로 제어 대상을 제한한다. 이후 각 목표의 높이와 방향에 대해 IK를 풀어 실행 가능성을 판단한다. 관측 범위와 자세별 도달성을 두 단계로 검사하는 구조이다.
 
@@ -182,32 +186,67 @@ IK 결과는 모델 좌표에서의 위치 오차와 기울기 오차를 확인�
 
 \section{상태 제어와 미션별 배치 전략}
 \subsection{공통 흐름과 파지 검증}
-전체 흐름은 SELECT, PICK, VERIFY, TRANSPORT, PLACE로 구성한다. SELECT는 팔을 관측을 방해하지 않는 자세로 이동한 뒤 블록을 선택한다. PICK은 그리퍼 개방, 접근, 하강, 닫힘과 파지 후보 실행을 담당한다. 이후 VERIFY는 그리퍼 상태를 확인하고 파지가 확인된 경우에만 TRANSPORT로 전이한다. 실패는 대상별 시도 횟수에 기록하고 재선택 또는 재시도로 처리한다.
+전체 흐름은 SELECT, PICK, VERIFY, TRANSPORT, PLACE로 구성한다. SELECT는 HOME에서 최신 영상을 확인하고 대상 블록을 선택한다. PICK은 도달 가능한 파지 후보를 실행하고 센서로 결과를 확인한다. PICK이 통과한 뒤에도 VERIFY에서 물체를 물고 있는지 다시 검사하며, 확인된 경우에만 운반으로 진행한다. 1차 미션의 분기와 반복 구조를 그림~\ref{fig:fsm}에 나타내었다.
 
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[node distance=9mm,
-state/.style={draw,rounded corners,text width=3.2cm,minimum height=9mm,align=center,font=\small},
+\begin{tikzpicture}[
+state/.style={draw,rounded corners,text width=3.1cm,minimum height=10mm,align=center,font=\small},
+decision/.style={draw,diamond,aspect=2.5,text width=2.1cm,align=center,inner sep=1pt,font=\small},
 arr/.style={-{Latex},thick}]
-\node[state] (sel) {SELECT\\최신 영상에서 선택};
-\node[state,below=of sel] (pick) {PICK\\접근·닫힘·파지 시도};
-\node[state,below=of pick] (ver) {VERIFY\\위치·부하 확인};
-\node[state,below=of ver] (tr) {TRANSPORT\\배치 상공으로 이동};
-\node[state,below=of tr] (pl) {PLACE\\미션별 배치};
-\node[state,right=18mm of sel] (done) {DONE\\종료·정리};
-\draw[arr] (sel)--(pick);
+\node[state] (sel) at (0,0) {SELECT\\관측과 대상 선택};
+\node[state] (pick) at (0,-1.7) {PICK\\후보별 파지 시도};
+\node[decision] (ver) at (0,-3.4) {VERIFY\\파지 확인?};
+\node[state] (tr) at (0,-5.1) {TRANSPORT\\슬롯 상공 이동};
+\node[state] (pl) at (0,-6.5) {PLACE\\해제 후 재관측};
+\node[state,text width=2.5cm] (retry) at (-4.3,-3.4) {재시도 / 순회 보류\\시도 이력 관리};
+\node[state,text width=2.7cm] (done) at (5.4,0) {DONE\\관측 기반 완료};
+\draw[arr] (sel)--node[right,font=\scriptsize]{대상 있음}(pick);
 \draw[arr] (pick)--(ver);
-\draw[arr] (ver)--node[right,font=\scriptsize]{파지 확인}(tr);
+\draw[arr] (ver)--node[right,font=\scriptsize]{예}(tr);
 \draw[arr] (tr)--(pl);
-\draw[arr] (ver.west)--++(-16mm,0)|-node[pos=0.2,left,font=\scriptsize]{실패·재시도}(sel.west);
-\draw[arr] (pl.east)--++(11mm,0)|-(sel.east);
-\draw[arr] (sel)--node[above,font=\scriptsize]{완료 판정}(done);
+\draw[arr] (ver.west)--node[above,font=\scriptsize]{아니오}(retry.east);
+\draw[arr] (pick.west)-|node[pos=0.25,above,font=\scriptsize]{PICK 실패}(retry.north);
+\draw[arr] (retry.west)--++(-5mm,0)|-(sel.west);
+\draw[arr] (pl.east)--++(8mm,0)|-(sel.south east);
+\draw[arr] (sel)--node[above,align=center,font=\scriptsize]{영역 밖 검출\\연속 5초 부재}(done);
+\draw[arr] (sel.north east)--++(0,6mm)-|(sel.north west);
+\node[font=\scriptsize,anchor=south] at (0,1.15) {대상 미확정 / 새 프레임 재관측};
 \end{tikzpicture}
-\caption{파지 확인과 재시도를 포함한 공통 상태 흐름.}
+\caption{1차 미션의 상태 흐름과 성공/실패 분기. 완료 판정에는 유효한 새 프레임만 사용한다. 외부 시간 제한에 의한 중단은 완료와 구분한다.}
 \label{fig:fsm}
 \end{figure}
 
-현재 파지 판정은 여러 번 읽은 그리퍼 위치와 절대 부하의 평균을 사용하며 두 조건을 모두 만족해야 한다. 빈손 닫힘을 운반 전에 차단하고, 실패 시 대상을 다시 선택하도록 하여 좌표 계산의 오차가 그대로 운반 동작으로 이어지는 것을 줄였다.
+PICK 내부에서는 기본 후보의 IK가 실패하더라도 도달 가능한 보정 후보가 있으면 파지를 시도한다. 실행한 후보에서 빈손으로 닫히면 다음 도달 가능한 후보를 확인하며, 후보를 소진하거나 동작 시간이 초과되면 SELECT로 돌아간다. 이 내부 후보 시도와 FSM 차원의 재선택을 그림~\ref{fig:pick-check}와 같이 구분하였다.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+box/.style={draw,rounded corners,text width=3.7cm,minimum height=10mm,align=center,font=\small},
+decision/.style={draw,diamond,aspect=2.6,text width=2.35cm,align=center,inner sep=1pt,font=\small},
+arr/.style={-{Latex},thick}]
+\node[box] (plan) at (0,0) {기본/보정 후보 계산};
+\node[decision] (reach) at (0,-1.6) {도달 가능한\\후보 있음?};
+\node[box] (attempt) at (0,-3.3) {후보 파지 실행\\접근과 그리퍼 닫힘};
+\node[decision] (held) at (0,-5.1) {$\bar p>12$ 그리고\\$\overline{|L|}\ge200$?};
+\node[box] (success) at (0,-6.9) {PICK 통과\\필요시 후퇴 후 VERIFY 재확인};
+\node[box,text width=2.8cm] (fail) at (5.1,-1.6) {PICK 실패\\재선택 / 순회 보류};
+\node[decision] (more) at (5.1,-5.1) {남은 도달\\후보 있음?};
+\draw[arr] (plan)--(reach);
+\draw[arr] (reach)--node[right,font=\scriptsize]{예}(attempt);
+\draw[arr] (reach)--node[above,font=\scriptsize]{아니오}(fail);
+\draw[arr] (attempt)--(held);
+\draw[arr] (held)--node[right,font=\scriptsize]{예}(success);
+\draw[arr] (held)--node[above,font=\scriptsize]{아니오}(more);
+\draw[arr] (more.north)--node[right,font=\scriptsize]{아니오}(fail.south);
+\draw[arr] (more.north west)|-node[pos=0.75,above,font=\scriptsize]{예: 다음 후보}(attempt.east);
+\end{tikzpicture}
+\caption{PICK 내부의 후보 시도와 센서 판정. $\bar p$와 $\overline{|L|}$은 위치와 절대 부하의 표본 평균이며, 표시한 임계값은 현재 설정이다. 동작 시간 초과도 PICK 실패로 처리한다.}
+\label{fig:pick-check}
+\end{figure}
+
+파지 판정은 다섯 번 읽은 그리퍼 위치와 절대 부하의 평균을 사용하며 두 조건을 모두 만족해야 한다. VERIFY에서도 같은 조건을 다시 확인하여 빈손 상태가 운반 단계로 이어지는 것을 차단한다. 실제 성공과 빈손 사례의 센서값은 표~\ref{tab:pick-results}에 제시하였다. 이 판정은 접촉 상태를 검사하는 것이므로 물체의 배치 위치나 적재 후 안정성은 별도 관측이 필요하다.
+\FloatBarrier
 
 \subsection{1차 미션: 지정 영역의 동적 슬롯 배치}
 1차 미션은 지정 영역 내부에 먼 행 세 개와 가까운 행 두 개의 슬롯을 구성한다. 영역 네 꼭짓점과 정규화 좌표를 이용하여 슬롯 중심을 계산하고, 각 슬롯의 해제점과 상공 자세를 IK로 구한다. 기본 정규화 좌표는 $(0.14,0.20)$, $(0.50,0.20)$, $(0.80,0.20)$, $(0.32,0.76)$, $(0.68,0.76)$이다. 선택한 색은 예약한 슬롯을 유지하여 재시도 때 배치 위치가 불필요하게 바뀌는 것을 줄인다.
@@ -271,7 +310,7 @@ arr/.style={-{Latex},thick}]
 \end{longtable}
 
 \subsection{역할 분담과 공동 작업}
-구성원별로 제어·인식, 데이터 수집·학습, 실험·문서 작업을 분담하고 장비 통합과 결과 검토를 공동으로 수행하였다. 세부 수행 내용은 표~\ref{tab:roles}과 같다.
+구성원별로 비전과 미션 제어, 관제 및 캘리브레이션 도구, 평가와 기술 문서 작업을 분담하고 장비 통합과 결과 검토를 공동으로 수행하였다. 세부 수행 내용은 표~\ref{tab:roles}과 같다.
 
 \begin{longtable}{@{}L{0.14\linewidth}L{0.76\linewidth}@{}}
 \caption{구성원별 수행 내용}\label{tab:roles}\\
@@ -279,16 +318,25 @@ arr/.style={-{Latex},thick}]
 \endfirsthead
 \toprule 구성원 & 수행 내용 \\\midrule
 \endhead
-윤민석 & SO-101 제어·캘리브레이션, 카메라·테이프 환경 정비\newline
-파랑·기본 블록 데이터 수집, SmolVLA 학습·실기 관찰\newline
-1차 미션 배치 로직 설명, 시연 영상 공유, 포스터 준비 \\
-이동근 & 초기 개발 환경·리더·팔로워 제어 구성, 카메라 웹 뷰어·원격 추론 환경 구축\newline
-초록·노랑 블록 데이터 수집, ACT 청크 옵션 검토\newline
-캘리브레이션·텔레오퍼레이션·FK 관측, 실험 기록 정리 \\
-김주환 & 정책·학습 검토, 평가 지표·기록 체계 정리, 배포 절차 검토\newline
-CV+IK 전환 설명, 최종보고서·발표 자료 작성 \\
-공동 수행 & 실제 장비 통합, 데이터 수집·실패 관찰\newline
-접근법 논의, 결과 검토·보고 자료 정리 \\
+윤민석 & 블록별 채도/밝기 조정, 도달 범위 밖과 지정 영역 내 블록 제외를 통한 비전 검출 최적화\newline
+파지/적재 위치의 mm 단위 보정, 블록 각도 기반 그리퍼 Roll 정렬\newline
+손목 서보 과열 문제 분석과 제어 방식 개선\newline
+파지 실패 재시도와 파지 성공 시 운반 로직 구현\newline
+미션 종료 조건 구현과 1차 미션 제어 경로 통합\newline
+졸업과제 포스터 제작 \\
+이동근 & FSM 파지 조건 수정, 중심점 도달 실패 시 실행 가능한 대체 파지 후보 활용 로직 보완\newline
+카메라 웹 뷰어 개발, 블록 검출 결과와 파지 후보 및 FK 위치의 실시간 시각화\newline
+좌표 캘리브레이션 도구 개발, 대응점과 관절값 기록 및 중단 후 수집 재개 기능 구현\newline
+카메라 영상 변화 감지 기반 자동 저장 기능 개발, 실험 이미지 수집 방식 개선\newline
+LeRobot 의존성과 uv 실행 환경 통합, Python CLI 기반 로봇 실행 도구 정리\newline
+실험 설정, 로그, 캘리브레이션 자료 정리 및 중간보고서와 최종보고서 작성 \\
+김주환 & 모방학습(ACT/SmolVLA) 시도와 한계 분석, 규칙 기반 FSM으로의 전환 근거 문서화\newline
+정량 평가 체계 정의, rollout 기록 템플릿 배포\newline
+캘리브레이션 시행착오 문서화와 공유, 실행 환경 통합 테스트 및 rollout 검증\newline
+PR 리뷰와 기술 문서(AGENTS.md, PR 이력) 정리\newline
+최종보고서와 최종 시연 PPT 작성 \\
+공동 수행 & 실제 장비 통합, 데이터 수집과 실패 관찰\newline
+접근법 논의, 결과 검토와 보고 자료 정리 \\
 \bottomrule
 \end{longtable}
 \FloatBarrier

@@ -67,5 +67,26 @@
     "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
     "transformation": "ffmpeg JPEG frame at 104 seconds; original framing retained",
     "sha256": "4132e8985b10a1f7fe3062b04f5194e7b2dc9130f93bd359f334028777e2a4e4"
+  },
+  {
+    "asset": "figures/workspace_20260908.png",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/zone_preview.png",
+    "transformation": "byte-for-byte copy; existing region and slot overlay retained",
+    "sha256": "3b8ada785609b8b9da76ffc69593c720634c5e245ac1cbbff8f0f8168d8a150b"
+  },
+  {
+    "asset": "figures/calibration_map.tex",
+    "source": [
+      "evidence/20260908/accepted_points.csv",
+      "evidence/20260908/venue_accepted.json"
+    ],
+    "transformation": "analysis/summarize_evidence.py; saved homography residuals in robot base mm, true-scale arrows",
+    "sha256": "649021d566395373f6033f3df1a19363d0b579d4f1bf6edf429998af6070f2ac"
+  },
+  {
+    "asset": "figures/task1_timeline.tex",
+    "source": "evidence/20260908/task1_run.txt",
+    "transformation": "analysis/summarize_evidence.py; timestamped state intervals and candidate starts, incomplete last interval marked",
+    "sha256": "dad92e98ef9f2e8bec3f68f5e669ff3490f4904743128f0aeeb480b899d819db"
   }
 ]
