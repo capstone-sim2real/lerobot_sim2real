@@ -1,0 +1,71 @@
+[
+  {
+    "asset": "figures/setup_early.png",
+    "source": "docs/report/중간보고서/figure/setup_front.png",
+    "transformation": "byte-for-byte copy",
+    "sha256": "b045fa1584af227016013329b198cd0da34c9e232c09aaf473c6689d1eb55e3b"
+  },
+  {
+    "asset": "figures/blocks.png",
+    "source": "docs/report/중간보고서/figure/blocks5.png",
+    "transformation": "byte-for-byte copy",
+    "sha256": "1f5b4842a092a63d7216ad57af3e82831ed0d5e9ab0c1623994e4767df7aca60"
+  },
+  {
+    "asset": "figures/grasp_before.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/original/before.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "4329c506a4aea472dae5171e3c0cfb276f5cb9698612c6685daad9d0dfecba28"
+  },
+  {
+    "asset": "figures/grasp_lifted.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/original/lifted.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "82cc6b5a1e1f5355861a9a848ea8ef7c0760db1a59a1f73a9451439d1421a980"
+  },
+  {
+    "asset": "figures/grasp_inner.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/repeat/pick1/closed.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "ebf3d789e63808a0c7a5c5d8eadd01aa0d2ee22e90d7f24e1f0f298098ff7401"
+  },
+  {
+    "asset": "figures/grasp_retry.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/repeat/pick1_retry_clear/closed.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "d28e65da11965a82a74f7fd6f1fe5513c8fc18ccb0b8c36b72c4b13671fa77e3"
+  },
+  {
+    "asset": "figures/drift_initial.csv",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/drift_60s.csv",
+    "transformation": "byte-for-byte copy",
+    "sha256": "c18b2c0e90ecab3ed34bd8015675657488aa27a5a59c29e12117e6c316b6745e"
+  },
+  {
+    "asset": "figures/drift_retry.csv",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/stability_retry_Kjz2Pr/drift_60s.csv",
+    "transformation": "byte-for-byte copy",
+    "sha256": "5dd478f55a05ae7de1934d1fa2a4394bcfb8995c6769cd07f5c711f96fb3152c"
+  },
+  {
+    "asset": "figures/demo_000.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 0 seconds; original framing retained",
+    "sha256": "a017d02e3531d316deb9b86e4293e20bb65856a2ec4cd41d9b9de1883df36071"
+  },
+  {
+    "asset": "figures/demo_060.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 60 seconds; original framing retained",
+    "sha256": "e8a45a317177925942a989fc623ee07915aa1f1ba469f5633458a3217647bafa"
+  },
+  {
+    "asset": "figures/demo_104.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 104 seconds; original framing retained",
+    "sha256": "4132e8985b10a1f7fe3062b04f5194e7b2dc9130f93bd359f334028777e2a4e4"
+  }
+]
