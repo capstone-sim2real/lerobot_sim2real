@@ -80,13 +80,25 @@
       "evidence/20260908/accepted_points.csv",
       "evidence/20260908/venue_accepted.json"
     ],
-    "transformation": "analysis/summarize_evidence.py; saved homography residuals in robot base mm, true-scale arrows",
-    "sha256": "649021d566395373f6033f3df1a19363d0b579d4f1bf6edf429998af6070f2ac"
+    "transformation": "analysis/summarize_evidence.py; saved homography residuals in robot base mm, true-scale arrows; nominal 200 x 100 mm rectangle centered on registered zone corners",
+    "sha256": "19a569ce4eb189faaa8ec6a8389b5ff09ad44cec397308afd3f179ea33d21f44"
   },
   {
     "asset": "figures/task1_timeline.tex",
     "source": "evidence/20260908/task1_run.txt",
     "transformation": "analysis/summarize_evidence.py; timestamped state intervals and candidate starts, incomplete last interval marked",
     "sha256": "dad92e98ef9f2e8bec3f68f5e669ff3490f4904743128f0aeeb480b899d819db"
+  },
+  {
+    "asset": "figures/calibration_p4_contact.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/p4_live.jpg",
+    "transformation": "byte-for-byte copy; paired P4 capture; identical crop in LaTeX, saved pixel center annotated on clear image",
+    "sha256": "89c8d8ac81e4830ab6186e0a9962c6f6268405d1080846be120c8fa4677529ac"
+  },
+  {
+    "asset": "figures/calibration_p4_clear.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/p4_clean.jpg",
+    "transformation": "byte-for-byte copy; paired P4 capture; identical crop in LaTeX, saved pixel center annotated on clear image",
+    "sha256": "c36c03619de4dc93350c8106e0e7b40676a33429fd3f6094f5c12abfee7724cd"
   }
 ]

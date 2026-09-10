@@ -165,9 +165,16 @@ def calibration_map():
            r"xmin=-280,xmax=280,ymin=-25,ymax=335,xlabel={Base Y (mm)},ylabel={Base X (mm)},",
            r"xtick={-200,-100,0,100,200},ytick={0,100,200,300},grid=major,grid style={black!12},",
            r"tick label style={font=\small},legend style={font=\small,at={(0.5,1.02)},anchor=south,legend columns=2}]"]
-    polygon = " ".join(f"(axis cs:{y},{x}) --" for x,y in venue["zone_polygon_mm"])
-    tex.append(r"\path[fill=black!7,draw=black!50,dashed] " + polygon + " cycle;")
-    tex.append(r"\node[font=\scriptsize] at (axis cs:15,310) {등록한 지정 영역};")
+    # Depict the nominal 200 x 100 mm zone, centered on its saved corners.
+    # This schematic does not change the measured polygon or calibration fit.
+    corners = venue["zone_polygon_mm"]
+    center_x = sum(x for x, _ in corners) / len(corners)
+    center_y = sum(y for _, y in corners) / len(corners)
+    zone_width_mm, zone_depth_mm = 200.0, 100.0
+    tex.append(r"\path[fill=black!7,draw=black!50,dashed] "
+               + f"(axis cs:{center_y-zone_width_mm/2},{center_x-zone_depth_mm/2}) rectangle "
+               + f"(axis cs:{center_y+zone_width_mm/2},{center_x+zone_depth_mm/2});")
+    tex.append(rf"\node[font=\scriptsize] at (axis cs:{center_y},310) {{지정 영역 (규격)}};")
     tex.append(r"\addplot[only marks,mark=*,black,forget plot] coordinates {(0,0)};")
     tex.append(r"\node[font=\scriptsize,anchor=west] at (axis cs:8,0) {베이스 원점};")
     for index, p in enumerate(rows, 1):
