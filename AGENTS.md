@@ -6,6 +6,17 @@
 
 관련 문서: 현재 아키텍처는 [docs/architecture.md](docs/architecture.md).
 
+### 문서 시점 구분
+
+- **현재 운영 경로:** Task 1 CV+IK zone gathering. 고정 탑 카메라와 동적 IK
+  슬롯을 사용하며 `so101-run --task 1`로 실행한다.
+- **유지할 목표 구조:** Task 2는 PICK/VERIFY/TRANSPORT를 공유하고 PLACE 전략만
+  접촉 기반 적층으로 교체한다. 이 seam은 현재 Task 1 구현 형태와 관계없이
+  앞으로도 설계 계약으로 유지한다.
+- **과거 기록:** `docs/guide/SO101_데이터수집_관리.md`,
+  `docs/guide/SO101_학습_추론.md`, `docs/report/*`의 ACT/SmolVLA 실험과 피벗
+  근거는 당시 상태를 보존한 자료다. 현재 실행법으로 해석하거나 현행화하지 않는다.
+
 ---
 
 ## §1 미션 규격
@@ -45,22 +56,31 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE → (블록 남음 && 시간 
            ↑______실패(재시도 / 스킵)______|
 ```
 
-- 1차와 2차 미션은 **PLACE 핸들러 주입만 다르고** 나머지 경로가 동일하다.
+- **목표 계약:** 1차와 2차 미션은 PLACE 전략만 교체하고 나머지 경로를 공유한다.
+  현재 production Task 1은 fresh-frame 완료 판정과 동적 IK 슬롯 때문에
+  `Task1SelectState`/`Task1TransportState`/`Task1PlaceState`를 먼저 사용하고 있다.
+  Task 2를 구현할 때 이 차이를 확대하지 말고 PLACE seam으로 수렴시킨다.
 - 상태 핸들러는 `BaseRobotIO` + config + 인터페이스만 **주입받는다.** 핸들러 안에서
   객체를 생성하지 않는다. `MockRobotIO`로 하드웨어 없이 단위 테스트가 가능해야 한다.
-- **`step()`은 한 틱(제한된 동작 단위)만 수행하고 즉시 리턴한다.** 머신이 step 사이에
-  시간 예산을 검사하므로, 수 분씩 블로킹하면 제한시간 컷이 무력화된다.
+- **목표 계약:** `step()`은 제한된 동작 단위만 수행하고 반환해야 한다. 현재 일부
+  PICK/TRANSPORT/PLACE step은 bounded `move_to()` 또는 descent 전체를 수행하므로
+  머신은 그 호출 중간에 예산을 검사하지 못한다. 새 코드는 이 블로킹 범위를
+  더 키우지 않는다.
 - **HARD RULE: VERIFY는 파지가 확인되지 않으면 절대 TRANSPORT로 진행하지 않는다.**
 - 재시도는 타겟별로 센다(`RunContext.record_attempt`). 한 블록이 예산 전체를
   먹지 못하게 `max_retries_per_block` 초과 시 스킵한다.
 - DONE은 종단 상태다. 하드웨어 정리(홈 복귀, 연결 해제)는 러너의 `finally`에
   둔다 — 예외 발생 시에도 실행되어야 하기 때문이다.
+- 현재 Task 1 zone-gather runner는 내부 FSM 시간 예산을 끈다. 평가의 180초 제한은
+  외부 supervisor가 강제해야 하며, 내부 deadline을 구현하기 전까지 이를 숨기지 않는다.
 
 ## §4 PLACE 전략 seam
 
-PLACE는 `PlaceStrategy` 인터페이스 뒤에 있다. 1차는 슬롯 배치, 2차는 적층
-전략을 주입한다. 이 seam은 유지한다 — 나중에 정책 기반 정렬로 교체할 수 있는
-지점이다.
+PLACE의 목표 경계는 `PlaceStrategy` 인터페이스다. 현재 공통 handler에는
+`SlotPlaceStrategy`와 `StackPlaceStrategy`가 있고, production Task 1은 동적 IK
+슬롯용 `Task1PlaceState`를 사용한다. Task 2는 PICK/VERIFY/TRANSPORT를 복제하지
+말고 이 PLACE seam에 접촉 기반 적층을 주입한다. 나중에 정책 기반 정렬로
+교체하더라도 같은 경계를 사용한다.
 
 **PICK도 같은 방식으로 교체 가능하다.** `fsm/act_handler.py`의 `ActPickState`는 `PickClient`
 Protocol(`ping()`, `run_pick(retreat_pose)`)에만 의존한다. CV+IK 경로는
@@ -69,11 +89,11 @@ Protocol(`ping()`, `run_pick(retreat_pose)`)에만 의존한다. CV+IK 경로는
 
 ## §5 적층: 접촉 기반 하강
 
-**타워 높이를 추측(dead-reckoning)으로만 결정하지 않는다.** 해제 높이는
-`z_release(n) = z_grasp + (n+1)·h` (h=20mm)로 계산하되, `ContactMonitor`의
-부하 스파이크를 **백스톱으로 항상 켜둔다.** 접촉이 감지되면 그 지점에서
-백오프 후 해제한다. 접촉 없이 사다리 바닥에 닿으면 경고 후 해제한다 —
-바닥판을 짓누르는 것보다 낮은 높이에서 떨어뜨리는 편이 낫다.
+**타워 높이를 블록 수로 추측하지 않는다.** 현재 `StackPlaceStrategy`는 기록된
+`tower_descent_<n>` 관절 키프레임 사다리를 천천히 따라가며 `ContactMonitor`의
+부하 스파이크에서 정지하고 백오프 후 해제한다. 접촉 없이 사다리 바닥에 닿으면
+경고 후 해제한다. Task 2를 완성할 때도 이 contact-first 원칙을 유지하며,
+`z_release(n)` 같은 층수 기반 dead reckoning을 주 제어로 추가하지 않는다.
 
 ## §6 좌표계와 캘리브레이션
 
@@ -103,21 +123,19 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   관절값 컬럼을 포함한다.
 - **카메라 마운트가 바뀌면 캘리브레이션은 무효다.** 반드시 재실행한다.
 
-**실측 결과 (2026-08-31, venue_lab.json) — 목표(RMS<5mm)를 못 채웠고, 원인은
-캘리브레이션 절차가 아니라 팔 자체의 기구학적 한계로 확인됨.**
+**현재 적용 결과 (2026-09-08, `venue_lab.json`) — 사용자가 gate 미달을 인지하고
+승인한 9점 fit이다.**
 
 - 순수 체스판 코너(카메라 광학만, FK 없음)로 맞춘 homography는 잔차 RMS
   0.4mm — 카메라·계산식은 문제없다는 뜻.
-- 반면 FK 기반 9점 캘리브레이션은 z(그립 높이)를 std 8.0mm→1.4mm로 훨씬
-  일관되게 잡았는데도 **RMS 9.5mm, 최악 LOO 32mm로 개선되지 않았다.**
-  즉 오차는 손목 기울기(orientation) 문제가 아니라, **관절 각도 조합마다
-  FK(관절각→좌표 계산)가 실제 팔 치수와 어긋나는 정도가 다르기 때문** —
-  URDF 모델과 이 개체의 실제 기구가 위치마다 다르게 안 맞는, 캘리브레이션을
-  다시 찍어도 없어지지 않는 하드웨어성 오차다.
+- 활성 fit은 **RMS 8.18mm, 최악 LOO 26.64mm, grasp-z 표준편차 6.82mm**다.
+  물리 그리퍼 기준점과 URDF `gripper_frame_link`의 대응은 아직 검증되지 않았다.
+  과거 2026-08-31의 15점 fit과 원인 가설은
+  `docs/report/CV_IK_전환_정리.md`에 당시 기록으로 보존한다.
 - **결론: 이 오차 규모(RMS~10mm, 최악 ~30mm)를 전제로 설계한다.** 재캘리브레이션에
   시간을 더 쓰지 않는다. §7의 IK/파지 설계가 이 오차를 흡수해야 한다
-  (그리퍼를 넉넉히 열기, 파지 직전 카메라로 한 번 더 확인해 위치 보정,
-  FSM의 기존 재시도 로직으로 실패 흡수 — 매번 완벽할 필요는 없다).
+  (그리퍼를 넉넉히 열기, FSM의 기존 재시도 로직으로 실패 흡수 — 매번 완벽할
+  필요는 없다).
 
 ## §7 역기구학 (IK)
 
@@ -156,11 +174,10 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
 
 **주의: 위 "0.00mm 수렴"은 URDF 모델 안에서의 시뮬레이션 결과다.** 실제
 팔에서는 §6에서 실측한 대로 위치마다 RMS~10mm, 최악 ~30mm의 FK 오차가
-있다. 따라서 IK 하나만으로 정확히 파지 지점에 도달한다고 가정하지 않는다
-— PICK 시퀀스는 블록 상공에서 한 번 더 카메라로 확인해 최종 XY를 보정하는
-닫힌 루프 단계를 포함해야 한다(같은 `PlaneCalibration`으로 같은 방향의
-편향이 걸리므로 완전히 새로운 오차원은 아니지만, 무보정보다는 안전하다).
-그래도 놓치는 경우는 VERIFY 실패 → SELECT 재시도 로직(§3)이 흡수한다.
+있다. 따라서 IK 하나만으로 정확히 파지 지점에 도달한다고 가정하지 않는다.
+현재 production PICK은 최초 fresh frame에서 만든 중심·재시도 후보를 실행하고,
+VERIFY 실패 뒤 HOME→SELECT에서 새 프레임으로 다시 검출한다. 파지 직전 근접
+재검출은 아직 구현되지 않았으므로 구현된 것처럼 문서화하지 않는다.
 
 ## §8 카메라
 
@@ -181,8 +198,9 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
 
 - 검출은 homography로 정사영한 **미터법 뷰**에서 수행한다. 따라서 모든 임계값이
   mm 단위이며 카메라 위치와 무관하다.
-- `configs/default.yaml`의 HSV 값은 **합성 픽스처 기준값이다.** 실사용 전
-  `tools/view_detect.py`로 실제 조명에서 반드시 재튜닝한다.
+- `configs/default.yaml`의 green/blue와 색 prototype은 실장비 프레임에서
+  조정했지만 red/yellow/wood HSV gate 일부는 합성 기준이 남아 있다. 세션 조명이
+  바뀌면 `tools/view_detect.py`로 다시 확인한다.
 - 맞닿은 동색 블록은 컨투어가 병합된다. 면적이 단일 블록의 ~2배인 블롭은
   분할하거나, 다음 사이클 재검출에 맡긴다(FSM이 매 사이클 재검출하므로 한 개를
   치우면 자연 분리된다).
