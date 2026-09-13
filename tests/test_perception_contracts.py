@@ -1,5 +1,7 @@
 """Perception contracts."""
 
+import math
+
 import cv2
 import numpy as np
 import pytest
@@ -168,6 +170,20 @@ def test_blocks_outside_the_reach_sector_are_not_reported():
     shifted = PerceptionConfig(workspace_radius_mm=100.0)
     assert detector._in_workspace((250.0, 0.0), shifted, (200.0, 0.0))
     assert not detector._in_workspace((250.0, 0.0), shifted, (0.0, 0.0))
+
+
+def test_workspace_uses_angle_dependent_reach_envelope():
+    cfg = PerceptionConfig(
+        workspace_radius_mm=320.0,
+        workspace_angle_min_deg=-90.0,
+        workspace_angle_max_deg=90.0,
+        workspace_radius_by_angle_mm=[[-90.0, 250.0], [0.0, 320.0], [90.0, 270.0]],
+    )
+    base = (0.0, 0.0)
+    assert detector._in_workspace((300.0, 0.0), cfg, base)
+    angle = math.radians(90.0)
+    assert detector._in_workspace((260.0 * math.cos(angle), 260.0 * math.sin(angle)), cfg, base)
+    assert not detector._in_workspace((280.0 * math.cos(angle), 280.0 * math.sin(angle)), cfg, base)
 
 
 def test_only_one_block_of_each_colour_survives():

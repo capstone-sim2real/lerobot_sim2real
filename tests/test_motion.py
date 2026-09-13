@@ -44,6 +44,7 @@ def test_jaw_frame_offsets_rotate_with_the_jaws_only_when_enabled():
     the sharpest possible statement of the difference."""
     cfg = AppConfig()
     cfg.motion.grasp_radial_offset_mm = 10.0
+    cfg.motion.grasp_forward_offset_mm = 0.0
     cfg.motion.grasp_tangential_offset_mm = 0.0
     cfg.motion.left_half_radial_offset_mm = 0.0
     cfg.motion.left_half_tangential_offset_mm = 0.0
@@ -198,30 +199,38 @@ def _run_queue(monkeypatch, plan, outcomes):
     return held, tried
 
 
-def test_blocked_descent_promotes_the_sideways_points(monkeypatch):
-    """Stopping short means the depth was right and only the lateral was off."""
+def test_retries_start_from_the_farthest_point_even_after_a_blocked_descent(monkeypatch):
     held, tried = _run_queue(
         monkeypatch, _cardinal_plan(),
         {"centre": GraspOutcome.BLOCKED, "right": GraspOutcome.HELD},
     )
     assert held is not None and held.label == "right"
-    # left/right jump ahead of the reach-only points
-    assert tried == ["centre", "left", "right"]
+    assert tried == ["centre", "front", "left", "right"]
 
 
-def test_blocked_descent_promotion_reaches_past_a_reach_only_point(monkeypatch):
-    """With left already first, the promotion must still pull 'right' forward."""
+def test_blocked_descent_does_not_override_the_farthest_first_order(monkeypatch):
     _, tried = _run_queue(
         monkeypatch, _cardinal_plan(),
         {"left": GraspOutcome.BLOCKED, "front": GraspOutcome.HELD},
     )
-    # 'right' is promoted ahead of 'back', which only changes reach
-    assert tried == ["centre", "left", "right", "back", "front"]
+    assert tried == ["centre", "front"]
 
 
-def test_plain_failure_keeps_the_configured_order(monkeypatch):
+def test_plain_failure_tries_front_sides_then_back(monkeypatch):
     _, tried = _run_queue(monkeypatch, _cardinal_plan(), {})
-    assert tried == ["centre", "left", "back", "right", "front"]
+    assert tried == ["centre", "front", "left", "right", "back"]
+
+
+def test_default_pick_bias_includes_a_fixed_extra_ten_mm_forward_offset():
+    cfg = AppConfig()
+    assert cfg.motion.grasp_radial_offset_mm == pytest.approx(12.0)
+    assert cfg.motion.grasp_forward_offset_mm == pytest.approx(10.0)
+
+    detected = (200.0, 0.0)
+    full = biased_grasp_xy(cfg.motion, *detected, scale=1.0)
+    reduced = biased_grasp_xy(cfg.motion, *detected, scale=0.0)
+    assert full[0] == pytest.approx(222.0)
+    assert reduced[0] == pytest.approx(210.0)
 
 
 def _fast_motion(**overrides):
@@ -354,8 +363,9 @@ def test_reduced_bias_keeps_the_sideways_correction():
     det = (200.0, 80.0)  # left half
     full = biased_grasp_xy(cfg, *det, scale=1.0)
     none = biased_grasp_xy(cfg, *det, scale=0.0)
-    # radial shrinks to nothing...
-    assert math.hypot(*none) == pytest.approx(math.hypot(*det), abs=0.5)
+    # The old radial correction shrinks away, but the explicit +10mm F
+    # instruction remains.
+    assert math.hypot(*none) == pytest.approx(math.hypot(*det) + cfg.grasp_forward_offset_mm, abs=0.5)
     assert math.hypot(*full) > math.hypot(*det) + 20.0
     # ...while the sideways component survives untouched
     def tangential_of(p):

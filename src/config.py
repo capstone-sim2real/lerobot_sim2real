@@ -158,6 +158,18 @@ class PerceptionConfig:
     workspace_radius_mm: float = 320.0
     workspace_angle_min_deg: float = -90.0
     workspace_angle_max_deg: float = 90.0
+    # Optional [azimuth_deg, max_raw_block_radius_mm] samples. When present,
+    # they replace the circular outer edge with a polar envelope; the scalar
+    # radius remains a hard cap. Venue defaults are generated from the same
+    # corrected PICK + grasp-bias + TopDownIK path used by Task 1.
+    workspace_radius_by_angle_mm: list[list[float]] = field(
+        default_factory=lambda: [
+            [-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
+            [-40, 307], [-30, 311], [-20, 313], [-10, 315], [0, 315],
+            [10, 315], [20, 313], [30, 309], [40, 305], [50, 300],
+            [60, 296], [70, 288], [80, 283], [90, 275],
+        ]
+    )
 
 
 @dataclass
@@ -288,8 +300,12 @@ class MotionConfig:
     # gripper_frame_offset): radial = away from the base, tangential = the
     # gripper's own left. The detector reports the block centre, but the jaws
     # were measured closing on its near edge (~5-10mm into a 40mm block
-    # instead of ~20mm), so the grasp point is pushed outward.
+    # instead of ~20mm), so the grasp point is pushed outward. This measured
+    # bias may be reduced by the reachability fallback.
     grasp_radial_offset_mm: float = 12.0
+    # Additional F/forward offset requested for every block and retry. Unlike
+    # the measured bias above, this part survives reachability bias scaling.
+    grasp_forward_offset_mm: float = 10.0
     # Uniform +10mm toward the gripper-relative left (the tangent of the
     # base-centred reach circle), applied to every block and every retry.
     grasp_tangential_offset_mm: float = 10.0
@@ -322,16 +338,14 @@ class MotionConfig:
     # worse further out; turn it on only with a before/after measurement.
     left_ramp_radial_mm_per_100mm: float = 0.0
     left_ramp_tangential_mm_per_100mm: float = 0.0
-    # Retry grasp points as (radial, tangential) mm from the biased centre,
-    # tried in order: left, back, right, front — counter-clockwise from the
-    # left in the gripper frame (+tangential is left, +radial is further out).
+    # Retry grasp points as (radial, tangential) mm from the biased centre.
+    # The runtime sorts these by the F/back component, farthest first
+    # (+tangential is left, +radial is further out).
     # 15mm is the full half-gap the 70mm jaws leave around a 40mm block, so a
     # retry lands dead centre when the aim was off by that much in that
     # direction, and still just contains the block when the aim was right.
-    # Sideways first: the left half carries the extra bias correction and is
-    # where the aim is least certain, and a sideways miss is the one a
-    # blocked descent also points at. Labels are derived from the signs, so
-    # diagonals work here too. Empty disables retrying.
+    # Labels are derived from the signs, so diagonals work here too. Empty
+    # disables retrying.
     grasp_retry_offsets_mm: list[list[float]] = field(
         default_factory=lambda: [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
     )
@@ -379,7 +393,7 @@ class IkConfig:
     ik_iters: int = 8
     # reject a solve whose achieved pose misses the target by more than this
     # (signals the target is outside the top-down-reachable workspace)
-    max_position_error_mm: float = 15.0
+    max_position_error_mm: float = 20.0
     max_tilt_error_deg: float = 6.0
 
 
@@ -457,22 +471,123 @@ class Task1Config:
     slot_radial_offset_mm: list[float] = field(
         default_factory=lambda: [20.0, 20.0, 20.0, 20.0, 20.0]
     )
-    # The oblique top camera increasingly under-estimates reach at the far
-    # edge. Keep near picks untouched, then add a radial correction which
-    # reaches max_offset_mm at max_radius_mm.
-    pick_correction_start_radius_mm: float = 200.0
-    pick_correction_max_radius_mm: float = 320.0
-    pick_correction_max_offset_mm: float = 20.0
+    # Picks take no distance-ramped radial correction any more -- both the
+    # oblique-camera ramp and the P-row front offsets over-corrected in the
+    # field. Only an ultra-near band still gets a flat outward boost, cut
+    # hard at the boundary. Of the measured points P1 (157 mm) is the sole
+    # one inside 175 mm; P8 (196 mm) is the next closest and takes nothing.
+    pick_near_boost_max_radius_mm: float = 175.0
+    pick_near_boost_mm: float = 20.0
     # At long reach a perfectly vertical gripper saturates wrist_flex near
     # +95 deg. Gradually tip the approach axis radially outward so the wrist
     # opens while remaining within ik.max_tilt_error_deg.
     pick_tilt_start_radius_mm: float = 280.0
     pick_tilt_max_radius_mm: float = 320.0
+    # Outward target-axis tilt applied at every Task-1 pick. This opens
+    # wrist_flex through IK while preserving the requested Cartesian point;
+    # placement keeps its original far-reach-only tilt ramp.
+    pick_tilt_base_deg: float = 3.0
     pick_tilt_max_deg: float = 5.0
     # Assumption pending hardware measurement: release just above the
     # calibrated pick plane instead of driving the held block into the table.
     release_clearance_mm: float = 5.0
 
+
+@dataclass
+class Task2Config:
+    """Stack every block at one point; only PLACE differs from Task 1.
+
+    SELECT/PICK/VERIFY and the pick corrections are read from ``task1`` --
+    Task 2 *is* Task 1's gather pipeline with a single destination
+    (AGENTS.md §3 §4). Only the tower geometry and the contact descent live
+    here.
+    """
+
+    # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
+    # zone edge nearest the base. The top-down envelope collapses with reach
+    # (measured: ~90mm of lift at 195mm against ~50mm at 285mm), so every
+    # millimetre pulled in buys tower height.
+    stack_uv: list[float] = field(default_factory=lambda: [0.50, 0.86])
+    # Task 1's measured command under-reach. Needed here not for accuracy --
+    # a tower only needs consistency -- but so the block physically lands
+    # inside zone_polygon_mm, which is what makes the detector ignore it.
+    stack_radial_offset_mm: float = 20.0
+    block_height_mm: float = 20.0  # AGENTS.md §1
+    # Ceiling on the pre-solved ladder, not a promise: levels the IK cannot
+    # reach are reported by the dry-run, never silently clipped.
+    max_levels: int = 5
+
+    # Assumption pending hardware measurement: smaller than task1's 5.0mm,
+    # because a drop that a table absorbs will topple a tower.
+    release_clearance_mm: float = 2.0
+    # Task 2 does not use contact-seeking descent. Every level goes straight
+    # to the solved release height and opens. Keep this compatibility field
+    # fixed at zero so older CLI/config plumbing fails loudly if it tries to
+    # re-enable the removed mode.
+    contact_descent_levels: int = 0
+
+    # Assumption pending hardware measurement. Three numbers have to sit in
+    # one order for a landing to be detectable at all:
+    #
+    #   loaded trail  <  contact_shortfall  <  descent_max_lag  <  overshoot
+    #
+    # A block meeting the tower stops the arm ``place_overshoot_mm`` above the
+    # commanded goal. If that gap is smaller than the lag we tolerate, a
+    # perfect stack reads as "no contact" -- the descent stops in the right
+    # place either way, but the backoff never runs and the log lies. Overshoot
+    # is in mm and the other two in joint action units, so the ordering can
+    # only be confirmed on the arm: watch `shortfall` in stack_contacts.
+    place_overshoot_mm: float = 12.0
+
+    # Hover search bounds above the nominal release height. motion.hover_*
+    # assumes a table-height target; 120mm above level four is far outside
+    # the envelope and only burns failing IK solves. The lower bound is also
+    # the clearance the held block has over the tower top on the way in.
+    hover_clearance_mm: float = 45.0
+    hover_min_clearance_mm: float = 15.0
+    # Hover poses are gated harder than ik.max_position_error_mm: a hover
+    # reported 12mm short would eat most of the clearance budget and make
+    # the tower gap fictional (see control/grasp.py).
+    hover_gate_mm: float = 3.0
+    # Floor the hover search may be squeezed to when the preferred band above
+    # is outside the arm's ceiling. Top-down lift collapses with height, so an
+    # upper level often solves 10mm over the tower but not 15mm. Refusing the
+    # level costs a whole block; approaching lower costs clearance we still
+    # have. Only a release pose that itself misses stops the ladder now.
+    hover_squeeze_clearance_mm: float = 8.0
+    # Below this, there is not enough travel between hover and floor for a
+    # descent to prove anything.
+    min_descent_travel_mm: float = 8.0
+
+    # Tilt the approach axis outward as the target rises, releasing the
+    # wrist_flex saturation that caps top-down lift (AGENTS.md §7). Late and
+    # small: a tilted release lands the block on an edge.
+    level_tilt_start_level: int = 2
+    level_tilt_per_level_deg: float = 1.5
+    level_tilt_max_deg: float = 5.0
+
+    # Assumption pending hardware measurement: motion.descent_max_lag (8.0)
+    # was tuned for an empty gripper; a carried block adds steady-state lag,
+    # and too small a value reads as a jam on the first tick.
+    descent_max_lag: float = 10.0
+    # How far short of the goal still counts as having landed. Must clear the
+    # loaded steady-state trail (motion.descent_blocked_tol = 4.0 was tuned
+    # empty-handed and is too tight) but stay under descent_max_lag. Assumption
+    # pending measurement; erring high is the safer mistake, because a missed
+    # landing skips the backoff that relieves servo pressure before the jaws
+    # open, while a false one only mislabels a release that happens anyway.
+    contact_shortfall: float = 6.0
+    # motion.descent_settle_s (5.0) would lean on the tower for five seconds
+    # after a soft landing that never tripped the lag watch.
+    descent_settle_s: float = 0.4
+    # Number of descend() calls the descent is split into, with one
+    # read_loads() between. Keep at 1: a per-tick read_loads once stranded
+    # the arm partway down (control/trajectory.py), and chunking also
+    # weakens the lag watch, which cannot accumulate across a call boundary.
+    descent_probe_segments: int = 1
+    # Contact in the top part of the descent is a mis-stack, not a landing.
+    min_descent_fraction: float = 0.5
+    max_descent_retries: int = 1
 
 @dataclass
 class LoggingConfig:
@@ -560,6 +675,7 @@ class AppConfig:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     fsm: FsmConfig = field(default_factory=FsmConfig)
     task1: Task1Config = field(default_factory=Task1Config)
+    task2: Task2Config = field(default_factory=Task2Config)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     calibration_capture: CalibrationCaptureConfig = field(
@@ -603,6 +719,7 @@ def load_config(
         apply_override(cfg, override)
     validate_perception_colors(cfg.perception)
     validate_task1(cfg)
+    validate_task2(cfg)
     return cfg
 
 
@@ -635,6 +752,27 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
             "perception.workspace_angle_max_deg must be greater than "
             "workspace_angle_min_deg"
         )
+    profile = cfg.workspace_radius_by_angle_mm
+    if profile:
+        if any(len(pair) != 2 for pair in profile):
+            raise ValueError(
+                "perception.workspace_radius_by_angle_mm entries must be "
+                "[azimuth_deg, radius_mm]"
+            )
+        angles = [float(pair[0]) for pair in profile]
+        radii = [float(pair[1]) for pair in profile]
+        if any(b <= a for a, b in zip(angles, angles[1:])):
+            raise ValueError(
+                "perception.workspace_radius_by_angle_mm angles must increase"
+            )
+        if angles[0] > cfg.workspace_angle_min_deg or angles[-1] < cfg.workspace_angle_max_deg:
+            raise ValueError(
+                "perception.workspace_radius_by_angle_mm must cover the workspace angle range"
+            )
+        if any(radius <= 0 for radius in radii):
+            raise ValueError(
+                "perception.workspace_radius_by_angle_mm radii must be positive"
+            )
 
 
 def validate_task1(cfg: AppConfig) -> None:
@@ -652,22 +790,19 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError("task1.slot_radial_offset_mm must have one value per slot_uv")
     if any(offset < 0 for offset in cfg.task1.slot_radial_offset_mm):
         raise ValueError("task1.slot_radial_offset_mm values must be non-negative")
-    if cfg.task1.pick_correction_start_radius_mm < 0:
-        raise ValueError("task1.pick_correction_start_radius_mm must be non-negative")
-    if (
-        cfg.task1.pick_correction_max_radius_mm
-        <= cfg.task1.pick_correction_start_radius_mm
-    ):
-        raise ValueError(
-            "task1.pick_correction_max_radius_mm must exceed pick_correction_start_radius_mm"
-        )
-    if cfg.task1.pick_correction_max_offset_mm < 0:
-        raise ValueError("task1.pick_correction_max_offset_mm must be non-negative")
+    if cfg.task1.pick_near_boost_max_radius_mm < 0:
+        raise ValueError("task1.pick_near_boost_max_radius_mm must be non-negative")
+    if cfg.task1.pick_near_boost_mm < 0:
+        raise ValueError("task1.pick_near_boost_mm must be non-negative")
     if cfg.task1.pick_tilt_start_radius_mm < 0:
         raise ValueError("task1.pick_tilt_start_radius_mm must be non-negative")
     if cfg.task1.pick_tilt_max_radius_mm <= cfg.task1.pick_tilt_start_radius_mm:
         raise ValueError(
             "task1.pick_tilt_max_radius_mm must exceed pick_tilt_start_radius_mm"
+        )
+    if not 0 <= cfg.task1.pick_tilt_base_deg <= cfg.task1.pick_tilt_max_deg:
+        raise ValueError(
+            "task1.pick_tilt_base_deg must be between zero and pick_tilt_max_deg"
         )
     if not 0 <= cfg.task1.pick_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError(
@@ -675,6 +810,65 @@ def validate_task1(cfg: AppConfig) -> None:
         )
 
 
+def validate_task2(cfg: AppConfig) -> None:
+    if len(cfg.task2.stack_uv) != 2:
+        raise ValueError("task2.stack_uv must be a single [u, v] pair")
+    if not all(0.0 < float(coord) < 1.0 for coord in cfg.task2.stack_uv):
+        raise ValueError("task2.stack_uv must be strictly inside the zone")
+    if cfg.task2.stack_radial_offset_mm < 0:
+        raise ValueError("task2.stack_radial_offset_mm must be non-negative")
+    if cfg.task2.block_height_mm <= 0:
+        raise ValueError("task2.block_height_mm must be positive")
+    if cfg.task2.max_levels < 1:
+        raise ValueError("task2.max_levels must be at least one")
+    if cfg.task2.contact_descent_levels != 0:
+        raise ValueError(
+            "task2.contact_descent_levels must be 0; Task 2 contact descent is disabled"
+        )
+    if cfg.task2.release_clearance_mm < 0:
+        raise ValueError("task2.release_clearance_mm must be non-negative")
+    if cfg.task2.place_overshoot_mm <= cfg.task2.release_clearance_mm:
+        raise ValueError(
+            "task2.place_overshoot_mm must exceed release_clearance_mm so the "
+            "descent goal sits below the nominal landing surface and contact "
+            "always fires before the goal (AGENTS.md §5)"
+        )
+    if not 0 < cfg.task2.hover_min_clearance_mm < cfg.task2.hover_clearance_mm:
+        raise ValueError(
+            "task2.hover_min_clearance_mm must be positive and below hover_clearance_mm"
+        )
+    if cfg.task2.hover_gate_mm <= 0:
+        raise ValueError("task2.hover_gate_mm must be positive")
+    if not 0 < cfg.task2.hover_squeeze_clearance_mm <= cfg.task2.hover_min_clearance_mm:
+        raise ValueError(
+            "task2.hover_squeeze_clearance_mm must be positive and at most "
+            "hover_min_clearance_mm"
+        )
+    if cfg.task2.min_descent_travel_mm <= 0:
+        raise ValueError("task2.min_descent_travel_mm must be positive")
+    if cfg.task2.level_tilt_start_level < 1:
+        raise ValueError("task2.level_tilt_start_level must be at least one")
+    if cfg.task2.level_tilt_per_level_deg < 0:
+        raise ValueError("task2.level_tilt_per_level_deg must be non-negative")
+    if not 0 <= cfg.task2.level_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
+        raise ValueError(
+            "task2.level_tilt_max_deg must be between zero and ik.max_tilt_error_deg"
+        )
+    if cfg.task2.descent_max_lag <= 0:
+        raise ValueError("task2.descent_max_lag must be positive")
+    if not 0 < cfg.task2.contact_shortfall < cfg.task2.descent_max_lag:
+        raise ValueError(
+            "task2.contact_shortfall must be positive and below descent_max_lag: "
+            "a landing has to register before the descent gives up on the arm"
+        )
+    if cfg.task2.descent_settle_s < 0:
+        raise ValueError("task2.descent_settle_s must be non-negative")
+    if cfg.task2.descent_probe_segments < 1:
+        raise ValueError("task2.descent_probe_segments must be at least one")
+    if not 0.0 <= cfg.task2.min_descent_fraction < 1.0:
+        raise ValueError("task2.min_descent_fraction must be in [0, 1)")
+    if cfg.task2.max_descent_retries < 0:
+        raise ValueError("task2.max_descent_retries must be non-negative")
 def apply_override(cfg: AppConfig, override: str) -> None:
     """Apply one ``a.b.c=value`` override in place.
 

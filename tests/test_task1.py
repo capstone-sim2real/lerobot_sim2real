@@ -8,9 +8,16 @@ import pytest
 
 from config import AppConfig
 from control.ik import IkResult
+from control.grasp import GraspAttempt
 from control.task1_transport import Task1TransportPlanner, push_out_from_base
 from fsm.states import RunContext, StateName
-from fsm.task1 import Task1Perception, Task1SelectState, corrected_pick_xy, far_reach_tilt_deg
+from fsm.task1 import (
+    Task1Perception,
+    Task1SelectState,
+    Task1TransportState,
+    corrected_pick_xy,
+    far_reach_tilt_deg,
+)
 from perception import BlockDetection, PlaneCalibration, detect_blocks, detect_zone_inner_polygon
 from perception.zone import point_in_zone, zone_slot_centres
 
@@ -104,26 +111,72 @@ def test_outside_detection_resets_timeout_and_uses_colour_as_identity(monkeypatc
 
     assert state.step(ctx) is StateName.PICK
     assert ctx.target_id == "blue"
-    assert ctx.extras["task1_slot_by_color"] == {"blue": 0}
+    assert "task1_slot_by_color" not in ctx.extras
+    assert "task1_slot_index" not in ctx.extras
     assert motion.home_calls == 1
 
 
-def test_task1_pick_correction_grows_radially_to_twenty_mm():
+def test_task1_assigns_slots_in_verified_grasp_order():
+    cfg = AppConfig()
+    result = IkResult({"wrist_flex": 0.0}, position_error_mm=0.0, tilt_error_deg=0.0)
+    held = GraspAttempt("centre", (0.0, 0.0), (100.0, 0.0), result, result, True)
+
+    class Planner:
+        def __init__(self):
+            self.indices = []
+
+        def plan(self, _held, slot_index):
+            self.indices.append(slot_index)
+            slot = type("Slot", (), {"index": slot_index, "hover": result})()
+            return type("Plan", (), {"slot": slot, "carry": ()})()
+
+    class Player:
+        def move_to(self, *_args, **_kwargs):
+            pass
+
+    planner = Planner()
+    state = Task1TransportState(planner, Player(), cfg)
+    ctx = RunContext(cfg.fsm)
+    ctx.extras["ik_pick_attempt"] = held
+
+    # A failed selection never reaches TRANSPORT, so green consumes no slot.
+    ctx.target_id = "wood"
+    assert state.step(ctx) is StateName.PLACE
+    ctx.target_id = "blue"
+    assert state.step(ctx) is StateName.PLACE
+    ctx.target_id = "green"
+    assert state.step(ctx) is StateName.PLACE
+
+    assert planner.indices == [0, 1, 2]
+    assert ctx.extras["task1_slot_by_color"] == {"wood": 0, "blue": 1, "green": 2}
+
+
+def test_task1_pick_boosts_only_the_ultra_near_band():
     cfg = AppConfig()
     base = (0.0, 0.0)
 
-    assert corrected_pick_xy((180.0, 0.0), base, cfg) == (180.0, 0.0)
-    assert corrected_pick_xy((260.0, 0.0), base, cfg) == pytest.approx((270.0, 0.0))
-    corrected = corrected_pick_xy((0.0, 320.0), base, cfg)
-    assert corrected == pytest.approx((0.0, 340.0))
+    # Inside the ultra-near radius the pick is pushed a flat 20 mm outward.
+    assert corrected_pick_xy((100.0, 0.0), base, cfg) == pytest.approx((120.0, 0.0))
+    assert corrected_pick_xy((0.0, 157.0), base, cfg) == pytest.approx((0.0, 177.0))
+    assert corrected_pick_xy((175.0, 0.0), base, cfg) == pytest.approx((195.0, 0.0))
+
+    # Past it every reach is commanded raw -- no ramp, no per-row offset.
+    for radius in (175.1, 196.0, 238.0, 275.0, 302.0, 320.0):
+        assert corrected_pick_xy((radius, 0.0), base, cfg) == pytest.approx(
+            (radius, 0.0)
+        )
+
+    # The boost keeps its direction when the block is off-axis.
+    corrected = corrected_pick_xy((60.0, 80.0), base, cfg)
+    assert corrected == pytest.approx((72.0, 96.0))
 
 
-def test_task1_far_reach_tilt_opens_only_at_long_reach():
+def test_task1_tilt_opens_everywhere_and_increases_at_long_reach():
     cfg = AppConfig()
     base = (0.0, 0.0)
 
-    assert far_reach_tilt_deg((270.0, 0.0), base, cfg) == 0.0
-    assert far_reach_tilt_deg((300.0, 0.0), base, cfg) == pytest.approx(-2.5)
+    assert far_reach_tilt_deg((270.0, 0.0), base, cfg) == pytest.approx(-3.0)
+    assert far_reach_tilt_deg((300.0, 0.0), base, cfg) == pytest.approx(-4.0)
     assert far_reach_tilt_deg((340.0, 0.0), base, cfg) == pytest.approx(-5.0)
 
 
@@ -131,7 +184,8 @@ def test_task1_selection_corrects_pick_only_not_active_detections(monkeypatch):
     cfg = AppConfig()
     cfg.task1.scan_interval_s = 0.0
     monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
-    raw = _block("red", 320.0, 0.0)
+    # Ultra-near, so the boost is live and the two centres must differ.
+    raw = _block("red", 150.0, 0.0)
     state = Task1SelectState(
         _Motion(), lambda: Task1Perception([raw], 1, 1000.0), _calibration(), cfg
     )
@@ -140,9 +194,9 @@ def test_task1_selection_corrects_pick_only_not_active_detections(monkeypatch):
 
     assert state.step(ctx) is StateName.PICK
     selection = ctx.extras["selection"]
-    assert selection.target.center_mm == pytest.approx((340.0, 0.0))
-    assert selection.detections[0].center_mm == (320.0, 0.0)
-    assert ctx.extras["task1_pick_radial_tilt_deg"] == pytest.approx(-5.0)
+    assert selection.target.center_mm == pytest.approx((170.0, 0.0))
+    assert selection.detections[0].center_mm == (150.0, 0.0)
+    assert ctx.extras["task1_pick_radial_tilt_deg"] == pytest.approx(-3.0)
 
 
 def test_skipped_colour_is_deferred_for_one_sweep_not_abandoned(monkeypatch):
@@ -211,6 +265,16 @@ def test_task1_all_slots_are_commanded_twenty_mm_farther():
     assert planner.slots[0].xy_mm == pytest.approx(
         push_out_from_base(raw[0], calib.base_xy_mm, 20.0)
     )
+
+
+def test_pick_base_tilt_is_not_applied_to_near_placement_slots():
+    cfg = AppConfig()
+    planner = Task1TransportPlanner(_calibration(), cfg, _AlwaysReachableIk())
+
+    for slot in planner.slots:
+        radius = np.hypot(*slot.xy_mm)
+        if radius <= cfg.task1.pick_tilt_start_radius_mm:
+            assert slot.radial_tilt_deg == 0.0
 
 
 def test_red_tape_inner_hole_can_be_registered_without_a_block_model():

@@ -18,6 +18,7 @@ import numpy as np
 
 from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_config
 from control.grasp import biased_grasp_xy, grasp_candidate_points
+from perception.detector import workspace_radius_at_angle
 from perception import (
     BlockDetection,
     PlaneCalibration,
@@ -53,22 +54,30 @@ def workspace_boundary_metadata(
         raise ValueError("workspace sample_step_deg must be positive")
 
     lo, hi = perception.workspace_angle_min_deg, perception.workspace_angle_max_deg
-    radius = perception.workspace_radius_mm
     count = max(2, int(math.ceil((hi - lo) / cfg.sample_step_deg)) + 1)
     angles_deg = np.linspace(lo, hi, count)
     angles_rad = np.radians(angles_deg)
+    radii = np.asarray(
+        [workspace_radius_at_angle(perception, angle) for angle in angles_deg],
+        dtype=np.float64,
+    )
     base_x, base_y = calibration.base_xy_mm or (0.0, 0.0)
     points_mm = np.column_stack(
         [
-            base_x + radius * np.cos(angles_rad),
-            base_y + radius * np.sin(angles_rad),
+            base_x + radii * np.cos(angles_rad),
+            base_y + radii * np.sin(angles_rad),
         ]
     )
     points_px = calibration.board_to_pixel(points_mm)
     base_px = calibration.board_to_pixel(np.asarray([[base_x, base_y]], dtype=np.float64))
     return {
-        "kind": "nominal_topdown_outer",
-        "radius_mm": float(radius),
+        "kind": (
+            "ik_reach_envelope"
+            if perception.workspace_radius_by_angle_mm
+            else "nominal_topdown_outer"
+        ),
+        "radius_mm": float(radii[len(radii) // 2]),
+        "label": "IK reach" if perception.workspace_radius_by_angle_mm else None,
         "angle_min_deg": float(lo),
         "angle_max_deg": float(hi),
         "points_px": _point_list(points_px),

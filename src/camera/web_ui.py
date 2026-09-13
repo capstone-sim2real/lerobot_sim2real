@@ -483,7 +483,8 @@ _PAGE = """<!doctype html>
           const arc = boundary.points_px;
           drawPolyline(context, arc, '#ff9800', 2.5);
           const middle = arc[Math.floor(arc.length / 2)];
-          drawText(context, `${Number(boundary.radius_mm).toFixed(0)} mm`, [middle[0] + 8, middle[1] - 8], '#ff9800');
+          const boundaryLabel = boundary.label || `${Number(boundary.radius_mm).toFixed(0)} mm`;
+          drawText(context, boundaryLabel, [middle[0] + 8, middle[1] - 8], '#ff9800');
           if (boundary.base_px && arc.length >= 2) {
             const first = arc[0];
             const last = arc[arc.length - 1];

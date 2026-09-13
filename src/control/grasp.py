@@ -20,7 +20,6 @@ they coincide with the board axes; toward either side they do not.
 from __future__ import annotations
 
 import math
-from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
@@ -131,15 +130,32 @@ def highest_reachable_hover(
     cfg: AppConfig,
     yaw_deg: float | None = None,
     radial_tilt_deg: float = 0.0,
+    clearance_mm: float | None = None,
+    min_clearance_mm: float | None = None,
 ) -> float:
     """Find the highest genuinely reachable top-down hover at this point.
 
     Pass the same ``yaw_deg`` the grasp will use: the hover must hold the
     jaw plane the descent is about to keep, and an explicit yaw also skips
     the neutral probe solve that ``yaw_deg=None`` runs on every call.
+
+    ``clearance_mm``/``min_clearance_mm`` override the search bounds. The
+    ``motion.hover_*`` defaults assume a target at table height; stacking
+    aims at a tower top, where searching 120mm above it is outside the
+    envelope entirely and only burns failing solves.
+
+    NOTE: when nothing solves this returns ``floor`` -- an *unreachable*
+    height that looks like an answer. Callers must re-gate the pose they
+    then solve at it.
     """
-    z_mm = base_z_mm + cfg.motion.hover_clearance_mm
-    floor = base_z_mm + cfg.motion.hover_min_clearance_mm
+    ceiling = cfg.motion.hover_clearance_mm if clearance_mm is None else clearance_mm
+    gap = (
+        cfg.motion.hover_min_clearance_mm
+        if min_clearance_mm is None
+        else min_clearance_mm
+    )
+    z_mm = base_z_mm + ceiling
+    floor = base_z_mm + gap
     while z_mm >= floor:
         # A broad IK gate accepts the calibration error budget.  Hover needs
         # a stricter check: reporting a pose that is 12mm short would make
@@ -184,7 +200,10 @@ def biased_grasp_xy(
         from_centre = (y_mm - cfg.left_half_y_mm) / 100.0
         radial += cfg.left_ramp_radial_mm_per_100mm * from_centre
         tangential += cfg.left_ramp_tangential_mm_per_100mm * from_centre
-    radial, tangential = _in_jaw_frame(cfg, radial * scale, tangential, jaw_rot_deg)
+    # The explicit F offset is a fixed instruction, not part of the older
+    # measured bias that the reachability fallback is allowed to reduce.
+    radial = cfg.grasp_forward_offset_mm + radial * scale
+    radial, tangential = _in_jaw_frame(cfg, radial, tangential, jaw_rot_deg)
     return gripper_frame_offset(x_mm, y_mm, radial, tangential)
 
 
@@ -423,12 +442,10 @@ def run_grasp_attempts(
 ) -> GraspAttempt | None:
     """Work through the planned grasp points until one holds.
 
-    A blocked descent reorders what is left rather than just moving on: the
-    descent stopping short means the depth was right and only the lateral
-    position was off, so the sideways points are promoted ahead of the ones
-    that only change reach. Unreachable candidates are dropped here instead
-    of aborting the run — only the first attempt has to clear the IK gate
-    for the pick to be worth starting.
+    The biased centre remains the first attempt. Every retry after it is
+    ordered by its F/back component, farthest first. Unreachable
+    candidates are dropped here instead of aborting the run — only the first
+    attempt has to clear the IK gate for the pick to be worth starting.
     """
     usable = [a for a in plan.attempts if a.reachable]
     for dropped in (a for a in plan.attempts if not a.reachable):
@@ -440,10 +457,17 @@ def run_grasp_attempts(
             f"grasp by {dropped.grasp.position_error_mm:.0f}mm)"
         )
     log(f"  {len(usable)} of {len(plan.attempts)} grasp points usable")
-    queue = deque(usable)
-    promoted = False
+    centre = [a for a in usable if a.label == "centre"]
+    retries = sorted(
+        (a for a in usable if a.label != "centre"),
+        # offset_mm[0] is the configured F/back axis in the gripper frame.
+        # Sorting on it makes F the first retry even when calibration error
+        # or a turned jaw makes the board-frame radius slightly misleading.
+        key=lambda a: -a.offset_mm[0],
+    )
+    queue = centre + retries
     while queue:
-        attempt = queue.popleft()
+        attempt = queue.pop(0)
         log(
             f"  attempt '{attempt.label}' at x={attempt.xy_mm[0]:.1f} "
             f"y={attempt.xy_mm[1]:.1f} (reach {math.hypot(*attempt.xy_mm):.0f}mm)"
@@ -455,11 +479,4 @@ def run_grasp_attempts(
         log(f"    -> {outcome.value.upper()}{detail}")
         if outcome is GraspOutcome.HELD:
             return attempt
-        if outcome is GraspOutcome.BLOCKED and not promoted:
-            promoted = True
-            is_sideways = lambda a: a.offset_mm[0] == 0.0 and a.offset_mm[1] != 0.0
-            sideways = [a for a in queue if is_sideways(a)]
-            if sideways:
-                log("    descent stopped short — trying the sideways points next")
-                queue = deque(sideways + [a for a in queue if not is_sideways(a)])
     return None

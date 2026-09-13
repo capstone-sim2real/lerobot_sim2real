@@ -9,8 +9,9 @@
         --set policy.server_address=100.99.252.112:8080 \
         --set policy.pretrained_name_or_path=/home/user/.../pretrained_model
 
-    # Task 2 (stack)
-    python -m runners.run_task --task 2 ...
+    # Task 2 (stack every block at one point in the zone)
+    python -m runners.run_task --task 2 --dry-run      # read the ladder FIRST
+    python -m runners.run_task --task 2 --set task2.max_levels=1
 
     # One-block CV+IK grasp smoke test; no destination poses required
     python -m runners.run_task --task 1 --flow pick_lift_lower --color green
@@ -26,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -34,13 +36,20 @@ from camera.client import fetch_snapshot, fetch_snapshot_with_metadata
 from control import MotionController, PoseRegistry, So101RobotIO
 from control.ik import TopDownIK
 from control.task1_transport import Task1TransportPlanner
+from control.task2_stack import Task2StackPlanner
 from fsm.act_handler import ActPickState
-from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_states
+from fsm.flows import (
+    build_pick_lift_lower_states,
+    build_task1_states,
+    build_task2_stack_states,
+    build_task2_states,
+)
 from fsm.ik_handler import CvIkPickState, CvIkSelectState
 from fsm.machine import StateMachine, TransitionLogger
 from fsm.states import RunContext
 from fsm.task1 import Task1Perception
 from perception import PlaneCalibration, detect_blocks, select_target
+from perception.zone import point_in_zone
 from policy import ActPolicyClient, GrpcPolicyTransport
 
 logger = logging.getLogger("run")
@@ -128,12 +137,15 @@ def run(
     motion = None
     try:
         motion = MotionController(robot, poses, cfg.motion, cfg.sensing)
-        task1_gather = task == 1 and flow == "task"
-        if task1_gather:
+        # Tasks 1 and 2 share the whole CV+IK gather pipeline; only the
+        # destination and the release differ (AGENTS.md §3 §4).
+        zone_task = task in (1, 2) and flow == "task"
+        task1_gather = zone_task and task == 1
+        if zone_task:
             if pick_mode != "cv_ik":
-                raise ValueError("Task 1 zone gathering currently requires --pick-mode cv_ik")
+                raise ValueError(f"Task {task} zone flow currently requires --pick-mode cv_ik")
             if not calib.zone_polygon_mm:
-                raise ValueError("Task 1 requires zone_polygon_mm; run so101-zone-calibrate --write")
+                raise ValueError(f"Task {task} requires zone_polygon_mm; run so101-zone-calibrate --write")
             motion.validate_poses(required=[cfg.motion.home_pose])
             retreat_pose = None
         elif flow == "pick_lift_lower":
@@ -151,7 +163,7 @@ def run(
             client = ActPolicyClient(robot, GrpcPolicyTransport(robot.robot, cfg.policy), cfg.policy)
             client.connect()  # server loads the model here, once per session
 
-        shared_ik = TopDownIK(cfg.ik, project_root=".") if task1_gather else None
+        shared_ik = TopDownIK(cfg.ik, project_root=".") if zone_task else None
         pick_state = make_pick_state(
             pick_mode,
             robot=robot,
@@ -160,7 +172,7 @@ def run(
             calib=calib,
             retreat_pose=retreat_pose,
             retreat_after_grasp=flow != "pick_lift_lower",
-            radial_tilt_extra_key="task1_pick_radial_tilt_deg" if task1_gather else None,
+            radial_tilt_extra_key="task1_pick_radial_tilt_deg" if zone_task else None,
             client=client,
             ik=shared_ik,
         )
@@ -181,6 +193,19 @@ def run(
             states = build_task1_states(
                 robot=robot, motion=motion, perceive=make_task1_perceive(calib, cfg),
                 pick_state=pick_state, cfg=cfg, calib=calib, planner=planner,
+            )
+        elif zone_task:  # task == 2
+            assert shared_ik is not None
+            stack_planner = Task2StackPlanner(calib, cfg, shared_ik)
+            logger.info(
+                "Task-2 tower at x=%.1f y=%.1f (reach %.0fmm): %d of %d levels reachable",
+                stack_planner.stack_xy_mm[0], stack_planner.stack_xy_mm[1],
+                math.dist(stack_planner.stack_xy_mm, calib.base_xy_mm or (0.0, 0.0)),
+                stack_planner.reachable_levels, cfg.task2.max_levels,
+            )
+            states = build_task2_stack_states(
+                robot=robot, motion=motion, perceive=make_task1_perceive(calib, cfg),
+                pick_state=pick_state, cfg=cfg, calib=calib, planner=stack_planner,
             )
         else:
             states = build_task2_states(
@@ -227,6 +252,12 @@ def write_summary(ctx: RunContext, task: int, run_id: str, cfg: AppConfig) -> Pa
         "task1_place_actions": ctx.extras.get("task1_place_actions"),
         "task1_slot_by_color": ctx.extras.get("task1_slot_by_color"),
         "task1_attempts_total": ctx.extras.get("task1_attempts_total"),
+        "task2_place_actions": ctx.extras.get("task2_place_actions"),
+        "task2_tower_height": ctx.extras.get("task2_tower_height"),
+        "task2_max_height_reached": ctx.extras.get("task2_max_height_reached"),
+        "task2_stop_reason": ctx.extras.get("task2_stop_reason"),
+        # Levels flown despite the ladder calling them unreachable.
+        "task2_forced_levels": ctx.extras.get("task2_forced_levels", []),
         "elapsed_s": round(ctx.elapsed_s(), 1),
         "attempts": ctx.attempts,
         "skipped": sorted(ctx.skipped),
@@ -269,6 +300,39 @@ def dry_run_task1(cfg: AppConfig) -> int:
     return 0
 
 
+def dry_run_task2(cfg: AppConfig) -> int:
+    """Preflight the whole Task-2 tower ladder without touching the motor bus.
+
+    This is the instrument that answers "how many levels fit". Top-down lift
+    collapses with reach, so the level count is an *output* of this command,
+    not an input to the design -- read it before running the arm.
+    """
+    calib = PlaneCalibration.load(cfg.perception.calibration_path)
+    if not calib.zone_polygon_mm:
+        raise ValueError("Task 2 requires zone_polygon_mm; run so101-zone-calibrate --write")
+    ik = TopDownIK(cfg.ik, project_root=".")
+    planner = Task2StackPlanner(calib, cfg, ik)
+
+    print("Task 2 dry-run (no robot connection, no motion)")
+    print(planner.describe())
+    inside = point_in_zone(planner.raw_xy_mm, calib)
+    print(
+        "\nlanding point inside zone_polygon_mm: "
+        + ("yes" if inside else "NO -- placed blocks stay visible to SELECT")
+    )
+
+    frame = fetch_snapshot(cfg.perception.snapshot_url)
+    detections = detect_blocks(frame, calib, cfg.perception, is_rgb=False)
+    print("\nactive outside-zone detections:")
+    if detections:
+        for detection in detections:
+            x, y = detection.center_mm
+            print(f"  {detection.color:6s} x={x:7.1f} y={y:7.1f} area={detection.area_mm2:.0f}mm2")
+    else:
+        print("  none")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--task", type=int, choices=[1, 2], required=True)
@@ -277,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--color", help="Only select this colour (required by pick_lift_lower)")
     parser.add_argument("--config", default="src/configs/default.yaml")
     parser.add_argument("--set", action="append", default=[], dest="overrides", help="key.path=value")
-    parser.add_argument("--dry-run", action="store_true", help="Task 1: inspect zone slots/IK/detections without connecting the robot")
+    parser.add_argument("--dry-run", action="store_true", help="Task 1: inspect zone slots/IK/detections; Task 2: inspect the tower ladder. No robot connection")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -285,10 +349,10 @@ def main(argv: list[str] | None = None) -> int:
     run_id = time.strftime(f"task{args.task}_%Y%m%d_%H%M%S")
 
     if args.dry_run:
-        if not (args.task == 1 and args.flow == "task" and args.pick_mode == "cv_ik"):
-            parser.error("--dry-run is supported for the default Task 1 CV+IK flow")
+        if not (args.task in (1, 2) and args.flow == "task" and args.pick_mode == "cv_ik"):
+            parser.error("--dry-run is supported for the default Task 1 / Task 2 CV+IK flows")
         try:
-            return dry_run_task1(cfg)
+            return dry_run_task1(cfg) if args.task == 1 else dry_run_task2(cfg)
         except Exception as e:
             logger.error("Dry-run aborted: %s", e)
             return 1
@@ -303,6 +367,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.task == 1 and args.flow == "task":
         print(f"\n=== Task 1 finished: outside region empty for {ctx.extras.get('task1_empty_for_s', 0.0):.1f}s "
               f"after {ctx.extras.get('task1_place_actions', 0)} place action(s) in {ctx.elapsed_s():.0f}s ===")
+    elif args.task == 2 and args.flow == "task":
+        print(f"\n=== Task 2 finished: tower {ctx.placed_count} high in {ctx.elapsed_s():.0f}s "
+              f"({ctx.extras.get('task2_stop_reason') or 'outside region empty'}) ===")
     else:
         print(f"\n=== Task {args.task} finished: {ctx.placed_count}/{cfg.fsm.num_blocks} placed "
               f"in {ctx.elapsed_s():.0f}s (skipped: {sorted(ctx.skipped) or 'none'}) ===")

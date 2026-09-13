@@ -12,6 +12,7 @@ from control.motion import MotionController
 from control.robot_io import BaseRobotIO
 from control.trajectory import TrajectoryPlayer
 from control.task1_transport import Task1TransportPlanner
+from control.task2_stack import Task2StackPlanner
 from fsm.handlers import (
     ContextMotionState,
     PerceiveFn,
@@ -29,6 +30,7 @@ from fsm.task1 import (
     Task1SelectState,
     Task1TransportState,
 )
+from fsm.task2 import Task2PlaceState, Task2SelectState, Task2TransportState
 from control.grasp import GraspAttempt
 from perception.homography import PlaneCalibration
 
@@ -74,6 +76,33 @@ def build_task1_states(
         StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
         StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
         StateName.PLACE: Task1PlaceState(motion, player, cfg),
+    }
+
+
+def build_task2_stack_states(
+    *,
+    robot: BaseRobotIO,
+    motion: MotionController,
+    perceive: Task1PerceiveFn,
+    pick_state: State,
+    cfg: AppConfig,
+    calib: PlaneCalibration,
+    planner: Task2StackPlanner,
+) -> dict[StateName, State]:
+    """Stack every block at one point; SELECT/PICK/VERIFY/TRANSPORT are Task 1's.
+
+    The CV+IK Task 2. ``build_task2_states`` below is the earlier
+    recorded-pose generation, kept for the pose-registry path.
+    """
+    if pick_state.name is not StateName.PICK:
+        raise ValueError("pick_state must implement the PICK state")
+    player = TrajectoryPlayer(robot, cfg.motion)
+    return {
+        StateName.SELECT: Task2SelectState(motion, perceive, calib, cfg),
+        StateName.PICK: pick_state,
+        StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
+        StateName.TRANSPORT: Task2TransportState(planner, player, cfg),
+        StateName.PLACE: Task2PlaceState(robot, motion, player, cfg),
     }
 
 

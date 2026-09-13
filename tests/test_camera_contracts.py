@@ -23,6 +23,7 @@ from perception import (
     BlockDetection,
     PlaneCalibration,
 )
+from perception import detector
 from runners import run_task
 
 
@@ -80,6 +81,7 @@ def test_workspace_arc_is_projected_from_robot_base_and_matches_the_detector():
         workspace_radius_mm=100.0,
         workspace_angle_min_deg=-90.0,
         workspace_angle_max_deg=90.0,
+        workspace_radius_by_angle_mm=[],
     )
     boundary = workspace_boundary_metadata(
         calibration, WorkspaceBoundaryConfig(sample_step_deg=90.0), perception
@@ -102,6 +104,28 @@ def test_workspace_arc_is_projected_from_robot_base_and_matches_the_detector():
 def test_default_workspace_arc_spans_the_full_half_plane():
     cfg = AppConfig().perception
     assert (cfg.workspace_angle_min_deg, cfg.workspace_angle_max_deg) == (-90.0, 90.0)
+
+
+def test_workspace_overlay_uses_same_angle_dependent_radii_as_detector():
+    calibration = PlaneCalibration(
+        H=np.eye(3), image_size=(600, 400), square_mm=25.0, base_xy_mm=(0.0, 0.0)
+    )
+    perception = PerceptionConfig(
+        workspace_radius_mm=320.0,
+        workspace_angle_min_deg=-90.0,
+        workspace_angle_max_deg=90.0,
+        workspace_radius_by_angle_mm=[[-90.0, 250.0], [0.0, 320.0], [90.0, 270.0]],
+    )
+    boundary = workspace_boundary_metadata(
+        calibration, WorkspaceBoundaryConfig(sample_step_deg=90.0), perception
+    )
+    assert boundary["kind"] == "ik_reach_envelope"
+    assert boundary["label"] == "IK reach"
+    np.testing.assert_allclose(
+        boundary["points_px"], [[0.0, -250.0], [320.0, 0.0], [0.0, 270.0]], atol=1e-6
+    )
+    for point in boundary["points_px"]:
+        assert detector._in_workspace(tuple(point), perception, (0.0, 0.0))
 
 
 def test_target_zone_overlay_uses_the_detector_exclusion_polygon():

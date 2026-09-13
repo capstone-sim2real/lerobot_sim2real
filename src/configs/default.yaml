@@ -81,6 +81,14 @@ perception:
   workspace_radius_mm: 320.0
   workspace_angle_min_deg: -90.0
   workspace_angle_max_deg: 90.0
+  # 2026-09-11 활성 grasp-z/보정/bias/20mm IK gate로 계산한 raw 블록 중심의
+  # 방위각별 도달 경계. 실제 IK 한계에서 5mm 안쪽이며 각도 사이는 선형 보간한다.
+  # detector와 카메라 주황 경계가 이 값을 함께 사용한다.
+  workspace_radius_by_angle_mm:
+    [[-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
+     [-40, 307], [-30, 311], [-20, 313], [-10, 315], [0, 315],
+     [10, 315], [20, 313], [30, 309], [40, 305], [50, 300],
+     [60, 296], [70, 288], [80, 283], [90, 275]]
 
 select:
   rule: nearest_first
@@ -141,6 +149,8 @@ motion:
   # grasp point bias in the gripper's own frame (radial = away from the base,
   # tangential = the gripper's own left) -- see MotionConfig
   grasp_radial_offset_mm: 12.0
+  # 모든 블록·재시도에 항상 유지되는 F(바깥/먼쪽) 방향 추가 10mm.
+  grasp_forward_offset_mm: 10.0
   # 모든 블록에서 부채꼴 접선 기준 그리퍼 상대 좌측으로 10mm.
   grasp_tangential_offset_mm: 10.0
   # false: 중립 요 기준(반경/접선) — 기존 측정이 모두 이 프레임에서 나옴
@@ -152,7 +162,7 @@ motion:
   # optional ramp on top of the step; OFF by default -- see MotionConfig
   left_ramp_radial_mm_per_100mm: 0.0
   left_ramp_tangential_mm_per_100mm: 0.0
-  # (radial, tangential) mm: left, back, right, front — 왼쪽부터 반시계 방향
+  # (radial, tangential) mm 후보. 실행 시 로봇 베이스에서 먼 순서로 재시도.
   # 15mm = 70mm 조우가 40mm 블록 주위에 남기는 한쪽 여유 전부
   grasp_retry_offsets_mm: [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
   descent_blocked_tol: 4.0
@@ -170,7 +180,7 @@ ik:
   ik_iters: 8
   # 실측 캘리브레이션 오차(AGENTS.md §6: RMS~10mm, 최악 ~30mm)보다 넉넉하게 잡음 —
   # 이 한계는 "IK가 못 풀었다"를 걸러내는 것이지, 파지 정확도 자체를 보장하지 않음.
-  max_position_error_mm: 15.0
+  max_position_error_mm: 20.0
   max_tilt_error_deg: 6.0
 
 policy:
@@ -205,17 +215,83 @@ task1:
   slot_uv: [[0.14, 0.20], [0.50, 0.20], [0.80, 0.20], [0.32, 0.76], [0.68, 0.76]]
   # 모든 슬롯을 실기 under-reach만큼 로봇 기준 바깥 방향으로 20mm 더 멀리 명령.
   slot_radial_offset_mm: [20.0, 20.0, 20.0, 20.0, 20.0]
-  # 사선 카메라의 먼 거리 오차 보정: 200mm까지 0, 320mm에서 바깥쪽 +20mm.
-  pick_correction_start_radius_mm: 200.0
-  pick_correction_max_radius_mm: 320.0
-  pick_correction_max_offset_mm: 20.0
-  # 원거리에서 wrist_flex 한계를 피하도록 gripper 축을 바깥쪽으로 최대 5도 기울임.
+  # 픽업의 거리 램프 보정은 전부 제거했다 — 사선 카메라 보정도, P행 front
+  # 오프셋도 실기에서 과보정이었다. 남은 건 초근거리 한 구간의 평탄한 +20mm
+  # 뿐이고 경계에서 딱 끊는다. 실측 반경은 P1 157 / P8 196 / P4 238 / P9 242 /
+  # P5 254 / P7 272 / P3 280 / P2 282 / P6 302mm 라 175mm 안에는 P1만 든다.
+  # (P번호는 반경 순서가 아니다 — P2, P3는 오히려 가장 먼 축이다.)
+  pick_near_boost_max_radius_mm: 175.0
+  pick_near_boost_mm: 20.0
+  # 모든 파지 위치에서 기본 3도 펼치고, 원거리 파지는 최대 5도까지 점진적으로 펼친다.
+  # 배치는 기존처럼 280mm 이후에만 0→5도 적용한다.
+  # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
   pick_tilt_start_radius_mm: 280.0
   pick_tilt_max_radius_mm: 320.0
+  pick_tilt_base_deg: 3.0
   pick_tilt_max_deg: 5.0
   # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
   release_clearance_mm: 5.0
 
+# 2차 미션: 한 좌표에 접촉 기반으로 적층한다. SELECT/PICK/VERIFY와 픽 보정은
+# task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).
+task2:
+  # 타워 지점. task1.slot_uv 와 같은 [u, v] 규약이고 v→1 이 베이스에 가까운 변이다.
+  # 탑다운 리프트는 리치에 강하게 반비례하므로(실측 195mm에서 ~90mm, 285mm에서
+  # ~50mm) 안쪽으로 당긴 1mm가 곧 타워 높이다.
+  stack_uv: [0.50, 0.86]
+  # Task 1과 같은 실기 under-reach 보정. 정확도가 아니라 zone_polygon_mm 안쪽에
+  # 착지시키기 위해 필요하다 — 그게 검출기가 놓인 블록을 무시하는 근거다.
+  stack_radial_offset_mm: 20.0
+  block_height_mm: 20.0
+  # 미리 푸는 사다리의 상한일 뿐 약속이 아니다. 안 닿는 층은 dry-run이 보고한다.
+  max_levels: 5
+  # 실기 확정 전 가정값. task1의 5.0보다 작다 — 테이블이 흡수하는 낙하가
+  # 타워는 무너뜨린다.
+  release_clearance_mm: 2.0
+  # Task 2에서 접촉 탐색 하강은 완전히 비활성화. 모든 층을 계산된 릴리스 높이로 즉시 이동.
+  contact_descent_levels: 0
+  # 실기 확정 전 가정값. 착지를 감지하려면 세 값이 한 순서를 지켜야 한다:
+  #   적재 시 정상상태 오프셋 < contact_shortfall < descent_max_lag < overshoot
+  # 타워에 닿은 블록은 명령 목표보다 place_overshoot_mm 위에서 멈춘다. 그 간격이
+  # 허용 lag보다 작으면 완벽한 적층이 "접촉 없음"으로 기록된다 — 멈추는 위치는
+  # 같지만 백오프가 안 돌고 로그가 거짓말을 한다. overshoot은 mm, 나머지 둘은
+  # 관절 action 단위라 순서 확인은 실기에서만 가능하다 (stack_contacts의 shortfall).
+  place_overshoot_mm: 12.0
+  # 명목 릴리스 높이 기준 hover 탐색 상/하한. motion.hover_* 는 테이블 높이 타깃
+  # 가정이라 4층 위 120mm는 엔벨로프 밖이다. 하한은 곧 타워 상단 통과 여유다.
+  hover_clearance_mm: 45.0
+  hover_min_clearance_mm: 15.0
+  # hover는 ik.max_position_error_mm 보다 엄격하게 본다: 12mm 짧은 hover는 여유
+  # 예산을 거의 다 먹어서 타워 간격을 허구로 만든다.
+  hover_gate_mm: 3.0
+  # 위쪽 층은 탑 위 15mm는 못 가도 10mm는 가는 경우가 많다(탑다운 리프트가
+  # 높이에 급격히 무너진다). 층을 포기하면 블록 하나를 통째로 잃으므로, 선호
+  # 여유가 천장 밖이면 이 바닥까지 짜내서라도 접근한다. 이제 사다리를 멈추는
+  # 것은 릴리스 자세 자체가 IK 게이트를 못 넘을 때뿐이다.
+  hover_squeeze_clearance_mm: 8.0
+  min_descent_travel_mm: 8.0
+  # 층이 올라갈수록 접근축을 바깥으로 기울여 wrist_flex 포화를 푼다 (AGENTS.md §7).
+  # 늦게, 조금씩 — 기울여 놓으면 블록이 모서리로 착지한다.
+  level_tilt_start_level: 2
+  level_tilt_per_level_deg: 1.5
+  level_tilt_max_deg: 5.0
+  # 실기 확정 전 가정값. motion.descent_max_lag(8.0)은 빈 그리퍼 기준이고, 블록을
+  # 들면 정상상태 오프셋이 커져서 값이 작으면 첫 틱부터 잼으로 읽힌다.
+  descent_max_lag: 10.0
+  # 목표에서 이만큼 못 미쳐도 착지로 친다. 적재 시 정상상태 오프셋보다는 커야 하고
+  # (motion.descent_blocked_tol=4.0은 빈 그리퍼 기준이라 너무 빡빡하다)
+  # descent_max_lag보다는 작아야 한다. 실기 확정 전 가정값 — 높게 잡는 쪽이 안전한
+  # 실수다. 놓치면 턱을 벌리기 전 서보 압력을 푸는 백오프를 건너뛰지만, 잘못 잡으면
+  # 어차피 일어날 릴리스에 라벨만 틀리게 붙는다.
+  contact_shortfall: 6.0
+  # motion.descent_settle_s(5.0)이면 부드럽게 닿은 뒤 타워를 5초간 누른다.
+  descent_settle_s: 0.4
+  # descend() 를 몇 조각으로 나눌지. 1로 둔다 — 틱마다 read_loads 하면 팔이 중간에
+  # 멈춘 실측 사례가 있고(control/trajectory.py), 조각내면 lag 감시도 약해진다.
+  descent_probe_segments: 1
+  # 하강 상반부의 접촉은 착지가 아니라 오적층이다.
+  min_descent_fraction: 0.5
+  max_descent_retries: 1
 logging:
   log_dir: logs/pick_stack
   save_transitions: true

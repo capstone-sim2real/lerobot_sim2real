@@ -276,10 +276,22 @@ def _in_workspace(
 ) -> bool:
     dx = center_mm[0] - base_xy[0]
     dy = center_mm[1] - base_xy[1]
-    if math.hypot(dx, dy) > cfg.workspace_radius_mm:
-        return False
     azimuth = math.degrees(math.atan2(dy, dx))
-    return cfg.workspace_angle_min_deg <= azimuth <= cfg.workspace_angle_max_deg
+    if not cfg.workspace_angle_min_deg <= azimuth <= cfg.workspace_angle_max_deg:
+        return False
+    return math.hypot(dx, dy) <= workspace_radius_at_angle(cfg, azimuth)
+
+
+def workspace_radius_at_angle(cfg: PerceptionConfig, azimuth_deg: float) -> float:
+    """Detector/overlay shared outer radius at one robot-base azimuth."""
+    radius = float(cfg.workspace_radius_mm)
+    profile = cfg.workspace_radius_by_angle_mm
+    if not profile:
+        return radius
+    angles = np.asarray([float(pair[0]) for pair in profile], dtype=np.float64)
+    radii = np.asarray([float(pair[1]) for pair in profile], dtype=np.float64)
+    interpolated = float(np.interp(float(azimuth_deg), angles, radii))
+    return min(radius, interpolated)
 
 
 def _merge_coincident(
@@ -368,4 +380,3 @@ def _blockiness(detection: BlockDetection) -> tuple[float, float]:
     bigger (its side faces show) and must not lose to a smaller artefact.
     """
     return (detection.fill * detection.solidity, detection.area_mm2)
-

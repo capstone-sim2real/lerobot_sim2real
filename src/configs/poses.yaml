@@ -7,8 +7,9 @@
 #   retreat           PICK 종료 자세 = 에피소드 END 자세 (블록 든 상태)
 #   zone_approach     zone 상공 경유점 (TRANSPORT 종점)
 #   slot_0 .. slot_4  Task 1 배치 슬롯 (20x10cm zone 안 3+2 배열, 저고도)
-#   tower_approach    Task 2 타워 상공 자세
-#   tower_descent_0..N  하강 키프레임 래더 (_0 최고 높이 → _N 바닥 근접)
+#   tower_approach    (레거시) 녹화 포즈 기반 Task 2 전용. 현행 CV+IK
+#                     Task 2는 동적 IK로 풀며 home 외의 포즈가 필요 없다.
+#   tower_descent_0..N  (레거시) 하강 키프레임 래더 (_0 최고 → _N 바닥 근접)
 #
 # 주의: 값은 캘리브레이션 종속 — 재캘리브레이션 후에는 전부 재기록.
 # 주의: PoseRegistry.save()는 이 헤더를 보존하지 않는다 — record_pose.py로

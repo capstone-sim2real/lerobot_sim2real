@@ -38,6 +38,10 @@ def interpolate(start: Pose, goal: Pose, max_step: float) -> list[Pose]:
 class TrajectoryPlayer:
     """Plays interpolated moves on the robot at a fixed tick rate."""
 
+    #: Whether the last ``descend`` stopped because the arm quit following,
+    #: as opposed to merely finishing short of tolerance.
+    last_descent_jammed: bool = False
+
     def __init__(self, robot: BaseRobotIO, cfg: MotionConfig):
         self._robot = robot
         self._cfg = cfg
@@ -105,6 +109,7 @@ class TrajectoryPlayer:
         max_step: float | None = None,
         tol: float | None = None,
         settle_s: float | None = None,
+        max_lag: float | None = None,
     ) -> tuple[Pose, bool]:
         """Descend toward ``goal``, and stop the moment the arm stops following.
 
@@ -130,10 +135,18 @@ class TrajectoryPlayer:
         Returns ``(measured_pose, blocked)``. ``blocked`` is a hint for
         ordering retries — it is never a reason to skip closing the jaws,
         since only closing them establishes whether the block is holdable.
+
+        ``blocked`` folds two different events together: the arm stopped
+        following (a real obstruction) and the arm merely finished short of
+        tolerance (which a loaded arm does on every descent). Callers that
+        need to tell them apart read ``last_descent_jammed`` afterwards.
         """
         max_step = max_step if max_step is not None else self._cfg.descent_step_per_tick
         tol = tol if tol is not None else self._cfg.arrival_tol
         settle_s = settle_s if settle_s is not None else self._cfg.descent_settle_s
+        # A loaded descent trails further than the empty-gripper default was
+        # tuned for, so the caller may raise the bar for what counts as jammed.
+        max_lag = max_lag if max_lag is not None else self._cfg.descent_max_lag
         start = self._robot.read_joints()
         deadline = time.monotonic() + self._cfg.move_timeout_s
         jammed = False
@@ -143,7 +156,7 @@ class TrajectoryPlayer:
             self._robot.send_joints(step)
             self._tick_sleep()
             measured = self._robot.read_joints()
-            if max(abs(measured[j] - step[j]) for j in goal) > self._cfg.descent_max_lag:
+            if max(abs(measured[j] - step[j]) for j in goal) > max_lag:
                 jammed = True  # the arm is no longer following: something is in the way
                 break
         if not jammed:
@@ -159,6 +172,7 @@ class TrajectoryPlayer:
                 self._tick_sleep()
         current = self._robot.read_joints()
         shortfall = max(abs(current[j] - goal[j]) for j in goal)
+        self.last_descent_jammed = jammed
         return current, jammed or shortfall > self._cfg.descent_blocked_tol
 
     def follow(self, waypoints: list[Pose], *, max_step: float | None = None) -> Pose:

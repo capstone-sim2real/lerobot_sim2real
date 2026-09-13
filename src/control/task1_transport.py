@@ -55,6 +55,46 @@ def push_out_from_base(
     return base_xy_mm[0] + dx * scale, base_xy_mm[1] + dy * scale
 
 
+def over_ik_gate(result: IkResult, cfg: AppConfig) -> bool:
+    """True when a solve missed by more than the configured reach gate."""
+    return (
+        result.position_error_mm > cfg.ik.max_position_error_mm
+        or result.tilt_error_deg > cfg.ik.max_tilt_error_deg
+    )
+
+
+def transit_apex(
+    ik: TopDownIK,
+    cfg: AppConfig,
+    name: str,
+    xy: tuple[float, float],
+    base_z: float,
+    *,
+    clearance_mm: float | None = None,
+    min_clearance_mm: float | None = None,
+) -> tuple[str, IkResult] | None:
+    """Highest carry waypoint over ``xy``, folded in to the transit radius.
+
+    Returns None when the point is already inside the radius or the folded
+    pose misses the gate -- both mean "no apex worth flying through".
+    """
+    apex_xy = pull_in(*xy, cfg.motion.transit_apex_radius_mm)
+    if apex_xy == xy:
+        return None
+    apex_z = highest_reachable_hover(
+        ik,
+        *apex_xy,
+        base_z,
+        cfg,
+        clearance_mm=clearance_mm,
+        min_clearance_mm=min_clearance_mm,
+    )
+    result = ik.solve(*apex_xy, apex_z)
+    if over_ik_gate(result, cfg):
+        return None
+    return name, result
+
+
 class Task1TransportPlanner:
     """Solve fixed zone slots once and carry waypoints per successful grasp."""
 
@@ -74,12 +114,10 @@ class Task1TransportPlanner:
         return self._slots
 
     def _over_gate(self, result: IkResult) -> bool:
-        return (
-            result.position_error_mm > self._cfg.ik.max_position_error_mm
-            or result.tilt_error_deg > self._cfg.ik.max_tilt_error_deg
-        )
+        return over_ik_gate(result, self._cfg)
 
     def _far_reach_tilt(self, xy_mm: tuple[float, float]) -> float:
+        """Tilt only genuinely far placement slots; pick base tilt is pick-only."""
         base = self._calib.base_xy_mm or (0.0, 0.0)
         radius = math.dist(xy_mm, base)
         start = self._cfg.task1.pick_tilt_start_radius_mm
@@ -87,7 +125,8 @@ class Task1TransportPlanner:
         maximum = self._cfg.task1.pick_tilt_max_deg
         if radius <= start or maximum == 0.0:
             return 0.0
-        return -maximum * min(1.0, (radius - start) / (end - start))
+        fraction = min(1.0, (radius - start) / (end - start))
+        return -maximum * fraction
 
     def _solve_slots(self) -> tuple[Task1SlotPlan, ...]:
         plans = []
@@ -120,14 +159,7 @@ class Task1TransportPlanner:
         return tuple(plans)
 
     def _apex(self, name: str, xy: tuple[float, float], base_z: float) -> tuple[str, IkResult] | None:
-        apex_xy = pull_in(*xy, self._cfg.motion.transit_apex_radius_mm)
-        if apex_xy == xy:
-            return None
-        apex_z = highest_reachable_hover(self._ik, *apex_xy, base_z, self._cfg)
-        result = self._ik.solve(*apex_xy, apex_z)
-        if self._over_gate(result):
-            return None
-        return name, result
+        return transit_apex(self._ik, self._cfg, name, xy, base_z)
 
     def plan(self, held: GraspAttempt, slot_index: int) -> Task1TransportPlan:
         if not 0 <= slot_index < len(self._slots):
