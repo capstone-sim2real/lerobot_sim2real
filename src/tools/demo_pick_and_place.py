@@ -1,6 +1,6 @@
 """End-to-end smoke test: detect one block by colour, pick it, move it to a
 named calibration point. This is the manual rehearsal for what
-fsm/ik_handlers.py will do automatically — everything here is glue over
+fsm/ik_handler.py will do automatically — everything here is glue over
 already-existing pieces (perception detector/homography, TopDownIK,
 TrajectoryPlayer, control/grasp.py), nothing new is implemented.
 
@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--color", required=True)
     ap.add_argument("--to", required=True, help="destination point name in --points (e.g. P5)")
     ap.add_argument("--config", default="src/configs/default.yaml")
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
+    ap.add_argument("--points", type=Path, default=Path("experiments/legacy/calibration/points.csv"))
     ap.add_argument("--snapshot-url", default=DEFAULT_SHOULDER_SNAPSHOT_URL)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--set", action="append", default=[], dest="overrides")

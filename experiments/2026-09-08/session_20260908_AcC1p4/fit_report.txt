@@ -1,0 +1,21 @@
+9 points: ['P1_retry', 'P2', 'P3_retry1', 'P4', 'P5', 'P6_retry1', 'P7', 'P8', 'P9']
+name     resid_mm     loo_mm
+P1_retry      24.53      67.50 <-- LOO exceeds gate
+P2          17.34      39.46 <-- LOO exceeds gate
+P3_retry1       8.09      11.09 <-- LOO exceeds gate
+P4          13.32      23.57 <-- LOO exceeds gate
+P5          18.23      28.91 <-- LOO exceeds gate
+P6_retry1      13.78      19.08 <-- LOO exceeds gate
+P7           8.00      14.42 <-- LOO exceeds gate
+P8          22.17      41.58 <-- LOO exceeds gate
+P9          21.68     100.69 <-- LOO exceeds gate
+
+fit RMS      : 17.30 mm  (gate < 5.0 mm)
+fit max      : 24.53 mm
+LOO max      : 100.69 mm  (gate < 8.0 mm)
+LOO mean     : 38.48 mm
+grasp z (mm) : mean=-3.6 std=9.4 range=[-16.9, 10.6]
+
+FAIL
+
+saved: docs/calibration/session_20260908_AcC1p4/venue_candidate.json

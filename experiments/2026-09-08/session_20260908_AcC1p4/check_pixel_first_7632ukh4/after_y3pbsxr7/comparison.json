@@ -1,0 +1,18 @@
+{
+  "before_px": [
+    556.1452026367188,
+    367.4369201660156
+  ],
+  "after_px": [
+    556.1172485351562,
+    368.5013427734375
+  ],
+  "delta_px": [
+    -0.0279541015625,
+    1.064422607421875
+  ],
+  "distance_px": 1.064789612545572,
+  "saved_at": "2026-09-08T02:04:03",
+  "preview": "/home/ehdrms/lerobot_sim2real-task1-zone-gather/docs/calibration/session_20260908_AcC1p4/check_pixel_first_7632ukh4/after_y3pbsxr7/after_candidate.png",
+  "status": "diagnostic_only_not_applied"
+}

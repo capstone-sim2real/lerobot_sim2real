@@ -1,0 +1,237 @@
+2026-09-08 03:09:59,421 lerobot.robots.so_follower.so_follower INFO my_follower SOFollower connected.
+WARNING: Robot has the following self collisions in neutral position:
+  -base_link_2 collides with shoulder_link_2
+  -shoulder_link_0 collides with upper_arm_link_1
+  -upper_arm_link_0 collides with lower_arm_link_0
+  -lower_arm_link_2 collides with wrist_link_1
+  -wrist_link_0 collides with gripper_link_1
+  -gripper_link_0 collides with moving_jaw_so101_v1_link_0
+2026-09-08 03:10:05,080 run INFO Task 1 / task starting with cv_ik PICK (run task1_20260908_030956, until outside region is empty for 5s)
+2026-09-08 03:10:06,031 fsm.machine INFO select -> pick (elapsed 1.0s, placed 0, note: target=green slot=0 outside=2 pick_correction=3.1mm)
+2026-09-08 03:10:06,151 fsm.ik_handler INFO   jaws turned to 79 deg for the block's faces
+2026-09-08 03:10:06,152 fsm.ik_handler INFO   5 of 5 grasp points usable
+2026-09-08 03:10:06,152 fsm.ik_handler INFO   attempt 'centre' at x=154.1 y=-176.2 (reach 234mm)
+2026-09-08 03:10:06,152 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:10:12,204 fsm.ik_handler INFO       hover settled at 2.4 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:10:12,205 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:10:15,237 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 9.884001502859604,
+                   'safe goal_pos': 11.321124918247218}}
+2026-09-08 03:10:15,273 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 7.91300112714471,
+                   'safe goal_pos': 11.321124918247218}}
+2026-09-08 03:10:15,310 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 5.942000751429802,
+                   'safe goal_pos': 11.321124918247218}}
+2026-09-08 03:10:15,346 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 3.971000375714908,
+                   'safe goal_pos': 11.321124918247218}}
+2026-09-08 03:10:16,595 fsm.ik_handler INFO     -> HELD pos=21.3 load=500
+2026-09-08 03:10:17,053 fsm.machine INFO pick -> verify (elapsed 12.0s, placed 0, note: cv_ik_held_centre)
+2026-09-08 03:10:17,667 fsm.machine INFO verify -> transport (elapsed 12.6s, placed 0, note: grasp_ok pos=21.3 load=200)
+2026-09-08 03:10:21,016 fsm.machine INFO transport -> place (elapsed 15.9s, placed 0)
+2026-09-08 03:10:24,363 fsm.machine INFO place -> select (elapsed 19.3s, placed 0, note: released_slot=0)
+2026-09-08 03:10:26,880 fsm.machine INFO select -> pick (elapsed 21.8s, placed 0, note: target=yellow slot=1 outside=1 pick_correction=6.4mm)
+2026-09-08 03:10:27,046 fsm.ik_handler INFO   jaws turned to 79 deg for the block's faces
+2026-09-08 03:10:27,046 fsm.ik_handler INFO   skipping 'front' at reach 282mm — outside the top-down envelope (hover misses by 21mm, grasp by 3mm)
+2026-09-08 03:10:27,046 fsm.ik_handler INFO   4 of 5 grasp points usable
+2026-09-08 03:10:27,046 fsm.ik_handler INFO   attempt 'centre' at x=113.1 y=241.7 (reach 267mm)
+2026-09-08 03:10:27,046 fsm.ik_handler INFO       open jaws, move to hover z=56mm
+2026-09-08 03:10:32,409 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:10:35,938 fsm.ik_handler INFO       open jaws, lift back to hover z=56mm
+2026-09-08 03:10:38,586 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:10:38,586 fsm.ik_handler INFO   attempt 'left' at x=99.5 y=248.0 (reach 267mm)
+2026-09-08 03:10:38,586 fsm.ik_handler INFO       open jaws, move to hover z=56mm
+2026-09-08 03:10:39,413 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:10:42,820 fsm.ik_handler INFO       open jaws, lift back to hover z=56mm
+2026-09-08 03:10:45,439 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:10:45,440 fsm.ik_handler INFO   attempt 'back' at x=106.7 y=228.1 (reach 252mm)
+2026-09-08 03:10:45,440 fsm.ik_handler INFO       open jaws, move to hover z=56mm
+2026-09-08 03:10:47,244 fsm.ik_handler INFO       hover settled at 4.1 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:10:47,244 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:10:49,781 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 9.884001502859604,
+                   'safe goal_pos': 11.059516023544798}}
+2026-09-08 03:10:49,818 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 7.91300112714471,
+                   'safe goal_pos': 11.059516023544798}}
+2026-09-08 03:10:49,854 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 5.942000751429802,
+                   'safe goal_pos': 11.059516023544798}}
+2026-09-08 03:10:49,891 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 3.971000375714908,
+                   'safe goal_pos': 11.059516023544798}}
+2026-09-08 03:10:51,139 fsm.ik_handler INFO     -> HELD pos=21.1 load=500
+2026-09-08 03:10:51,457 fsm.machine INFO pick -> verify (elapsed 46.4s, placed 0, note: cv_ik_held_back)
+2026-09-08 03:10:52,070 fsm.machine INFO verify -> transport (elapsed 47.0s, placed 0, note: grasp_ok pos=21.1 load=200)
+2026-09-08 03:10:55,062 fsm.machine INFO transport -> place (elapsed 50.0s, placed 0)
+2026-09-08 03:10:58,667 fsm.machine INFO place -> select (elapsed 53.6s, placed 0, note: released_slot=1)
+2026-09-08 03:11:01,440 fsm.machine INFO select -> pick (elapsed 56.4s, placed 0, note: target=red slot=2 outside=1 pick_correction=1.9mm)
+2026-09-08 03:11:01,542 fsm.ik_handler INFO   jaws turned to 21 deg for the block's faces
+2026-09-08 03:11:01,542 fsm.ik_handler INFO   5 of 5 grasp points usable
+2026-09-08 03:11:01,542 fsm.ik_handler INFO   attempt 'centre' at x=147.6 y=-170.5 (reach 226mm)
+2026-09-08 03:11:01,542 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:11:06,654 fsm.ik_handler INFO       hover settled at 2.4 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:06,654 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:11:11,150 fsm.ik_handler INFO       open jaws, lift back to hover z=81mm
+2026-09-08 03:11:14,402 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:11:14,402 fsm.ik_handler INFO   attempt 'left' at x=158.9 y=-160.7 (reach 226mm)
+2026-09-08 03:11:14,402 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:11:16,032 fsm.ik_handler INFO       hover settled at 3.6 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:16,032 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:11:20,573 fsm.ik_handler INFO       open jaws, lift back to hover z=81mm
+2026-09-08 03:11:23,817 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:11:23,817 fsm.ik_handler INFO   attempt 'back' at x=137.8 y=-159.2 (reach 211mm)
+2026-09-08 03:11:23,817 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:11:25,655 fsm.ik_handler INFO       hover settled at 2.9 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:25,656 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:11:30,230 fsm.ik_handler INFO       open jaws, lift back to hover z=81mm
+2026-09-08 03:11:33,475 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:11:33,476 fsm.ik_handler INFO   attempt 'right' at x=136.2 y=-180.4 (reach 226mm)
+2026-09-08 03:11:33,476 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:11:35,424 fsm.ik_handler INFO       hover settled at 2.6 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:35,426 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:11:39,889 fsm.ik_handler INFO       open jaws, lift back to hover z=81mm
+2026-09-08 03:11:43,097 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:11:43,098 fsm.ik_handler INFO   attempt 'front' at x=157.4 y=-181.9 (reach 241mm)
+2026-09-08 03:11:43,098 fsm.ik_handler INFO       open jaws, move to hover z=81mm
+2026-09-08 03:11:44,821 fsm.ik_handler INFO       hover settled at 2.2 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:44,822 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:11:49,150 fsm.ik_handler INFO       open jaws, lift back to hover z=81mm
+2026-09-08 03:11:52,294 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:11:52,932 fsm.machine INFO pick -> select (elapsed 107.9s, placed 0, note: cv_ik_empty_retry)
+2026-09-08 03:11:55,088 fsm.machine INFO select -> pick (elapsed 110.0s, placed 0, note: target=red slot=2 outside=1 pick_correction=0.0mm)
+2026-09-08 03:11:55,205 fsm.ik_handler INFO   jaws turned to 9 deg for the block's faces
+2026-09-08 03:11:55,205 fsm.ik_handler INFO   5 of 5 grasp points usable
+2026-09-08 03:11:55,206 fsm.ik_handler INFO   attempt 'centre' at x=102.3 y=-161.1 (reach 191mm)
+2026-09-08 03:11:55,206 fsm.ik_handler INFO       open jaws, move to hover z=91mm
+2026-09-08 03:11:59,784 fsm.ik_handler INFO       hover settled at 2.5 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:11:59,784 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:12:03,150 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 9.884001502859604,
+                   'safe goal_pos': 10.470896010464358}}
+2026-09-08 03:12:03,186 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 7.91300112714471,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:03,223 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 5.942000751429802,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:03,259 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 3.971000375714908,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:04,509 fsm.ik_handler INFO     -> HELD pos=20.3 load=500
+2026-09-08 03:12:05,072 fsm.machine INFO pick -> verify (elapsed 120.0s, placed 0, note: cv_ik_held_centre)
+2026-09-08 03:12:05,684 fsm.machine INFO verify -> transport (elapsed 120.6s, placed 0, note: grasp_ok pos=20.3 load=200)
+2026-09-08 03:12:07,734 fsm.machine INFO transport -> place (elapsed 122.7s, placed 0)
+2026-09-08 03:12:11,255 fsm.machine INFO place -> select (elapsed 126.2s, placed 0, note: released_slot=2)
+2026-09-08 03:12:13,684 fsm.machine INFO select -> pick (elapsed 128.6s, placed 0, note: target=wood slot=3 outside=1 pick_correction=12.3mm)
+2026-09-08 03:12:14,206 fsm.ik_handler INFO   radial bias reduced to 0%: the full bias put the aim point outside the reachable envelope (the sideways bias is kept)
+2026-09-08 03:12:14,206 fsm.ik_handler INFO   jaws turned to 68 deg for the block's faces
+2026-09-08 03:12:14,206 fsm.ik_handler INFO   gripper tipped outward by 0.8 deg for far reach
+2026-09-08 03:12:14,206 fsm.ik_handler INFO   skipping 'front' at reach 301mm — outside the top-down envelope (hover misses by 24mm, grasp by 6mm)
+2026-09-08 03:12:14,206 fsm.ik_handler INFO   4 of 5 grasp points usable
+2026-09-08 03:12:14,207 fsm.ik_handler INFO   attempt 'centre' at x=207.4 y=-197.4 (reach 286mm)
+2026-09-08 03:12:14,207 fsm.ik_handler INFO       open jaws, move to hover z=56mm
+2026-09-08 03:12:20,337 fsm.ik_handler INFO       hover settled at 2.2 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:12:20,337 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:12:22,359 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 9.889567649555403,
+                   'safe goal_pos': 10.40549378678875}}
+2026-09-08 03:12:22,395 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 7.917175737166545,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:22,431 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 5.944783824777701,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:22,468 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'gripper': {   'original goal_pos': 3.972391912388858,
+                   'safe goal_pos': 10.27468933943754}}
+2026-09-08 03:12:23,716 fsm.ik_handler INFO     -> HELD pos=20.3 load=500
+2026-09-08 03:12:23,894 fsm.machine INFO pick -> verify (elapsed 138.8s, placed 0, note: cv_ik_held_centre)
+2026-09-08 03:12:24,506 fsm.machine INFO verify -> transport (elapsed 139.4s, placed 0, note: grasp_ok pos=20.3 load=200)
+2026-09-08 03:12:25,102 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 23.90186241969249,
+                         'safe goal_pos': 24.197802197802197}}
+2026-09-08 03:12:25,137 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 21.91782027096479,
+                         'safe goal_pos': 22.263736263736263}}
+2026-09-08 03:12:25,173 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 19.933778122237094,
+                         'safe goal_pos': 20.32967032967033}}
+2026-09-08 03:12:25,208 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 17.949735973509398,
+                         'safe goal_pos': 18.483516483516482}}
+2026-09-08 03:12:25,244 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 15.965693824781702,
+                         'safe goal_pos': 16.54945054945055}}
+2026-09-08 03:12:25,279 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 13.981651676054003,
+                         'safe goal_pos': 14.615384615384617}}
+2026-09-08 03:12:25,314 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 11.997609527326311,
+                         'safe goal_pos': 12.681318681318682}}
+2026-09-08 03:12:25,350 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 10.013567378598612,
+                         'safe goal_pos': 10.65934065934066}}
+2026-09-08 03:12:25,385 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 8.029525229870913,
+                         'safe goal_pos': 8.637362637362639}}
+2026-09-08 03:12:25,421 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 6.045483081143217,
+                         'safe goal_pos': 6.615384615384617}}
+2026-09-08 03:12:25,456 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 4.061440932415522,
+                         'safe goal_pos': 4.5054945054945055}}
+2026-09-08 03:12:25,492 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 2.077398783687819,
+                         'safe goal_pos': 2.395604395604396}}
+2026-09-08 03:12:25,528 root WARNING Relative goal position magnitude had to be clamped to be safe.
+{   'shoulder_lift': {   'original goal_pos': 0.09335663496013069,
+                         'safe goal_pos': 0.2857142857142865}}
+2026-09-08 03:12:27,183 fsm.machine INFO transport -> place (elapsed 142.1s, placed 0)
+2026-09-08 03:12:31,729 fsm.machine INFO place -> select (elapsed 146.7s, placed 0, note: released_slot=3)
+2026-09-08 03:12:33,661 fsm.machine INFO select -> pick (elapsed 148.6s, placed 0, note: target=blue slot=4 outside=1 pick_correction=2.8mm)
+2026-09-08 03:12:33,771 fsm.ik_handler INFO   jaws turned to 45 deg for the block's faces
+2026-09-08 03:12:33,771 fsm.ik_handler INFO   5 of 5 grasp points usable
+2026-09-08 03:12:33,771 fsm.ik_handler INFO   attempt 'centre' at x=155.0 y=185.8 (reach 242mm)
+2026-09-08 03:12:33,771 fsm.ik_handler INFO       open jaws, move to hover z=71mm
+2026-09-08 03:12:39,181 fsm.ik_handler INFO       hover settled at 2.5 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:12:39,181 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:12:43,430 fsm.ik_handler INFO       open jaws, lift back to hover z=71mm
+2026-09-08 03:12:46,491 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:12:46,491 fsm.ik_handler INFO   attempt 'left' at x=143.5 y=195.4 (reach 242mm)
+2026-09-08 03:12:46,491 fsm.ik_handler INFO       open jaws, move to hover z=71mm
+2026-09-08 03:12:48,122 fsm.ik_handler INFO       hover settled at 2.3 deg, short of the 2.0 deg target — descending anyway
+2026-09-08 03:12:48,123 fsm.ik_handler INFO       descend to grasp z=16mm
+2026-09-08 03:12:52,380 fsm.ik_handler INFO       open jaws, lift back to hover z=71mm
+2026-09-08 03:12:55,450 fsm.ik_handler INFO     -> EMPTY pos=2.5 load=44
+2026-09-08 03:12:55,450 fsm.ik_handler INFO   attempt 'back' at x=145.4 y=174.3 (reach 227mm)
+2026-09-08 03:12:55,450 fsm.ik_handler INFO       open jaws, move to hover z=71mm
+2026-09-08 03:12:59,044 lerobot.robots.so_follower.so_follower INFO my_follower SOFollower disconnected.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/runners/run_task.py", line 314, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/runners/run_task.py", line 297, in main
+    ctx = run(args.task, cfg, run_id, pick_mode=args.pick_mode, flow=args.flow, target_color=args.color)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/runners/run_task.py", line 207, in run
+    machine.run()
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/fsm/machine.py", line 88, in run
+    next_name = state.step(self._ctx)
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/fsm/ik_handler.py", line 129, in step
+    held = run_grasp_attempts(self._player, self._robot, self._cfg, plan, log=logger.info)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/control/grasp.py", line 451, in run_grasp_attempts
+    outcome, check = attempt_grasp(player, robot, cfg, attempt, log=log)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/control/grasp.py", line 388, in attempt_grasp
+    player.move_to(attempt.hover.joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/control/trajectory.py", line 65, in move_to
+    self._tick_sleep()
+  File "/home/ehdrms/lerobot_sim2real-task1-zone-gather/src/control/trajectory.py", line 47, in _tick_sleep
+    time.sleep(1.0 / self._cfg.fps)
+KeyboardInterrupt

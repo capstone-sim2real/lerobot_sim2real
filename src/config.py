@@ -210,7 +210,9 @@ class SensingConfig:
     # contact detection during stack descent: |load - baseline| spike on any
     # of these joints. Contact can *reduce* load (surface takes the gravity
     # torque), hence the absolute delta.
-    contact_joints: list[str] = field(default_factory=lambda: ["shoulder_lift", "elbow_flex"])
+    contact_joints: list[str] = field(
+        default_factory=lambda: ["shoulder_lift", "elbow_flex"]
+    )
     contact_load_delta: float = 80.0
     contact_baseline_samples: int = 5
 
@@ -223,7 +225,7 @@ class MotionConfig:
     invalid after recalibration and must be re-recorded."""
 
     poses_path: str = "src/configs/poses.yaml"
-    fps: float = 30.0
+    fps: float = 45.0
     # per-tick joint delta cap for interpolation (action units); the robot's
     # own max_relative_target clamp stays on as a second net
     max_step_per_tick: float = 2.0
@@ -272,7 +274,9 @@ class MotionConfig:
     retreat_pose: str = "retreat"
     transport_waypoints: list[str] = field(default_factory=lambda: ["zone_approach"])
     # Task 1: slot i is used for the (i+1)-th placed block
-    slot_poses: list[str] = field(default_factory=lambda: ["slot_0", "slot_1", "slot_2", "slot_3", "slot_4"])
+    slot_poses: list[str] = field(
+        default_factory=lambda: ["slot_0", "slot_1", "slot_2", "slot_3", "slot_4"]
+    )
     # Task 2: approach above the tower, then descend along the ladder
     tower_approach_pose: str = "tower_approach"
     tower_ladder_prefix: str = "tower_descent"
@@ -369,7 +373,9 @@ class IkConfig:
     seed_cache_path: str = "src/configs/calib/ik_seed_table.npz"
     # pan-offset retries to absorb the gripper's lateral offset from the pan
     # axis (AGENTS.md §7 measured ~27mm)
-    pan_offset_candidates_deg: list[float] = field(default_factory=lambda: [0.0, 6.0, -6.0, 12.0, -12.0])
+    pan_offset_candidates_deg: list[float] = field(
+        default_factory=lambda: [0.0, 6.0, -6.0, 12.0, -12.0]
+    )
     ik_iters: int = 8
     # reject a solve whose achieved pose misses the target by more than this
     # (signals the target is outside the top-down-reachable workspace)
@@ -405,7 +411,13 @@ class PolicyConfig:
     retreat_hold_ticks: int = 5
     # gripper excluded: its position depends on what is being held
     retreat_check_joints: list[str] = field(
-        default_factory=lambda: ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
+        default_factory=lambda: [
+            "shoulder_pan",
+            "shoulder_lift",
+            "elbow_flex",
+            "wrist_flex",
+            "wrist_roll",
+        ]
     )
     pick_timeout_s: float = 25.0
 
@@ -494,7 +506,9 @@ class CameraOverlayConfig:
     # publish near-miss contours (and which gate dropped them) to the page, so
     # "no block here" and "block seen, fill 0.48" stay distinguishable
     report_rejects: bool = True
-    workspace_boundary: WorkspaceBoundaryConfig = field(default_factory=WorkspaceBoundaryConfig)
+    workspace_boundary: WorkspaceBoundaryConfig = field(
+        default_factory=WorkspaceBoundaryConfig
+    )
 
 
 @dataclass
@@ -502,6 +516,37 @@ class CameraConfig:
     """Camera web UI settings; capture transport stays configured by its CLI."""
 
     overlay: CameraOverlayConfig = field(default_factory=CameraOverlayConfig)
+
+
+@dataclass
+class CalibrationCaptureConfig:
+    """Raw-pixel candidate gates; provisional values, checked in the preview."""
+
+    color: str = "yellow"
+    point_count: int = 9
+    area_px2_min: float = 400.0
+    area_px2_max: float = 16000.0
+    morph_kernel_px: int = 5
+
+
+@dataclass
+class SessionToolsConfig:
+    """Operator-session file paths and timing; no hardware imports."""
+
+    runtime_dir: str = "var/so101"
+    snapshot_url: str = "http://127.0.0.1:8090/snapshot/shoulder.jpg"
+    snapshot_timeout_s: float = 5.0
+    poll_interval_s: float = 0.1
+    telemetry_stale_s: float = 3.0
+    capture_stale_s: float = 5.0
+    capture_timeout_s: float = 15.0
+    wrist_limit_deg: float = 8.0
+    temperature_limit_c: float = 65.0
+    telemetry_interval_s: float = 1.0
+    startup_poll_s: float = 0.1
+    startup_ramp_s: float = 0.0
+    expected_motor_model: int = 777
+    telemetry_tail_bytes: int = 16384
 
 
 @dataclass
@@ -517,6 +562,10 @@ class AppConfig:
     task1: Task1Config = field(default_factory=Task1Config)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
+    calibration_capture: CalibrationCaptureConfig = field(
+        default_factory=CalibrationCaptureConfig
+    )
+    session_tools: SessionToolsConfig = field(default_factory=SessionToolsConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -533,13 +582,17 @@ def _build_dataclass(cls: type, data: dict[str, Any], path: str) -> Any:
     for name, value in data.items():
         ftype = valid[name]
         if is_dataclass(ftype) and isinstance(value, dict):
-            kwargs[name] = _build_dataclass(ftype, value, f"{path}.{name}" if path else name)
+            kwargs[name] = _build_dataclass(
+                ftype, value, f"{path}.{name}" if path else name
+            )
         else:
             kwargs[name] = value
     return cls(**kwargs)
 
 
-def load_config(yaml_path: Path | str | None = None, overrides: list[str] | None = None) -> AppConfig:
+def load_config(
+    yaml_path: Path | str | None = None, overrides: list[str] | None = None
+) -> AppConfig:
     """Build AppConfig from defaults, then YAML, then ``key.path=value`` overrides."""
     data: dict[str, Any] = {}
     if yaml_path is not None:
@@ -601,7 +654,10 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError("task1.slot_radial_offset_mm values must be non-negative")
     if cfg.task1.pick_correction_start_radius_mm < 0:
         raise ValueError("task1.pick_correction_start_radius_mm must be non-negative")
-    if cfg.task1.pick_correction_max_radius_mm <= cfg.task1.pick_correction_start_radius_mm:
+    if (
+        cfg.task1.pick_correction_max_radius_mm
+        <= cfg.task1.pick_correction_start_radius_mm
+    ):
         raise ValueError(
             "task1.pick_correction_max_radius_mm must exceed pick_correction_start_radius_mm"
         )
@@ -610,7 +666,9 @@ def validate_task1(cfg: AppConfig) -> None:
     if cfg.task1.pick_tilt_start_radius_mm < 0:
         raise ValueError("task1.pick_tilt_start_radius_mm must be non-negative")
     if cfg.task1.pick_tilt_max_radius_mm <= cfg.task1.pick_tilt_start_radius_mm:
-        raise ValueError("task1.pick_tilt_max_radius_mm must exceed pick_tilt_start_radius_mm")
+        raise ValueError(
+            "task1.pick_tilt_max_radius_mm must exceed pick_tilt_start_radius_mm"
+        )
     if not 0 <= cfg.task1.pick_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError(
             "task1.pick_tilt_max_deg must be between zero and ik.max_tilt_error_deg"
@@ -637,14 +695,20 @@ def apply_override(cfg: AppConfig, override: str) -> None:
         raise ValueError(f"Unknown config key '{key_path}' in override {override!r}")
     current = getattr(target, leaf)
     if is_dataclass(current):
-        raise ValueError(f"Cannot override config group '{key_path}' directly; set its leaf keys")
+        raise ValueError(
+            f"Cannot override config group '{key_path}' directly; set its leaf keys"
+        )
     value = yaml.safe_load(raw_value)
     if current is not None and value is not None:
         if isinstance(current, bool) != isinstance(value, bool):
-            raise ValueError(f"Override {override!r}: expected bool, got {type(value).__name__}")
+            raise ValueError(
+                f"Override {override!r}: expected bool, got {type(value).__name__}"
+            )
         if isinstance(current, (int, float)) and not isinstance(current, bool):
             if not isinstance(value, (int, float)) or isinstance(value, bool):
-                raise ValueError(f"Override {override!r}: expected number, got {type(value).__name__}")
+                raise ValueError(
+                    f"Override {override!r}: expected number, got {type(value).__name__}"
+                )
             value = type(current)(value)
         elif not isinstance(value, type(current)):
             raise ValueError(

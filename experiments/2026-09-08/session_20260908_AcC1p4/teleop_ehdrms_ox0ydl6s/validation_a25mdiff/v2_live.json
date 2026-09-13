@@ -1,0 +1,23 @@
+{
+  "name": "V2",
+  "time": 1788805852.02883,
+  "joints": {
+    "shoulder_pan": 58.59340659340659,
+    "shoulder_lift": 20.21978021978022,
+    "elbow_flex": -2.8131868131868134,
+    "wrist_flex": 65.05494505494505,
+    "wrist_roll": 0.3956043956043956,
+    "gripper": 21.58273381294964
+  },
+  "joints_after": {
+    "shoulder_pan": 58.59340659340659,
+    "shoulder_lift": 20.21978021978022,
+    "elbow_flex": -2.8131868131868134,
+    "wrist_flex": 65.05494505494505,
+    "wrist_roll": 0.3956043956043956,
+    "gripper": 21.58273381294964
+  },
+  "max_joint_delta": 0.0,
+  "image": "v2_live.jpg",
+  "pixel_pending": true
+}

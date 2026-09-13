@@ -49,3 +49,23 @@ frame에서 외부 검출 0개가 연속 5초 유지될 때 DONE으로 전이함
 ```bash
 uv run --extra hardware --extra dev pytest -q
 ```
+
+## 파일별 책임
+
+`camera/server.py`는 CLI와 서비스 조립을 담당한다. HTTP 경로 처리는
+`camera/http.py`, USB 프레임 공급은 `camera/stream.py`, 녹화는
+`camera/recorder.py`, 수동 교차 캘리브레이션은 `camera/cross_calibration.py`에 둔다.
+기존 `camera.server`의 클래스 import 경로는 호환용으로 유지한다.
+
+테스트는 `test_config_contracts.py`, `test_camera_contracts.py`,
+`test_perception_contracts.py`, `test_selection_contracts.py`로 나눴다.
+공통 합성 블록·평면은 `tests/core_helpers.py`, 실제 테스트 이미지는
+`tests/fixtures/`에서 제공한다. HTTP 통합 검사는 `test_camera_http.py`에 둔다.
+
+실험 데이터는 [experiments](../experiments/README.md)에, 실행 중 IPC와 관절 로그는
+Git에서 제외한 `var/so101/`에 보관한다. 재사용 명령과 설정은
+[세션 도구](guide/SO101_세션도구.md)에 정리한다.
+
+이번 구조 정리의 검증: 하드웨어 의존성이 없는 환경에서 94개 통과,
+placo가 없어 IK 모듈은 건너뜀. Orin의 별도 작업본에서는 IK를 포함해 99개 통과.
+실제 모터 동작이나 카메라 서버 재시작은 수행하지 않았다.

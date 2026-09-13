@@ -1,0 +1,23 @@
+{
+  "name": "P1",
+  "time": 1788803171.7692385,
+  "joints": {
+    "shoulder_pan": 47.252747252747255,
+    "shoulder_lift": -10.813186813186814,
+    "elbow_flex": 55.20879120879121,
+    "wrist_flex": 49.23076923076923,
+    "wrist_roll": 11.648351648351648,
+    "gripper": 22.890778286461742
+  },
+  "joints_after": {
+    "shoulder_pan": 47.252747252747255,
+    "shoulder_lift": -10.813186813186814,
+    "elbow_flex": 55.20879120879121,
+    "wrist_flex": 49.23076923076923,
+    "wrist_roll": 11.648351648351648,
+    "gripper": 22.890778286461742
+  },
+  "max_joint_delta": 0.0,
+  "image": "p1_live.jpg",
+  "pixel_pending": true
+}

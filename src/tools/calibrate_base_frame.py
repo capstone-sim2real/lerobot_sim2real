@@ -7,7 +7,7 @@ no parallax term to correct for). The robot base is the origin, so
 ``base_xy_mm = (0, 0)`` and select.py's nearest-first math needs no offset.
 
     python -m tools.calibrate_base_frame \
-        --points docs/calibration/points.csv \
+        --points experiments/legacy/calibration/points.csv \
         --out src/configs/calib/venue_lab.json
 
 Reports fit RMS and a leave-one-out (LOO) max error: refit on 8 points and
@@ -65,7 +65,7 @@ def leave_one_out_errors(pairs) -> np.ndarray:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
+    ap.add_argument("--points", type=Path, default=Path("experiments/legacy/calibration/points.csv"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--image-size", default="1280x720", help="WxH the calibration frames were captured at")
     ap.add_argument("--rms-max-mm", type=float, default=5.0)

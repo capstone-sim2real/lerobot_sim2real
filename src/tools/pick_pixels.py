@@ -21,14 +21,13 @@ the mouse wheel; the click maps back to full-resolution pixels either way.
 from __future__ import annotations
 
 import argparse
-import csv
 import html
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from tools.calibration_records import CSV_FIELDS, read_csv, write_csv
 
-CSV_FIELDS = ["name", "image", "u_px", "v_px", "x_m", "y_m", "z_m", "notes"]
 
 PAGE = """<!doctype html><meta charset=utf-8><title>calibration pixel picker</title>
 <style>
@@ -71,15 +70,12 @@ onkeydown=e=>{if(e.key=='ArrowRight')next();if(e.key=='ArrowLeft')prev()};load()
 
 
 def read_rows(csv_path: Path) -> list[dict]:
-    with csv_path.open(newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    return read_csv(csv_path)[1]
 
 
 def write_rows(csv_path: Path, rows: list[dict]) -> None:
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        w.writeheader()
-        w.writerows(rows)
+    fields = read_csv(csv_path)[0] if csv_path.exists() else CSV_FIELDS
+    write_csv(csv_path, fields, rows)
 
 
 def make_handler(csv_path: Path, image_dir: Path):
@@ -101,7 +97,7 @@ def make_handler(csv_path: Path, image_dir: Path):
             elif u.path == "/points":
                 self._send(json.dumps(read_rows(csv_path)).encode(), "application/json")
             elif u.path.startswith("/img/"):
-                name = Path(html.unescape(u.path[len("/img/"):])).name
+                name = Path(html.unescape(u.path[len("/img/") :])).name
                 p = image_dir / name
                 if not p.is_file():
                     self.send_error(404, f"no such image: {name}")
@@ -124,9 +120,15 @@ def make_handler(csv_path: Path, image_dir: Path):
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
-    ap.add_argument("--image-dir", type=Path, default=None, help="default: the points.csv directory")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--points", type=Path, default=Path("experiments/legacy/calibration/points.csv")
+    )
+    ap.add_argument(
+        "--image-dir", type=Path, default=None, help="default: the points.csv directory"
+    )
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8091)
     args = ap.parse_args(argv)
@@ -139,7 +141,9 @@ def main(argv: list[str] | None = None) -> int:
     todo = [r["name"] for r in rows if not r["u_px"]]
     print(f"{len(rows)} points, {len(todo)} still need a pixel: {todo or '(none)'}")
     print(f"open http://<this-host>:{args.port}/   (Ctrl-C to stop)")
-    HTTPServer((args.host, args.port), make_handler(args.points, image_dir)).serve_forever()
+    HTTPServer(
+        (args.host, args.port), make_handler(args.points, image_dir)
+    ).serve_forever()
     return 0
 
 

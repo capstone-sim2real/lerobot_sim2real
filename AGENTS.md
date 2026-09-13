@@ -4,7 +4,7 @@
 (`AGENTS.md §3`, `§4`, `§5`, `§9`, `§11` 등). 코드를 수정하는 에이전트는
 먼저 이 문서를 읽고, 여기 규칙과 충돌하는 변경을 하지 않는다.
 
-관련 문서: 실행 계획은 [docs/plan/CV_IK_PIVOT.md](docs/plan/CV_IK_PIVOT.md).
+관련 문서: 현재 아키텍처는 [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -62,9 +62,9 @@ PLACE는 `PlaceStrategy` 인터페이스 뒤에 있다. 1차는 슬롯 배치, 2
 전략을 주입한다. 이 seam은 유지한다 — 나중에 정책 기반 정렬로 교체할 수 있는
 지점이다.
 
-**PICK도 같은 방식으로 교체 가능하다.** `handlers.PickState`는 `PickClient`
+**PICK도 같은 방식으로 교체 가능하다.** `fsm/act_handler.py`의 `ActPickState`는 `PickClient`
 Protocol(`ping()`, `run_pick(retreat_pose)`)에만 의존한다. CV+IK 경로는
-`fsm/ik_handlers.py`의 `IkPickState`로 PICK만 교체하고 나머지 상태는
+`fsm/ik_handler.py`의 `CvIkPickState`로 PICK만 교체하고 나머지 상태는
 `handlers.py`에서 import해 재사용한다.
 
 ## §5 적층: 접촉 기반 하강

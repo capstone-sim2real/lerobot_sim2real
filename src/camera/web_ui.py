@@ -10,13 +10,21 @@ def render_camera_page(
     *,
     overlay_cameras: set[str],
 ) -> bytes:
-    camera_tiles = "\n".join(
-        _camera_tile(name, device, overlay=name in overlay_cameras)
-        for name, device in cameras
+    primary, *secondary = cameras
+    camera_tiles = _camera_tile(
+        *primary,
+        overlay=primary[0] in overlay_cameras,
+        secondary=secondary,
     )
     picker = ""
     if overlay_cameras:
         picker = """
+        <label for="tool-menu">tool</label>
+        <select id="tool-menu" aria-label="camera tool">
+          <option value="overlay" selected>overlay</option>
+          <option value="cross">cross calibration</option>
+        </select>
+        <button id="cross-reset" type="button" hidden>reset cross points</button>
         <label for="overlay-color">overlay</label>
         <select id="overlay-color" aria-label="overlay colour">
           <option value="" selected>all</option>
@@ -35,7 +43,13 @@ def render_camera_page(
     return page.encode("utf-8")
 
 
-def _camera_tile(name: str, device: str, *, overlay: bool) -> str:
+def _camera_tile(
+    name: str,
+    device: str,
+    *,
+    overlay: bool,
+    secondary: list[tuple[str, str]],
+) -> str:
     safe_name = html.escape(name)
     safe_device = html.escape(device)
     canvas = (
@@ -49,6 +63,16 @@ def _camera_tile(name: str, device: str, *, overlay: bool) -> str:
         if overlay
         else ""
     )
+    secondary_views = "\n".join(
+        f'''<section class="secondary-camera">
+            <div class="stream-stack">
+              <img class="camera-image" data-camera="{html.escape(extra_name)}"
+                   src="/video/{html.escape(extra_name)}.mjpg" alt="{html.escape(extra_name)} camera stream">
+            </div>
+            <div class="camera-info"><span>{html.escape(extra_name)} · {html.escape(extra_device)}</span></div>
+          </section>'''
+        for extra_name, extra_device in secondary
+    )
     return f"""
       <section class="camera-layout" data-camera="{safe_name}">
         <div class="camera-view">
@@ -61,6 +85,7 @@ def _camera_tile(name: str, device: str, *, overlay: bool) -> str:
             <span>{safe_name} · {safe_device}</span>
             <span class="overlay-status"></span>
           </div>
+          {secondary_views}
         </div>
         {details}
       </section>
@@ -97,7 +122,7 @@ _PAGE = """<!doctype html>
       gap: 20px;
       align-items: start;
     }
-    .camera-layout + .camera-layout { margin-top: 24px; }
+    .secondary-camera { margin-top: 16px; }
     .stream-stack {
       position: relative;
       width: 100%;
@@ -146,6 +171,14 @@ _PAGE = """<!doctype html>
       padding: 5px 7px;
       font: inherit;
     }
+    button {
+      color: #f5f5f5;
+      background: #111;
+      border: 1px solid #666;
+      padding: 5px 7px;
+      font: inherit;
+      cursor: pointer;
+    }
     @media (max-width: 760px) {
       .camera-layout { grid-template-columns: 1fr; }
       .details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -157,7 +190,18 @@ _PAGE = """<!doctype html>
   <main>__CAMERA_TILES__</main>
   <script>
     const picker = document.querySelector('#overlay-color');
+    const toolMenu = document.querySelector('#tool-menu');
+    const crossReset = document.querySelector('#cross-reset');
     const overlays = new Map();
+    let gripperReference = null;
+    const fetchGripperReference = async () => {
+      try {
+        const response = await fetch('/gripper-reference.json', {cache: 'no-store'});
+        gripperReference = response.ok ? await response.json() : null;
+      } catch (_) { gripperReference = null; }
+      overlays.forEach(renderDetails);
+      setTimeout(fetchGripperReference, 500);
+    };
     const shortLabel = {
       'centre': 'B', 'front': 'F', 'back': 'BK', 'left': 'L', 'right': 'R',
       'front-left': 'FL', 'front-right': 'FR',
@@ -179,6 +223,7 @@ _PAGE = """<!doctype html>
     };
 
     const selectedColor = () => picker?.value;
+    const crossMode = () => toolMenu?.value === 'cross';
     const visibleDetections = (state) => {
       const color = selectedColor();
       if (color === 'none') return [];
@@ -296,6 +341,17 @@ _PAGE = """<!doctype html>
       }
       const detections = visibleDetections(state);
       panel.replaceChildren();
+      if (state.camera === 'shoulder' && gripperReference?.available) {
+        const block = document.createElement('div');
+        block.className = 'detail-block';
+        const title = document.createElement('div');
+        title.className = 'detail-name'; title.textContent = 'Gripper · FK XY';
+        block.append(title);
+        addDetailRow(block, 'XYZ', pointText(gripperReference.xyz_mm), '');
+        addDetailRow(block, '표시', '블록 평면 투영 · 영상 검출 아님', '');
+        addDetailRow(block, '측정 시각', new Date(gripperReference.measured_at * 1000).toLocaleTimeString(), '');
+        panel.append(block);
+      }
       detections.forEach((detection) => {
         const block = document.createElement('div');
         block.className = 'detail-block';
@@ -382,12 +438,45 @@ _PAGE = """<!doctype html>
       };
       overlays.set(camera, state);
       connect(state);
+      canvas.addEventListener('click', async (event) => {
+        if (!crossMode() || camera !== 'shoulder') return;
+        const bounds = canvas.getBoundingClientRect();
+        const point = [
+          (event.clientX - bounds.left) * canvas.width / bounds.width,
+          (event.clientY - bounds.top) * canvas.height / bounds.height
+        ];
+        if (!state.crossPoint) {
+          state.crossPoint = point;
+          state.status.textContent = 'click the table reference point';
+          return;
+        }
+        const response = await fetch('/tools/cross-calibration/points', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({marker_px: state.crossPoint, reference_px: point})
+        });
+        const result = await response.json();
+        state.crossPoint = null;
+        state.status.textContent = result.ready
+          ? `cross calibration: ${result.samples.length} points, RMS ${Number(result.rms_mm).toFixed(1)}mm`
+          : `cross calibration: ${result.samples.length}/4 points`;
+      });
     };
+
+    fetchGripperReference();
 
     const paint = () => {
       overlays.forEach((state) => {
         const context = state.context;
         context.clearRect(0, 0, state.canvas.width, state.canvas.height);
+        if (crossMode() && state.camera === 'shoulder') {
+          state.canvas.style.pointerEvents = 'auto';
+          if (state.crossPoint) {
+            drawCross(context, state.crossPoint, '#ff9800', 10);
+            drawText(context, 'cross', [state.crossPoint[0] + 12, state.crossPoint[1] - 12], '#ff9800');
+          }
+        } else {
+          state.canvas.style.pointerEvents = 'none';
+        }
         if (selectedColor() === 'none') return;
         const boundary = state.config.workspace_boundary;
         if (boundary) {
@@ -416,6 +505,18 @@ _PAGE = """<!doctype html>
         }
         visibleRejects(state).forEach((reject) => drawReject(context, reject));
         visibleDetections(state).forEach((detection) => drawDetection(context, detection));
+        const ref = gripperReference;
+        if (state.camera === 'shoulder' && ref?.available && ref.pixel?.every(Number.isFinite)) {
+          const age = Math.max(0, Date.now()/1000 - ref.measured_at);
+          const point = ref.pixel;
+          context.save();
+          context.beginPath(); context.arc(point[0], point[1], 13, 0, Math.PI*2);
+          context.strokeStyle = '#111'; context.lineWidth = 6; context.stroke();
+          context.strokeStyle = '#ffffff'; context.lineWidth = 2; context.stroke();
+          drawCross(context, point, '#ffffff', 19);
+          drawText(context, `FK XY · ${age.toFixed(0)}s ago`, [point[0]+22, point[1]-18], '#ffffff');
+          context.restore();
+        }
       });
       requestAnimationFrame(paint);
     };
@@ -427,6 +528,26 @@ _PAGE = """<!doctype html>
           connect(state);
           renderDetails(state);
         }
+      });
+    });
+    toolMenu?.addEventListener('change', () => {
+      crossReset.hidden = !crossMode();
+      overlays.forEach((state) => {
+        state.crossPoint = null;
+        state.status.textContent = crossMode()
+          ? 'click cross centre, then table reference point'
+          : '';
+      });
+    });
+    crossReset?.addEventListener('click', async () => {
+      const response = await fetch('/tools/cross-calibration/reset', {method: 'POST'});
+      if (!response.ok) {
+        overlays.forEach((state) => { state.status.textContent = 'cross calibration reset failed'; });
+        return;
+      }
+      overlays.forEach((state) => {
+        state.crossPoint = null;
+        state.status.textContent = 'cross calibration reset';
       });
     });
 
