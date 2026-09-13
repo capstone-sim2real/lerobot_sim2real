@@ -1,0 +1,48 @@
+{
+  "number": 13,
+  "slug": "appendix_conditions",
+  "seconds": 0,
+  "referenced_image_paths": [
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png",
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/02_mission.png"
+  ],
+  "prompt": "Use case: style-transfer, precise presentation typography edit.\nInput image 1 is the existing slide to EDIT. Preserve its substantive Korean content, evidence photos, data, diagram logic and all caveats. The user dislikes the giant bold promotional headlines. Redesign this as a QUIET UNIVERSITY RESEARCH PRESENTATION.\nTypography and composition, mandatory:\n- SINGLE 16:9 slide, same dimensions as input. Use restrained Noto Sans KR-like sans-serif typography.\n- At 1672px canvas width the title is ONLY 40-44px tall font size, medium/semibold weight 500-600, NOT black/heavy. About 45% of the old title size. Never stretch a short title across the page. A title may occupy less than half the slide width. Title left edge x=92, top y=80. Place a thin subtle rule at y=145 separating header from body. Start body near y=190. Keep ample clear margins.\n- Body text around 27-32px regular weight, section labels 31-35px medium. The title is only about 1.35 times body size. Key numbers at most 44-50px medium; never giant 100px+ numerals. Team names around 35px medium. Preserve legibility; do NOT shrink everything indiscriminately.\n- Convert huge bottom slogans and full-width sky promotional banners into modest regular-weight concluding lines (28-30px) with a thin rule, no big filled banner. Avoid shouting, all-heavy typography, huge KPI numerals, campaign-poster layout, ornate icons and thick decorations.\n- Remove large decorative corner square clusters. Use at most a single tiny 12px sky square or short thin blue rule as a subtle accent. No new illustrations or decoration.\n- Keep Steel / Sky palette: #355872 text/lines, #7AAACE secondary, #9CD5FF small accents, #F7F8F0 background. Keep slide 07 dark steel with ivory text. All other body slides ivory. Flat colors, no gradients/shadows.\n- Rebalance the newly freed title space with comfortable whitespace and an orderly content grid. Existing photos/diagrams remain the visual focus. Preserve or enlarge image readability rather than filling space with bigger text.\nCONTENT INVARIANTS:\nDo not invent or remove results, units, dates, model names or limitations. Keep all supplied numbers exactly. Photographs must preserve robot poses, blocks and boundaries; do not synthesize extra images. Keep arrow directions and decision labels semantically identical. No stock robot photos, fake experimental scenes, invented charts, invented performance claims or new slogans. Use commas/slashes, not middle dots. Existing source photos and text can move together for layout but substantive content stays the same.\nOnly replace the main headline with the exact calm section title below. Other exact wording can remain. Retain the small slide number near the upper left, unobtrusively. This is an edited slide, not an extra image inside a collage.\n\nEXACT NEW MAIN TITLE: \"부록 / 실험 조건\"\nSLIDE NUMBER: 13\n\nINPUT IMAGE 2 is ONLY the now-approved internal typography reference for this revision: match its modest heading, thin header rule, regular-weight body, quiet numeric values and absence of oversized corner decorations. Do NOT copy its photos, mission content or slide number. The slide-specific content comes entirely from image 1. For dark slide07 apply equivalent scale and weight using ivory text. The new heading must be no larger than the heading in image2.",
+  "output": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/13_appendix_conditions.png",
+  "previous_slide": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png",
+  "title": "부록 / 실험 조건",
+  "edit_image_paths": [
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png",
+    "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/02_mission.png"
+  ],
+  "tool": "built-in image_gen",
+  "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-a85dd5b3-96bb-442b-87bc-28e6308e9891.png",
+  "generation_history": [
+    {
+      "generated_source_path": "/home/ehdrms/.codex/generated_images/01a08d0a-89a1-7cd3-a648-73fa43ea7ae9/exec-a85dd5b3-96bb-442b-87bc-28e6308e9891.png",
+      "prompt": "Use case: style-transfer, precise presentation typography edit.\nInput image 1 is the existing slide to EDIT. Preserve its substantive Korean content, evidence photos, data, diagram logic and all caveats. The user dislikes the giant bold promotional headlines. Redesign this as a QUIET UNIVERSITY RESEARCH PRESENTATION.\nTypography and composition, mandatory:\n- SINGLE 16:9 slide, same dimensions as input. Use restrained Noto Sans KR-like sans-serif typography.\n- At 1672px canvas width the title is ONLY 40-44px tall font size, medium/semibold weight 500-600, NOT black/heavy. About 45% of the old title size. Never stretch a short title across the page. A title may occupy less than half the slide width. Title left edge x=92, top y=80. Place a thin subtle rule at y=145 separating header from body. Start body near y=190. Keep ample clear margins.\n- Body text around 27-32px regular weight, section labels 31-35px medium. The title is only about 1.35 times body size. Key numbers at most 44-50px medium; never giant 100px+ numerals. Team names around 35px medium. Preserve legibility; do NOT shrink everything indiscriminately.\n- Convert huge bottom slogans and full-width sky promotional banners into modest regular-weight concluding lines (28-30px) with a thin rule, no big filled banner. Avoid shouting, all-heavy typography, huge KPI numerals, campaign-poster layout, ornate icons and thick decorations.\n- Remove large decorative corner square clusters. Use at most a single tiny 12px sky square or short thin blue rule as a subtle accent. No new illustrations or decoration.\n- Keep Steel / Sky palette: #355872 text/lines, #7AAACE secondary, #9CD5FF small accents, #F7F8F0 background. Keep slide 07 dark steel with ivory text. All other body slides ivory. Flat colors, no gradients/shadows.\n- Rebalance the newly freed title space with comfortable whitespace and an orderly content grid. Existing photos/diagrams remain the visual focus. Preserve or enlarge image readability rather than filling space with bigger text.\nCONTENT INVARIANTS:\nDo not invent or remove results, units, dates, model names or limitations. Keep all supplied numbers exactly. Photographs must preserve robot poses, blocks and boundaries; do not synthesize extra images. Keep arrow directions and decision labels semantically identical. No stock robot photos, fake experimental scenes, invented charts, invented performance claims or new slogans. Use commas/slashes, not middle dots. Existing source photos and text can move together for layout but substantive content stays the same.\nOnly replace the main headline with the exact calm section title below. Other exact wording can remain. Retain the small slide number near the upper left, unobtrusively. This is an edited slide, not an extra image inside a collage.\n\nEXACT NEW MAIN TITLE: \"부록 / 실험 조건\"\nSLIDE NUMBER: 13\n\nINPUT IMAGE 2 is ONLY the now-approved internal typography reference for this revision: match its modest heading, thin header rule, regular-weight body, quiet numeric values and absence of oversized corner decorations. Do NOT copy its photos, mission content or slide number. The slide-specific content comes entirely from image 1. For dark slide07 apply equivalent scale and weight using ivory text. The new heading must be no larger than the heading in image2.",
+      "referenced_image_paths": [
+        "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_20260911/slides/13_appendix_conditions.png",
+        "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/02_mission.png"
+      ]
+    }
+  ],
+  "review": {
+    "status": "passed",
+    "method": "view_image inspection compared with previous slide and calm 02 reference",
+    "checks": [
+      "Short appendix title, small accent and thin header rule",
+      "Calibration table 5/9/15/9 with 20.11/13.46/11.98/8.18 mm preserved",
+      "Separate-collection-condition caveat preserved",
+      "30/45 Hz and no 45 Hz full-mission retest preserved",
+      "60.5 sec, p95 max 0.514 px, not 10-minute verification preserved",
+      "Sensor versus physical judgement caveat and execution ID preserved"
+    ],
+    "limitations": [
+      "Generated raster typography is visually checked, not editable text or exact measured font sizing.",
+      "Native 1672x941 dimensions retained without pixel resampling."
+    ]
+  },
+  "width": 1672,
+  "height": 941,
+  "current_image_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/steel_sky_14_calm_v2_20260911/slides/13_appendix_conditions.png"
+}

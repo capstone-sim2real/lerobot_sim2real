@@ -1,0 +1,92 @@
+{
+  "generator": "built-in image_gen",
+  "created": "2026-09-11",
+  "palette_source": "User supplied five palettes in this conversation, order preserved",
+  "layout": {
+    "columns": 3,
+    "rows": 2,
+    "slides": 6
+  },
+  "assets": [
+    {
+      "number": 1,
+      "id": "01_slate_sand",
+      "file": "01_slate_sand.png",
+      "palette": [
+        "#213448",
+        "#547792",
+        "#94B4C1",
+        "#EAE0CF"
+      ],
+      "neutral_text": null,
+      "width": 2048,
+      "height": 768,
+      "sha256": "a92a43a6c9de1df8acaee20d3dd3a9ddee68cc8aebbd42917991da110ef2136f",
+      "prompt": "prompts/01_slate_sand.txt"
+    },
+    {
+      "number": 2,
+      "id": "02_steel_sky",
+      "file": "02_steel_sky.png",
+      "palette": [
+        "#355872",
+        "#7AAACE",
+        "#9CD5FF",
+        "#F7F8F0"
+      ],
+      "neutral_text": null,
+      "width": 2048,
+      "height": 768,
+      "sha256": "d6f03e9b5151d132d62653babf98c65d5897b18cb38ef23231c5f6b5edddd852",
+      "prompt": "prompts/02_steel_sky.txt"
+    },
+    {
+      "number": 3,
+      "id": "03_sage_cream",
+      "file": "03_sage_cream.png",
+      "palette": [
+        "#80A1BA",
+        "#91C4C3",
+        "#B4DEBD",
+        "#FFF7DD"
+      ],
+      "neutral_text": "#26343C",
+      "width": 2048,
+      "height": 768,
+      "sha256": "9647a55db3ba77bd56a504f8bf7793b11a3cf0cfc9b7359beef368905cd18f27",
+      "prompt": "prompts/03_sage_cream.txt"
+    },
+    {
+      "number": 4,
+      "id": "04_ocean_mist",
+      "file": "04_ocean_mist.png",
+      "palette": [
+        "#09637E",
+        "#088395",
+        "#7AB2B2",
+        "#EBF4F6"
+      ],
+      "neutral_text": null,
+      "width": 2048,
+      "height": 768,
+      "sha256": "a5401219a8ced4a4cab3f05ce671fcd1a6443f2d75a67ab400e9bb4868229cd1",
+      "prompt": "prompts/04_ocean_mist.txt"
+    },
+    {
+      "number": 5,
+      "id": "05_violet_mint",
+      "file": "05_violet_mint.png",
+      "palette": [
+        "#473472",
+        "#53629E",
+        "#87BAC3",
+        "#D6F4ED"
+      ],
+      "neutral_text": null,
+      "width": 2048,
+      "height": 768,
+      "sha256": "4e59da4ff87e5893a56f99afa4eb289c105a929f987872753d94dbf8ba65ab8c",
+      "prompt": "prompts/05_violet_mint.txt"
+    }
+  ]
+}

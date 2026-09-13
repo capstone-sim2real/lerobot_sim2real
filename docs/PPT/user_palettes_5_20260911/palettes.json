@@ -1,0 +1,58 @@
+[
+  {
+    "id": "01_slate_sand",
+    "name": "슬레이트 / 샌드",
+    "colors": [
+      "#213448",
+      "#547792",
+      "#94B4C1",
+      "#EAE0CF"
+    ],
+    "direction": "Quiet, premium editorial art direction: warm sand paper fields, dark slate oversized typography, desaturated steel-blue accents, asymmetrical architectural-portfolio layouts. Background mainly #EAE0CF, text #213448, secondary #547792, accent #94B4C1. A contrasting dark-slate cover with sand type; remaining slides mostly sand with selectively deep-slate vertical fields. Strong empty space, fine typographic rules, huge custom-aligned Korean headings, restrained clean infographics without boxes. Avoid cream-vintage textures; contemporary architectural studio presentation. Cover typography dominates: CV+IK as a strong stacked type composition with tiny geometric block silhouettes, no robot. Shift title placement across slides intelligently. Calibrations shown as a striking two-column typographic plate, not metric cards."
+  },
+  {
+    "id": "02_steel_sky",
+    "name": "스틸 / 스카이",
+    "colors": [
+      "#355872",
+      "#7AAACE",
+      "#9CD5FF",
+      "#F7F8F0"
+    ],
+    "direction": "Crisp modern product-case-study slides: airy almost-white #F7F8F0, large dark-steel #355872 type, generous sky-blue #9CD5FF areas, restrained #7AAACE hierarchy. Use large right-angle color fields and bold crop-to-edge geometry, fluid open text alignment, clean editorial font weight contrast, strong horizontal rhythm. No rounded cards or generic SaaS UI. Cover has an ultra-large typographic CV+IK composition within a sky-blue field and minimal Korean project title. System panel has a clean vertical-to-horizontal information path. Calibration panel may invert into #355872 with light type, while results remain very light. These should feel like a contemporary Korean design studio built a practical academic pitch deck."
+  },
+  {
+    "id": "03_sage_cream",
+    "name": "세이지 / 크림",
+    "colors": [
+      "#80A1BA",
+      "#91C4C3",
+      "#B4DEBD",
+      "#FFF7DD"
+    ],
+    "neutral": "#26343C",
+    "direction": "Mature pastel editorial: warm cream #FFF7DD canvas, large pale-sage #B4DEBD sections, muted aqua #91C4C3 and powder slate #80A1BA geometric accents. These exact four chromatic colors ONLY. For readable type and fine necessary diagram strokes use one neutral ink #26343C; do NOT darken or replace palette colors. Colors occupy broad flat areas, not small badges. Play with asymmetric margins, oversized clean typography, generous breathing room, square mosaic-like blocks as one controlled motif. Refined art-and-science exhibition aesthetic, not cute kindergarten, not handwritten, not pastel SaaS cards. Cover typographic and abstract, extremely spare. Six distinct page compositions within a gentle unified grid, precise hierarchy, no low-contrast colored paragraphs."
+  },
+  {
+    "id": "04_ocean_mist",
+    "name": "오션 / 미스트",
+    "colors": [
+      "#09637E",
+      "#088395",
+      "#7AB2B2",
+      "#EBF4F6"
+    ],
+    "direction": "Bold contemporary research publication with an ocean-and-mist palette: deep #09637E, teal #088395, desaturated seafoam #7AB2B2, icy background #EBF4F6. Strong magazine-like page architecture, long unboxed arrows, typography flush to broad margins, selectively full-bleed dark ocean panels. Cover is a huge two-line Korean title over deep ocean with a refined solid rectangular abstraction of a block task; avoid rendered robots. On content pages use a very light mist field with one wide teal band or tall type column, no repeated header template. Exact teal palette instead of navy/purple/black. Calibration uses typography and two precise planar diagrams; results uses an elegant four-row editorial data ledger. Professional design-conference aesthetic with abundant intentional negative space."
+  },
+  {
+    "id": "05_violet_mint",
+    "name": "바이올렛 / 민트",
+    "colors": [
+      "#473472",
+      "#53629E",
+      "#87BAC3",
+      "#D6F4ED"
+    ],
+    "direction": "Avant-garde but usable scientific exhibition graphics: dark violet #473472, indigo #53629E, muted aqua #87BAC3, pale mint #D6F4ED. Mint-dominant light surfaces with large violet contemporary Korean typography, not generic white-and-purple card design. Confident asymmetry, oversized typographic anchors, a few large clipped right-angle forms, sleek open diagrams. Alternate a dark violet cover with mint type and very light mint content panels; one data panel may use an indigo field. Geometric blocks refer to the robot task without literal robot illustrations. Keep elegant 2020s editorial-design energy, mature and rigorous; no purple 3D machinery, thin serif headings, gradients, soft UI panels or decorative logos."
+  }
+]

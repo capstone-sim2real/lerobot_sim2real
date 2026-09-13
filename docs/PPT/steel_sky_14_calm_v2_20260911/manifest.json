@@ -1,0 +1,158 @@
+{
+  "created_at_utc": "2026-09-10T21:39:03.034531+00:00",
+  "generator": "built-in image_gen",
+  "revision": "calm v2; slide 01 retained, slides 02-14 edited",
+  "approved_cover_preserved": true,
+  "format": "14 raster-image slides; 12 main + 2 appendix",
+  "main_talk_seconds": 560,
+  "transition_buffer_seconds": 40,
+  "palette": [
+    "#355872",
+    "#7AAACE",
+    "#9CD5FF",
+    "#F7F8F0"
+  ],
+  "images_modified_by_packaging": false,
+  "slides": [
+    {
+      "number": 1,
+      "file": "slides/01_cover.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "b5620ad07f6c1861f7c425c1de5cd31a2ee12ac33b2500a88a454717c0738c61",
+      "seconds": 15,
+      "prompt": "prompts/01_cover.txt",
+      "metadata": "metadata/01.json"
+    },
+    {
+      "number": 2,
+      "file": "slides/02_mission.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "e8836f3ab70be0b34fb255c5599db8d2b614ba4800b2b40a10a8b78441fbb1a7",
+      "seconds": 35,
+      "prompt": "prompts/02_mission.txt",
+      "metadata": "metadata/02.json"
+    },
+    {
+      "number": 3,
+      "file": "slides/03_demonstration.png",
+      "width": 1671,
+      "height": 941,
+      "sha256": "83ff3d16190027e6a3479b7efd474b581bc1bcf39406f6b7181158016a7d00fd",
+      "seconds": 35,
+      "prompt": "prompts/03_demonstration.txt",
+      "metadata": "metadata/03.json"
+    },
+    {
+      "number": 4,
+      "file": "slides/04_pivot.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "3301d87a54cfd08af08d571f6ac4d6d5da441c90eb35d6f43c3c2e0069cd4f4e",
+      "seconds": 45,
+      "prompt": "prompts/04_pivot.txt",
+      "metadata": "metadata/04.json"
+    },
+    {
+      "number": 5,
+      "file": "slides/05_architecture.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "fe1981e5c0e3e2308231748e45818711d6b0f1a8c92a7c1b93a07426ffaaa8ce",
+      "seconds": 55,
+      "prompt": "prompts/05_architecture.txt",
+      "metadata": "metadata/05.json"
+    },
+    {
+      "number": 6,
+      "file": "slides/06_vision.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "dfe27e2f4a506bfc9e1cc7506513e1499c7682c336d9dc6e643e1ea5fffc6696",
+      "seconds": 45,
+      "prompt": "prompts/06_vision.txt",
+      "metadata": "metadata/06.json"
+    },
+    {
+      "number": 7,
+      "file": "slides/07_calibration.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "1bfddbc91d71011073d9e183e0df9f4128b2439fc8db11ba6aefd684812bf6ef",
+      "seconds": 60,
+      "prompt": "prompts/07_calibration.txt",
+      "metadata": "metadata/07.json"
+    },
+    {
+      "number": 8,
+      "file": "slides/08_ik.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "30ef0f35663084525e611545af873aa7211ad9cbb0ba245a772fa374f60d2edd",
+      "seconds": 45,
+      "prompt": "prompts/08_ik.txt",
+      "metadata": "metadata/08.json"
+    },
+    {
+      "number": 9,
+      "file": "slides/09_grasp.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "85e54cf07f3347d47b1339f7455148eb4a4ff1cc3934f79edcaf80241f1e2dd0",
+      "seconds": 70,
+      "prompt": "prompts/09_grasp.txt",
+      "metadata": "metadata/09.json"
+    },
+    {
+      "number": 10,
+      "file": "slides/10_results.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "3e40ad5aea5895a27a173ebcc2aca067d3bf9ad98d06287e888a8f3f946ad7e5",
+      "seconds": 60,
+      "prompt": "prompts/10_results.txt",
+      "metadata": "metadata/10.json"
+    },
+    {
+      "number": 11,
+      "file": "slides/11_retry_cost.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "21b505f5d876ec7f53468cfd834d442f8744f74eff2fb2f057df8cef471ae455",
+      "seconds": 50,
+      "prompt": "prompts/11_retry_cost.txt",
+      "metadata": "metadata/11.json"
+    },
+    {
+      "number": 12,
+      "file": "slides/12_conclusion.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "8728fa8518e7c04469ca400708a010a5cb9c0f19a942b802727796abb7c796de",
+      "seconds": 45,
+      "prompt": "prompts/12_conclusion.txt",
+      "metadata": "metadata/12.json"
+    },
+    {
+      "number": 13,
+      "file": "slides/13_appendix_conditions.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "1eaff187d53bec3bc5e93e5ede37447f47d0a8dd8396d62c464155941462ccda",
+      "seconds": 0,
+      "prompt": "prompts/13_appendix_conditions.txt",
+      "metadata": "metadata/13.json"
+    },
+    {
+      "number": 14,
+      "file": "slides/14_appendix_roles.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "5504d407bc00faa51e5cada4ad26b18fbec3e40daf3e2ba044d3a78cd3a99211",
+      "seconds": 0,
+      "prompt": "prompts/14_appendix_roles.txt",
+      "metadata": "metadata/14.json"
+    }
+  ]
+}
