@@ -15,11 +15,11 @@ checked before trusting it.
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import cv2
 import numpy as np
+from tools.calibration_records import read_csv, write_csv
 
 # Loose HSV bands (OpenCV hue 0-179), wide enough to catch a single saturated
 # block colour under normal room lighting. Tightened later per AGENTS.md §9
@@ -55,13 +55,17 @@ def find_block_centroid(frame_bgr: np.ndarray, color: str, min_area_px: float = 
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--points", type=Path, default=Path("docs/calibration/points.csv"))
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--points", type=Path, default=Path("experiments/legacy/calibration/points.csv")
+    )
     ap.add_argument("--color", required=True, choices=sorted(_HSV_BANDS))
     ap.add_argument("--min-area-px", type=float, default=200.0)
     args = ap.parse_args(argv)
 
-    rows = list(csv.DictReader(args.points.open(newline="", encoding="utf-8")))
+    fields, rows = read_csv(args.points)
     image_dir = args.points.parent
     found, missing = 0, []
     for row in rows:
@@ -82,17 +86,26 @@ def main(argv: list[str] | None = None) -> int:
 
         overlay = frame.copy()
         cv2.drawContours(overlay, [contour], -1, (0, 255, 255), 2)
-        cv2.drawMarker(overlay, (int(round(cx)), int(round(cy))), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
+        cv2.drawMarker(
+            overlay,
+            (int(round(cx)), int(round(cy))),
+            (0, 0, 255),
+            cv2.MARKER_CROSS,
+            24,
+            2,
+        )
         out_path = image_dir / f"{img_path.stem}_detected.png"
         cv2.imwrite(str(out_path), overlay)
-        print(f"  {row['name']}: centroid=({cx:.1f},{cy:.1f})  area_px={area:.0f}  -> {out_path.name}")
+        print(
+            f"  {row['name']}: centroid=({cx:.1f},{cy:.1f})  area_px={area:.0f}  -> {out_path.name}"
+        )
 
-    with args.points.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=rows[0].keys())
-        w.writeheader()
-        w.writerows(rows)
+    write_csv(args.points, fields, rows)
 
-    print(f"\n{found}/{len(rows)} points filled" + (f", missing: {missing}" if missing else ""))
+    print(
+        f"\n{found}/{len(rows)} points filled"
+        + (f", missing: {missing}" if missing else "")
+    )
     return 0 if not missing else 1
 
 

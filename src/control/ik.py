@@ -36,13 +36,37 @@ class IkResult:
         return True  # gate applied by the caller against cfg thresholds
 
 
-def _topdown_pose(x_mm: float, y_mm: float, z_mm: float, yaw_deg: float) -> np.ndarray:
-    """4x4 pose: approach axis straight down, jaw plane rotated by yaw_deg."""
+def _topdown_pose(
+    x_mm: float,
+    y_mm: float,
+    z_mm: float,
+    yaw_deg: float,
+    radial_tilt_deg: float = 0.0,
+) -> np.ndarray:
+    """4x4 pose with an optional outward tip of the approach axis.
+
+    A negative ``radial_tilt_deg`` tips the downward axis away from the robot
+    around the base-frame tangential axis. This releases wrist-flex saturation
+    at long reach without coupling the tilt direction to jaw yaw.
+    """
     T = np.eye(4)
     c, s = np.cos(np.radians(yaw_deg)), np.sin(np.radians(yaw_deg))
     T[:3, 0] = [-s, c, 0.0]
     T[:3, 1] = [c, s, 0.0]
     T[:3, 2] = [0.0, 0.0, -1.0]
+    if radial_tilt_deg:
+        phi = math.atan2(y_mm, x_mm)
+        axis = np.array([-math.sin(phi), math.cos(phi), 0.0])
+        angle = math.radians(radial_tilt_deg)
+        cross = np.array(
+            [
+                [0.0, -axis[2], axis[1]],
+                [axis[2], 0.0, -axis[0]],
+                [-axis[1], axis[0], 0.0],
+            ]
+        )
+        rotation = np.eye(3) + math.sin(angle) * cross + (1.0 - math.cos(angle)) * (cross @ cross)
+        T[:3, :3] = rotation @ T[:3, :3]
     T[:3, 3] = [x_mm / 1000.0, y_mm / 1000.0, z_mm / 1000.0]
     return T
 
@@ -192,11 +216,32 @@ class TopDownIK:
         A square block grasps identically every 90 deg, so this aligns the
         jaws with a pair of block faces while keeping wrist_roll within
         +-45 deg of neutral (AGENTS.md §9)."""
+        return self.grasp_yaw_and_rotation_deg(x_mm, y_mm, z_mm, block_angle_deg)[0]
+
+    def grasp_yaw_and_rotation_deg(
+        self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float
+    ) -> tuple[float, float]:
+        """``grasp_yaw_deg`` plus how far it turns the jaws off neutral.
+
+        The rotation is what ``gripper_frame_offset`` does *not* know about:
+        that function's radial/tangential axes are the neutral-yaw ones, so
+        once the jaws turn to meet a block's faces the two frames differ by
+        this angle (bounded to +-45 deg by the mod-90 fold). Returned from
+        the same probe solve because the caller that wants one wants both.
+        """
         neutral = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
         candidates = [block_angle_deg + 90.0 * k for k in range(4)]
-        return min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
+        yaw = min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
+        return yaw, ((yaw - neutral) + 180.0) % 360.0 - 180.0
 
-    def solve(self, x_mm: float, y_mm: float, z_mm: float, yaw_deg: float | None = None) -> IkResult:
+    def solve(
+        self,
+        x_mm: float,
+        y_mm: float,
+        z_mm: float,
+        yaw_deg: float | None = None,
+        radial_tilt_deg: float = 0.0,
+    ) -> IkResult:
         """Best-effort top-down IK solve. Check ``position_error_mm`` /
         ``tilt_error_deg`` against config thresholds before trusting the
         result (AGENTS.md §6/§7 — this can fail gracefully out-of-reach).
@@ -208,7 +253,7 @@ class TopDownIK:
         if yaw_deg is None:
             yaw_deg = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
         k = self._load_kinematics()
-        target = _topdown_pose(x_mm, y_mm, z_mm, yaw_deg)
+        target = _topdown_pose(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
         r_mm = float(np.hypot(x_mm, y_mm))
         pan0 = -float(np.degrees(np.arctan2(y_mm, x_mm)))
         seeds = self._nearest_seeds(r_mm, z_mm)

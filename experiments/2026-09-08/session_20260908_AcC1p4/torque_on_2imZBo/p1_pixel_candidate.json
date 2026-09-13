@@ -1,0 +1,9 @@
+{
+  "centre": [
+    347.9245300292969,
+    432.4043273925781
+  ],
+  "preview": "docs/calibration/session_20260908_AcC1p4/torque_on_2imZBo/p1_clean_candidate.png",
+  "block_motion_verified": true,
+  "verification": "User confirmed block did not move during gripper withdrawal"
+}

@@ -11,12 +11,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-import cv2
-import numpy as np
-
 from config import SelectConfig
 from perception.detector import BlockDetection
 from perception.homography import PlaneCalibration
+from perception.zone import point_in_zone
 
 
 @dataclass
@@ -36,12 +34,7 @@ def target_id_for(det: BlockDetection, cell_mm: float) -> str:
 
 
 def _in_zone(det: BlockDetection, calib: PlaneCalibration, margin_mm: float) -> bool:
-    if not calib.zone_polygon_mm:
-        return False
-    polygon = np.array(calib.zone_polygon_mm, dtype=np.float32)
-    # signed distance: positive inside, negative outside
-    dist = cv2.pointPolygonTest(polygon, det.center_mm, measureDist=True)
-    return dist >= -margin_mm
+    return point_in_zone(det.center_mm, calib, margin_mm)
 
 
 def select_target(

@@ -1,0 +1,10 @@
+{
+  "frame_seq": "63329",
+  "captured_at": "1788800500.406400",
+  "u_px": 556.1452026367188,
+  "v_px": 367.4369201660156,
+  "status": "pixel_candidate_only_waiting_for_fk",
+  "image": "before.jpg",
+  "preview": "before_candidate.png",
+  "saved_at": "2026-09-08T02:01:40"
+}

@@ -55,8 +55,11 @@ def check_grasp(robot: BaseRobotIO, cfg: SensingConfig, *, settle: bool = True) 
     """Decide whether the gripper is holding a block.
 
     Assumes the close command was already sent. Position signal: an empty
-    gripper reaches ``gripper_empty_closed_max`` or below; a 20 mm block
-    stops it earlier. Load signal: a held block keeps |Present_Load| high.
+    gripper reaches ``gripper_empty_closed_max`` or below; anything the jaws
+    actually close on stops them earlier — including a block caught standing
+    on edge, which leaves only about half the jaw travel of one lying flat.
+    Load signal: a held block keeps |Present_Load| high, and with an empty
+    gripper reading 39..41 against a 200 floor it is the stronger of the two.
     """
     if cfg.grasp_check_mode not in _GRASP_MODES:
         raise ValueError(f"Unknown grasp_check_mode {cfg.grasp_check_mode!r}, expected one of {_GRASP_MODES}")

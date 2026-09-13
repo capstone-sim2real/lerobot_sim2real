@@ -1,6 +1,13 @@
 # Capstone Sim2Real
 
-SO-101 로봇팔, Jetson/JetBot 기반 vision-action 실험, 온디바이스 LLM 추론 벤치마크를 정리하는 졸업과제 저장소입니다.
+SO-101 로봇팔로 5개 블록을 지정 영역에 옮기고 적층하는 졸업과제 저장소입니다.
+현재 검증·운영 중인 기본 경로는 고정 탑 카메라의 색·형상 검출과 결정론적
+IK를 결합한 **Task 1 CV+IK zone gathering**입니다. Task 2는 동일한
+PICK/VERIFY/TRANSPORT 흐름에 적층 PLACE 전략만 교체하는 목표 구조를 유지합니다.
+
+과거 ACT/SmolVLA 실험 문서는 CV+IK로 피벗한 근거를 보존하는 기록입니다. 현재
+실행법은 이 README와 [현재 아키텍처](docs/architecture.md),
+[CV+IK 가이드](docs/guide/SO101_CV_IK_파지운반.md)를 기준으로 합니다.
 
 LeRobot은 `third_party/lerobot` submodule로 고정하며, 프로젝트 루트의 단일 `uv` 환경에서 함께 실행합니다.
 
@@ -27,10 +34,16 @@ sudo usermod -aG dialout "$USER"
 
 cd ~/lerobot_sim2real
 uv sync --python 3.12 --extra hardware --extra dev
+source .venv/bin/activate
 so101-scan-motors
 ```
 
 자세한 설치 절차와 `uv`, `fish`, 권한 문제는 [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)를 봅니다.
+
+## 세션 도구와 실험 기록
+
+- [텔레옵·점 기록·실시간 FK 권장 실행법](docs/guide/SO101_세션도구.md)
+- [날짜별 실험 기록](experiments/README.md)
 
 ## Common Commands
 
@@ -55,22 +68,44 @@ so101-keyboard --step 1
 브라우저로 카메라 실시간 확인:
 
 ```bash
-so101-camera --host 0.0.0.0 --port 8090
+so101-camera
 ```
+
+기본값은 `0.0.0.0:8090`이며 비전 오버레이도 함께 활성화됩니다. 오버레이를
+완전히 끄려면 `so101-camera --no-overlay`를 사용합니다. 화면의 오버레이는
+원본 MJPEG 위에서 브라우저가 합성하므로 영상 스트림을 느리게 만들지 않습니다.
 
 에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 직전 비교 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
 
 ```bash
-so101-camera --host 0.0.0.0 --port 8090 \
+so101-camera \
   --save-dir /tmp/so101-camera --save-interval-s 2 \
   --save-on-change --change-threshold 8 --max-save-interval-s 10
 ```
 
-CV/IK 파지 flow 실행 (카메라 서버를 먼저 띄워둔 채로):
+블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행
+(카메라 서버를 먼저 띄워둔 채로):
 
 ```bash
 so101-run --task 1 --flow pick_lift_lower --color green
 ```
+
+고정 빨강 테이프 구역은 기존 homography를 보존하는 전용 도구로 한 번 등록함.
+
+```bash
+so101-zone-calibrate                         # preview only
+so101-zone-calibrate --write                 # zone_polygon_mm 저장
+so101-run --task 1 --dry-run                 # 모터 연결 없이 슬롯/IK 확인
+so101-run --task 1                           # 외부 블록이 5초간 없을 때까지 수집
+```
+
+Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인 부분임. PLACE 횟수나
+색상 개수로 종료하지 않고, 홈 자세에서 fresh frame 기준 외부 검출이 5초 동안
+연속 0개일 때만 완료함.
+
+현재 Task 1 runner는 이 완료 판정을 위해 내부 FSM 시간 예산을 적용하지 않습니다.
+평가의 180초 제한을 재현할 때는 내부 deadline이 구현될 때까지 외부 supervisor로
+시간을 제한하고 실험 로그에 그 명령을 함께 남깁니다.
 
 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
 
@@ -79,21 +114,37 @@ so101-run --task 1 --flow pick_lift_lower --color green
 ```text
 .
 ├── docs/
-│   ├── guide/                 SO-101 사용/실험 가이드
-│   └── report/                착수보고서 등 제출 문서
-├── src/tools/                 SO-101 Python CLI 구현
+│   ├── calibration/           캘리브레이션 자료 위치 안내
+│   ├── eval/                  정량 평가 기록 형식
+│   ├── guide/                 현재 운영 가이드와 과거 실험 가이드
+│   └── report/                시점별 제출·피벗 기록(역사 자료)
+├── experiments/               날짜별 실장비 증거와 실패 기록
+├── src/
+│   ├── camera/                단일 소유 카메라 서버와 표시용 오버레이
+│   ├── perception/            homography, 색·형상 검출, 선택
+│   ├── control/               IK, 파지, 궤적, 센싱
+│   ├── fsm/                   Task 흐름과 상태 구현
+│   ├── policy/                보존된 optional ACT PICK 클라이언트
+│   ├── runners/               so101-run 조립·실행
+│   └── tools/                 캘리브레이션·진단·세션 CLI
 ├── third_party/               SO-101 자산·LeRobot submodule
+└── docker/                    보존된 ACT policy-server 제출 경로
 ```
 
 `third_party/lerobot`은 Git submodule이고, `.venv/`는 각 팀원이 `uv sync`로 생성하는 로컬 환경입니다. `uv.lock`과 submodule 커밋을 함께 추적해 같은 드라이버·기구학 버전을 재현합니다.
 
 ## Documents
 
+- [현재 아키텍처와 구현 상태](docs/architecture.md)
 - [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)
 - [SO-101 문제해결](docs/guide/SO101_문제해결.md)
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
 - [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
+- [캘리브레이션 자료 위치](docs/calibration/README.md)
+- [정량 평가 기록](docs/eval/README.md)
+- [과거 ACT/SmolVLA 데이터 수집 기록](docs/guide/SO101_데이터수집_관리.md)
+- [과거 ACT/SmolVLA 학습·추론 기록](docs/guide/SO101_학습_추론.md)
 - [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
 
 ## Notes

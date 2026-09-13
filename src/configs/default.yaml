@@ -2,6 +2,14 @@
 # Every key mirrors a dataclass field in pick_stack/config.py — unknown keys
 # are rejected at load time. Override at runtime with --set key.path=value.
 
+calibration_capture:
+  # Raw-image pixel gates, provisional; review the marked block top before accepting.
+  color: yellow
+  point_count: 9
+  area_px2_min: 400.0
+  area_px2_max: 16000.0
+  morph_kernel_px: 5
+
 robot:
   port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
   id: my_follower
@@ -15,23 +23,76 @@ perception:
   square_mm: 25.0        # 실제 체스판 한 칸 길이 실측 후 수정
   min_pattern: [5, 5]
   rectified_mm_per_px: 1.0
-  # 합성 픽스처 기준값 — 실프레임으로 tools/view_detect.py 돌려서 재튜닝 필수
+  # HSV 밴드는 '분류'가 아니라 넉넉한 1차 후보 게이트다. 서로 겹쳐도 되고,
+  # 실제로 겹쳐야 한다 — wood와 yellow는 어떤 고정 박스로도 안 갈린다.
+  # 어두운 구석에 있을 땐 색상이 갈리고 채도는 안 갈리며, 밝은 판 위에선
+  # 정확히 그 반대다(양쪽 다 실측). 최종 색 판정은 color_prototypes가 한다.
   hsv_ranges:
-    red: [[0, 90, 60, 8, 255, 255], [172, 90, 60, 179, 255, 255]]
-    yellow: [[26, 90, 80, 34, 255, 255]]
-    green: [[40, 60, 50, 85, 255, 255]]
-    blue: [[95, 90, 50, 130, 255, 255]]
-    wood: [[10, 40, 80, 25, 180, 255]]
+    red: [[0, 100, 55, 10, 255, 255], [170, 100, 55, 179, 255, 255]]
+    yellow: [[13, 55, 50, 40, 255, 255]]
+    green: [[35, 40, 30, 95, 255, 255]]
+    blue: [[88, 40, 30, 136, 255, 255]]
+    wood: [[3, 25, 40, 32, 120, 255]]
+  # 색별 기준 (색상, 채도). 블록 내부 픽셀(테두리 침식 후, 색당 2~4.5만개)을
+  # 어두운 배치와 밝은 배치 양쪽에서 실측한 값. 명도(V)는 일부러 뺐다 —
+  # 위치에 따라 가장 많이 변하면서 정체성은 가장 적게 담는 채널이다.
+  # 각 blob은 '어느 게이트에 걸렸나'가 아니라 '어느 기준에 가장 가까운가'로
+  # 이름이 정해지고, 색마다 max_per_color개까지만 가져간다.
+  # 색마다 (색상,채도) 점 '목록'이다. 어두운 구석과 밝은 판 위에서 같은 블록의
+  # 채도가 완전히 다르게 측정되는데(yellow 실측 S가 65~200까지 흔들림), 한 점을
+  # 평균으로 잡으면 실제 밝은 노랑이 자기 기준점보다 wood 기준점에 더 가까워지는
+  # 문제가 생겼다. 그래서 yellow는 조명 상황별로 점을 2개 두고, 후보는 그 색의
+  # 여러 점 중 가장 가까운 것과 비교한다.
+  color_prototypes:
+    red: [[2, 168]]
+    yellow: [[23, 116], [26, 190]]
+    green: [[72, 148]]
+    blue: [[120, 137]]
+    wood: [[17, 81]]
+  prototype_hue_weight: 2.0
+  prototype_saturation_weight: 1.0
+  # 모든 기준색에서 이보다 멀면 어느 블록도 아니다. 이 상한이 없으면 남은 blob이
+  # 비어 있는 색 슬롯에 강제 배정되어 없는 블록을 만들어낸다.
+  # 실측 실제 블록 0.07~0.10, 가장 헷갈리는 쌍(wood-yellow)의 오답이 0.24.
+  prototype_max_distance: 0.35
   area_mm2_min: 900.0
-  area_mm2_max: 2600.0
+  # 고방위각에서는 카메라가 블록 측면까지 보므로 투영 blob이 ~2200mm2까지 부푼다
+  area_mm2_max: 3200.0
   aspect_ratio_max: 1.6
-  solidity_min: 0.85
+  # 0.85가 아닌 이유: 방위각 ±75° 밖에서는 카메라가 블록 옆면까지 봐서 실루엣이
+  # 진짜로 오목한 육각형이 된다. 30프레임 실측 최악값 0.847(+82° 파랑),
+  # 나머지 색은 0.888 이상. 테이프/잡동사니는 여전히 0.55~0.72.
+  solidity_min: 0.78
   fill_min: 0.65
-  morph_kernel_px: 5
+  # 5가 아닌 9: 어두운 가장자리에서 마스크 테두리가 프레임마다 떨리며 blob에
+  # 홈을 파는데, 이건 색이 아니라 '형상' 문제라 HSV를 풀면 오히려 악화된다.
+  # OPEN을 넓히면 그 테두리가 깎여 나가고 안정된 코어만 남는다.
+  # +82° 파랑 30프레임 실측 solidity 하한: k=5 0.691 -> k=7 0.802 -> k=9 0.847
+  morph_kernel_px: 9
+  # 경기장에 색상별 블록이 1개씩만 존재 — 색마다 최대 이 개수까지만. 0이면 무제한.
+  max_per_color: 1
+  # 이 거리보다 가까운 다른 색 후보는 '같은 블록이 여러 게이트에 걸린 것'으로
+  # 보고 색을 정하기 전에 하나로 합친다. 0이면 비활성.
+  min_color_separation_mm: 30.0
+  # 로봇 도달 영역(베이스 기준 부채꼴). 밖의 블록은 아예 보고하지 않는다 —
+  # 팔이 닿지도 않고, 판 바깥 나무 바닥 같은 잡동사니가 바로 그 유령 후보의
+  # 출처다. 관제 화면의 주황 부채꼴이 이 값을 그대로 그리므로, 그려진 것이
+  # 곧 검출 범위다. radius 0이면 비활성.
+  workspace_radius_mm: 320.0
+  workspace_angle_min_deg: -90.0
+  workspace_angle_max_deg: 90.0
+  # 2026-09-11 활성 grasp-z/보정/bias/20mm IK gate로 계산한 raw 블록 중심의
+  # 방위각별 도달 경계. 실제 IK 한계에서 5mm 안쪽이며 각도 사이는 선형 보간한다.
+  # detector와 카메라 주황 경계가 이 값을 함께 사용한다.
+  workspace_radius_by_angle_mm:
+    [[-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
+     [-40, 307], [-30, 311], [-20, 313], [-10, 315], [0, 315],
+     [10, 315], [20, 313], [30, 309], [40, 305], [50, 300],
+     [60, 296], [70, 288], [80, 283], [90, 275]]
 
 select:
   rule: nearest_first
-  zone_margin_mm: 20.0
+  zone_margin_mm: 0.0
   target_cell_mm: 40.0
 
 sensing:
@@ -43,7 +104,10 @@ sensing:
   # 95는 실제 블록을 넣어보고 충분하다고 확인한 값이며 100까지 5 남긴다.
   gripper_open_pos: 95.0
   gripper_close_pos: 2.0
-  gripper_empty_closed_max: 20.0
+  # 위치 게이트는 '빈손'을 걸러내는 용도이므로 빈손 분포(3.4)를 기준으로 잡는다.
+  # 기존 20.0은 블록이 눕혀진 상태(조우 40mm)와 빈손의 중간값이라, 블록이 세워진
+  # 상태(조우 ~20mm)로 잡히면 임계값에 걸쳐서 실제 파지를 EMPTY로 오판했다.
+  gripper_empty_closed_max: 12.0
   gripper_load_min: 200.0
   grasp_check_mode: position_and_load
   grasp_settle_s: 0.4
@@ -55,11 +119,19 @@ sensing:
 
 motion:
   poses_path: src/configs/poses.yaml
-  fps: 30.0
+  fps: 45.0
   max_step_per_tick: 2.0
   descent_step_per_tick: 0.6
   arrival_tol: 3.0
   transit_arrival_tol: 8.0
+  # 파지 하강 직전 hover 도착 허용오차. descend()가 '측정된' 자세에서 보간하므로
+  # 여기서 남은 오차만큼 내려가면서 옆으로 쓸려 블록을 밀어낸다(283mm 반경 실측:
+  # 8°→69mm, 3°→29mm, 2°→21mm). 빈 조우라 느슨한 transit 값의 근거가 없다.
+  grasp_hover_arrival_tol: 2.0
+  # 위 허용오차를 맞추려고 hover에서 더 기다리는 시간 상한. 서보 분해능이
+  # 안 되면 못 맞추므로 짧게 끊고 그대로 하강한다 (블록당 시도 5회이므로
+  # move_timeout_s를 쓰면 시도마다 수 초씩 죽는다).
+  grasp_hover_settle_s: 0.8
   hover_clearance_mm: 120.0
   hover_min_clearance_mm: 40.0
   hover_search_step_mm: 5.0
@@ -77,14 +149,24 @@ motion:
   # grasp point bias in the gripper's own frame (radial = away from the base,
   # tangential = the gripper's own left) -- see MotionConfig
   grasp_radial_offset_mm: 12.0
-  grasp_tangential_offset_mm: 0.0
+  # 모든 블록·재시도에 항상 유지되는 F(바깥/먼쪽) 방향 추가 10mm.
+  grasp_forward_offset_mm: 10.0
+  # 모든 블록에서 부채꼴 접선 기준 그리퍼 상대 좌측으로 10mm.
+  grasp_tangential_offset_mm: 10.0
+  # false: 중립 요 기준(반경/접선) — 기존 측정이 모두 이 프레임에서 나옴
+  # true : 조우가 블록 면과 평행해진 뒤의 프레임 기준(그리퍼 롤각 반영)
+  grasp_offsets_follow_jaw_yaw: false
   left_half_y_mm: 0.0
   left_half_radial_offset_mm: 10.0
-  left_half_tangential_offset_mm: 10.0
-  # (radial, tangential) mm: front-left, front-right, back-left, back-right
-  grasp_retry_offsets_mm: [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]
-  blocked_descent_offsets_mm: [10.0, -10.0]
+  left_half_tangential_offset_mm: 0.0
+  # optional ramp on top of the step; OFF by default -- see MotionConfig
+  left_ramp_radial_mm_per_100mm: 0.0
+  left_ramp_tangential_mm_per_100mm: 0.0
+  # (radial, tangential) mm 후보. 실행 시 로봇 베이스에서 먼 순서로 재시도.
+  # 15mm = 70mm 조우가 40mm 블록 주위에 남기는 한쪽 여유 전부
+  grasp_retry_offsets_mm: [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
   descent_blocked_tol: 4.0
+  descent_max_lag: 8.0
   descent_settle_s: 5.0
 
 ik:
@@ -98,7 +180,7 @@ ik:
   ik_iters: 8
   # 실측 캘리브레이션 오차(AGENTS.md §6: RMS~10mm, 최악 ~30mm)보다 넉넉하게 잡음 —
   # 이 한계는 "IK가 못 풀었다"를 걸러내는 것이지, 파지 정확도 자체를 보장하지 않음.
-  max_position_error_mm: 15.0
+  max_position_error_mm: 20.0
   max_tilt_error_deg: 6.0
 
 policy:
@@ -124,6 +206,124 @@ fsm:
   max_retries_per_block: 2
   reserve_time_s: 10.0
 
+task1:
+  # HOME에서 fresh frame을 계속 보며 이 시간 동안 외부 블록이 없을 때만 DONE.
+  empty_timeout_s: 5.0
+  scan_interval_s: 0.2
+  max_frame_age_s: 1.0
+  # [u, v]: zone 긴 변의 왼쪽->오른쪽, 먼 변->가까운 변. 먼 3개 후 가까운 2개.
+  slot_uv: [[0.14, 0.20], [0.50, 0.20], [0.80, 0.20], [0.32, 0.76], [0.68, 0.76]]
+  # 모든 슬롯을 실기 under-reach만큼 로봇 기준 바깥 방향으로 20mm 더 멀리 명령.
+  slot_radial_offset_mm: [20.0, 20.0, 20.0, 20.0, 20.0]
+  # 픽업의 거리 램프 보정은 전부 제거했다 — 사선 카메라 보정도, P행 front
+  # 오프셋도 실기에서 과보정이었다. 남은 건 초근거리 한 구간의 평탄한 +20mm
+  # 뿐이고 경계에서 딱 끊는다. 실측 반경은 P1 157 / P8 196 / P4 238 / P9 242 /
+  # P5 254 / P7 272 / P3 280 / P2 282 / P6 302mm 라 175mm 안에는 P1만 든다.
+  # (P번호는 반경 순서가 아니다 — P2, P3는 오히려 가장 먼 축이다.)
+  pick_near_boost_max_radius_mm: 175.0
+  pick_near_boost_mm: 20.0
+  # 모든 파지 위치에서 기본 3도 펼치고, 원거리 파지는 최대 5도까지 점진적으로 펼친다.
+  # 배치는 기존처럼 280mm 이후에만 0→5도 적용한다.
+  # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
+  pick_tilt_start_radius_mm: 280.0
+  pick_tilt_max_radius_mm: 320.0
+  pick_tilt_base_deg: 3.0
+  pick_tilt_max_deg: 5.0
+  # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
+  release_clearance_mm: 5.0
+
+# 2차 미션: 한 좌표에 접촉 기반으로 적층한다. SELECT/PICK/VERIFY와 픽 보정은
+# task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).
+task2:
+  # 타워 지점. task1.slot_uv 와 같은 [u, v] 규약이고 v→1 이 베이스에 가까운 변이다.
+  # 탑다운 리프트는 리치에 강하게 반비례하므로(실측 195mm에서 ~90mm, 285mm에서
+  # ~50mm) 안쪽으로 당긴 1mm가 곧 타워 높이다.
+  stack_uv: [0.50, 0.86]
+  # Task 1과 같은 실기 under-reach 보정. 정확도가 아니라 zone_polygon_mm 안쪽에
+  # 착지시키기 위해 필요하다 — 그게 검출기가 놓인 블록을 무시하는 근거다.
+  stack_radial_offset_mm: 20.0
+  block_height_mm: 20.0
+  # 미리 푸는 사다리의 상한일 뿐 약속이 아니다. 안 닿는 층은 dry-run이 보고한다.
+  max_levels: 5
+  # 실기 확정 전 가정값. task1의 5.0보다 작다 — 테이블이 흡수하는 낙하가
+  # 타워는 무너뜨린다.
+  release_clearance_mm: 2.0
+  # Task 2에서 접촉 탐색 하강은 완전히 비활성화. 모든 층을 계산된 릴리스 높이로 즉시 이동.
+  contact_descent_levels: 0
+  # 실기 확정 전 가정값. 착지를 감지하려면 세 값이 한 순서를 지켜야 한다:
+  #   적재 시 정상상태 오프셋 < contact_shortfall < descent_max_lag < overshoot
+  # 타워에 닿은 블록은 명령 목표보다 place_overshoot_mm 위에서 멈춘다. 그 간격이
+  # 허용 lag보다 작으면 완벽한 적층이 "접촉 없음"으로 기록된다 — 멈추는 위치는
+  # 같지만 백오프가 안 돌고 로그가 거짓말을 한다. overshoot은 mm, 나머지 둘은
+  # 관절 action 단위라 순서 확인은 실기에서만 가능하다 (stack_contacts의 shortfall).
+  place_overshoot_mm: 12.0
+  # 명목 릴리스 높이 기준 hover 탐색 상/하한. motion.hover_* 는 테이블 높이 타깃
+  # 가정이라 4층 위 120mm는 엔벨로프 밖이다. 하한은 곧 타워 상단 통과 여유다.
+  hover_clearance_mm: 45.0
+  hover_min_clearance_mm: 15.0
+  # hover는 ik.max_position_error_mm 보다 엄격하게 본다: 12mm 짧은 hover는 여유
+  # 예산을 거의 다 먹어서 타워 간격을 허구로 만든다.
+  hover_gate_mm: 3.0
+  # 위쪽 층은 탑 위 15mm는 못 가도 10mm는 가는 경우가 많다(탑다운 리프트가
+  # 높이에 급격히 무너진다). 층을 포기하면 블록 하나를 통째로 잃으므로, 선호
+  # 여유가 천장 밖이면 이 바닥까지 짜내서라도 접근한다. 이제 사다리를 멈추는
+  # 것은 릴리스 자세 자체가 IK 게이트를 못 넘을 때뿐이다.
+  hover_squeeze_clearance_mm: 8.0
+  min_descent_travel_mm: 8.0
+  # 층이 올라갈수록 접근축을 바깥으로 기울여 wrist_flex 포화를 푼다 (AGENTS.md §7).
+  # 늦게, 조금씩 — 기울여 놓으면 블록이 모서리로 착지한다.
+  level_tilt_start_level: 2
+  level_tilt_per_level_deg: 1.5
+  level_tilt_max_deg: 5.0
+  # 실기 확정 전 가정값. motion.descent_max_lag(8.0)은 빈 그리퍼 기준이고, 블록을
+  # 들면 정상상태 오프셋이 커져서 값이 작으면 첫 틱부터 잼으로 읽힌다.
+  descent_max_lag: 10.0
+  # 목표에서 이만큼 못 미쳐도 착지로 친다. 적재 시 정상상태 오프셋보다는 커야 하고
+  # (motion.descent_blocked_tol=4.0은 빈 그리퍼 기준이라 너무 빡빡하다)
+  # descent_max_lag보다는 작아야 한다. 실기 확정 전 가정값 — 높게 잡는 쪽이 안전한
+  # 실수다. 놓치면 턱을 벌리기 전 서보 압력을 푸는 백오프를 건너뛰지만, 잘못 잡으면
+  # 어차피 일어날 릴리스에 라벨만 틀리게 붙는다.
+  contact_shortfall: 6.0
+  # motion.descent_settle_s(5.0)이면 부드럽게 닿은 뒤 타워를 5초간 누른다.
+  descent_settle_s: 0.4
+  # descend() 를 몇 조각으로 나눌지. 1로 둔다 — 틱마다 read_loads 하면 팔이 중간에
+  # 멈춘 실측 사례가 있고(control/trajectory.py), 조각내면 lag 감시도 약해진다.
+  descent_probe_segments: 1
+  # 하강 상반부의 접촉은 착지가 아니라 오적층이다.
+  min_descent_fraction: 0.5
+  max_descent_retries: 1
 logging:
   log_dir: logs/pick_stack
   save_transitions: true
+
+# Operator display only. None of these values are used by SELECT, IK, or the
+# robot control loop. The outer arc is a nominal visual guide; TopDownIK stays
+# authoritative for the reachability of each concrete grasp.
+camera:
+  overlay:
+    analysis_fps: 5.0
+    worker_nice: 10
+    opencv_threads: 1
+    # 게이트에서 탈락한 근접 후보를 사유와 함께 화면에 표시 (표시 전용)
+    report_rejects: true
+    # 형상만 여기 있고 반경/각도는 perception.workspace_* 를 그대로 그린다
+    workspace_boundary:
+      enabled: true
+      sample_step_deg: 2.0
+
+# Operator-session defaults; existing CLI arguments override these values.
+session_tools:
+  runtime_dir: var/so101
+  snapshot_url: http://127.0.0.1:8090/snapshot/shoulder.jpg
+  snapshot_timeout_s: 5.0
+  poll_interval_s: 0.1
+  telemetry_stale_s: 3.0
+  capture_stale_s: 5.0
+  capture_timeout_s: 15.0
+  wrist_limit_deg: 8.0
+  temperature_limit_c: 65.0
+  telemetry_interval_s: 1.0
+  startup_poll_s: 0.1
+  startup_ramp_s: 0.0
+  expected_motor_model: 777
+  telemetry_tail_bytes: 16384

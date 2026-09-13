@@ -1,0 +1,11 @@
+{
+  "leader_profile": "ehdrms/my_leader.json",
+  "mapping": "absolute; no relative offsets",
+  "torque_on": true,
+  "fps_requested": 60,
+  "max_step": 5,
+  "max_relative_target": 10,
+  "point_count_planned": 9,
+  "order": "held joints and image, then clean block image",
+  "camera_stability": "Earlier 60-second check only; not a new drift check"
+}

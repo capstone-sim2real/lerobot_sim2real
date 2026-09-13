@@ -12,6 +12,7 @@ from fsm.handlers import VerifyState
 from fsm.ik_handler import CvIkPickState
 from fsm.machine import StateMachine
 from fsm.states import RunContext, State, StateName
+from fsm.task1 import Task1Perception
 from perception.detector import BlockDetection
 from perception.homography import PlaneCalibration
 from perception.select import SelectionResult
@@ -71,6 +72,8 @@ def test_fsm_places_a_block_and_stops_at_time_budget():
     assert StateMachine(_states(), ctx).run().placed_count == 1
     expired = RunContext(fsm=FsmConfig(time_budget_s=-1.0))
     assert StateMachine(_states(), expired).run().placed_count == 0
+    expired_without_task1_cutoff = RunContext(fsm=FsmConfig(num_blocks=1, time_budget_s=-1.0))
+    assert StateMachine(_states(), expired_without_task1_cutoff, enforce_time_budget=False).run().placed_count == 1
 
 
 def test_verify_never_transports_an_empty_gripper():
@@ -92,6 +95,13 @@ def test_verify_never_transports_an_empty_gripper():
 class _FakeIk:
     def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
         return IkResult({"shoulder_pan": 0.0, "shoulder_lift": -20.0, "elbow_flex": 30.0, "wrist_flex": 10.0, "wrist_roll": 0.0}, 0.1, 0.1)
+
+    def grasp_yaw_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
+        return self.grasp_yaw_and_rotation_deg(x_mm, y_mm, z_mm, block_angle_deg)[0]
+
+    def grasp_yaw_and_rotation_deg(self, x_mm, y_mm, z_mm, block_angle_deg):
+        # stub neutral yaw is 0, so the block angle *is* the jaw rotation
+        return block_angle_deg, block_angle_deg
 
 
 class _FakePlayer:
@@ -141,10 +151,9 @@ def test_cv_ik_pick_uses_a_reachable_offset_when_centre_is_unreachable(monkeypat
     motion, player, ctx = _FakeMotion(), _FakePlayer(), _cv_ik_context()
     solved = IkResult({"shoulder_pan": 0.0}, 0.1, 0.1)
     centre = GraspAttempt("centre", (0.0, 0.0), (220.0, -20.0), solved, solved, False)
-    offset = GraspAttempt("back-left", (-10.0, 10.0), (210.0, -10.0), solved, solved, True)
-    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset], [])
-    monkeypatch.setattr(ik_handler, "highest_reachable_hover", lambda *_args: 48.0)
-    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args: plan)
+    offset = GraspAttempt("left", (0.0, 10.0), (210.0, -10.0), solved, solved, True)
+    plan = GraspPlan((220.0, -20.0), (220.0, -20.0), 8.0, 48.0, [centre, offset])
+    monkeypatch.setattr(ik_handler, "plan_grasp_attempts", lambda *_args, **_kw: plan)
     attempted = []
 
     def run(_player, _robot, _cfg, received_plan, **_kwargs):
@@ -172,9 +181,17 @@ def test_flows_compose_only_the_states_each_workflow_needs():
     pick = _Pick()
     robot, motion = object(), _FakeMotion()
     perceive = lambda _skipped: SelectionResult(None, None, 0, [])
+    task1_perceive = lambda: Task1Perception([], 1, 1.0)
+    calib = PlaneCalibration(
+        H=np.eye(3), image_size=(1, 1), square_mm=1.0,
+        base_xy_mm=(0.0, 0.0),
+        zone_polygon_mm=[(300.0, 100.0), (300.0, -100.0), (200.0, -100.0), (200.0, 100.0)],
+        meta={"grasp_z_mm_mean": 8.0},
+    )
 
     task1 = build_task1_states(
-        robot=robot, motion=motion, perceive=perceive, pick_state=pick, sensing_cfg=SensingConfig()
+        robot=robot, motion=motion, perceive=task1_perceive, pick_state=pick,
+        cfg=AppConfig(), calib=calib, planner=object(),
     )
     task2 = build_task2_states(
         robot=robot, motion=motion, perceive=perceive, pick_state=pick, sensing_cfg=SensingConfig()

@@ -1,0 +1,2 @@
+name,image,u_px,v_px,x_m,y_m,z_m,shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,notes
+P1,p1_clean.jpg,347.925,432.404,0.199989,0.177185,0.020338,-47.780,33.143,-24.088,81.670,1.978,FK at gripper_frame_link; auto pixel candidate reviewed; block unchanged during arm withdrawal

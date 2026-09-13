@@ -1,0 +1,19 @@
+{
+  "time": 1788802062.242638,
+  "torque": {
+    "shoulder_pan": 1,
+    "shoulder_lift": 1,
+    "elbow_flex": 1,
+    "wrist_flex": 1,
+    "wrist_roll": 1,
+    "gripper": 1
+  },
+  "joints": {
+    "shoulder_pan": -47.78021978021978,
+    "shoulder_lift": 33.142857142857146,
+    "elbow_flex": -24.087912087912088,
+    "wrist_flex": 81.67032967032966,
+    "wrist_roll": 1.978021978021978,
+    "gripper": 23.675604970569
+  }
+}

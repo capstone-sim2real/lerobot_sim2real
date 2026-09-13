@@ -1,0 +1,8 @@
+WARNING: Robot has the following self collisions in neutral position:
+  -base_link_2 collides with shoulder_link_2
+  -shoulder_link_0 collides with upper_arm_link_1
+  -upper_arm_link_0 collides with lower_arm_link_0
+  -lower_arm_link_2 collides with wrist_link_1
+  -wrist_link_0 collides with gripper_link_1
+  -gripper_link_0 collides with moving_jaw_so101_v1_link_0
+2026-09-08 03:07:53,554 run ERROR Dry-run aborted: Task-1 slot 0 is outside the IK gate: hover=15.2mm drop=0.5mm

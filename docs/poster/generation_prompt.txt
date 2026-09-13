@@ -1,0 +1,68 @@
+Use case: compositing, infographic-diagram.
+Edit target: FIRST of the five attached user images, the flat white portrait university poster template numbered 25, with pink header and 3 pink section separators. Images 2-5 are only historical poster references; do not copy their projects, text, colors, photography or wrinkles.
+Deliver a finished, high-resolution portrait scientific Korean capstone poster PNG, approximately original aspect 2806:3973, preferably 2720x3840 or higher available resolution. Flat clean artwork, no photograph of paper, no perspective, no border cropping.
+
+CRITICAL TEMPLATE INVARIANTS: faithfully retain first image's salmon-pink beveled title banner, huge white 25 at left, white two-line project title and subtle shadow, exact team metadata strip immediately below, 3 coral tab headings integrated into full-width thin gray separator lines, generous white background, black footer rule and Pusan National University footer/logo. Do not redesign into another template. Three horizontal major sections must stay; their heights may be changed to fit content. Keep original footer and original header positions/proportions. Use section tabs at approx y=18%, 39%, 76%; footer at 94%. Main body margins approx 4% width. Text legible, aligned, polished Korean scientific poster, charcoal Korean sans-serif with bold headings, coral accent and very pale blush panels. Avoid tiny text, decorative clutter, excessive rounded cards. All new explanatory text and diagram labels in Korean; existing proper names in header remain exact.
+
+Header, preserve verbatim original first image:
+"25"
+"컴퓨터 비전과 역기구학 기반 SO-ARM101"
+"로봇팔의 블록 Pick & Stack 시스템"
+Metadata:
+"소속 정보컴퓨터공학부"  "분과 C"  "팀명 Sim2Real"
+"참여학생 윤민석, 이동근, 김주환"  "지도교수 김종덕"
+Footer preserve: "2026 정보컴퓨터공학부 졸업과제 발표회" and original blue university seal + "부산대학교".
+
+CONTENT CONTEXT: user requests a finished-design assumption including Task2 though implementation is in progress. Present functional system design for both missions, not fake experimental success results. No invented success rates, time measurements, test charts, claims of 100% completion or certified success. 180s,300s and 5s are task requirements, not measured achievements. Illustrations must be explanatory schematic illustrations, not fabricated evidence photos or real screenshots. Small captions "시스템 개념도", "검출 원리 도식", "미션 수행 도식" make this clear.
+
+SECTION 1 tab exact: "과제 개요 및 설계 전환"
+Layout two columns approx 60/40, medium-height. Left strong opening line:
+"한 대의 로봇팔로, 흩어진 블록의 운반부터 적층까지"
+Body two lines:
+"고정 카메라로 5색 블록의 위치와 방향을 인식하고,"
+"역기구학과 접촉 감지를 결합해 운반·적층을 수행한다."
+Then compact horizontal comparison under small bold heading "모방학습에서 기하 기반 제어로"
+Light gray left mini panel text: "모방학습 시도" / "시연 데이터·촬영 환경에 민감" / "파지 실패 원인 분리의 어려움"
+Arrow to blush right mini panel: "컴퓨터 비전·역기구학" / "고정 환경의 기하 정보 활용" / "인식·좌표·동작을 단계별 보정"
+Right: clean white-background semi-isometric scientific diagram of SO-ARM101 desk robot, compact black servo joints and white/light-gray 3D printed articulated links, TWO parallel gripper jaws, on checkerboard, single overhead camera looking down, five low square cuboid blocks (blue,red,yellow,green,natural wood), red tape rectangular target. Not industrial six-axis yellow arm. Labels "고정 상부 카메라", "로봇팔", "5색 블록". Caption "시스템 개념도".
+At bottom of section single slim spec line: "블록 4 × 4 × 2 cm  |  지정 영역 20 × 10 cm  |  로봇팔 1대 · 상부 카메라 1대"
+
+SECTION 2 tab exact: "시스템 구성 및 핵심 기술"
+Largest section. First slim horizontal hardware/data flow, Korean labels and small pictograms:
+"고정 카메라" → "영상 처리·좌표 변환" → "관절 궤적 생성" → "로봇팔 제어"
+Smaller text under: "상부 영상" / "젯슨 오린 나노" / "역기구학·관절 보간" / "위치·부하 피드백"
+
+Below, two equal columns with numbered technical headlines. Left column number 01 "색과 형상을 함께 보는 블록 검출". Include top-down checkerboard diagram with exactly five colored rectangular flat blocks, green oriented thin bounding quadrilaterals, center crosshairs, red rectangular tape zone with subtle excluded hatch; small arrow to 2D coordinate point. Label within graphic "블록 중심·방향", "지정 영역 제외". Caption "검출 원리 도식".
+Text below:
+"• 색상 후보에 면적·종횡비·채움률 필터를 적용"
+"• 빨간 테이프와 빨간 블록을 형상으로 구분"
+"• 평면 좌표 변환으로 영상 좌표를 로봇 좌표에 대응"
+"• 지정 영역 밖에서 가까운 블록부터 선택"
+
+Right column number 02 "도달 가능한 자세와 재시도 파지". Diagram arm outline showing dotted coral pick descent trajectory, multiple small crosshairs around target for center+four retry positions, and raised arch transport path, neutral wrist illustration; label "중심 및 주변 후보", "들어올림 → 운반". Caption "파지·운반 경로 도식".
+Text below:
+"• 블록의 90도 대칭을 이용해 손목 회전 최소화"
+"• 역기구학으로 파지 후보의 도달 가능성 사전 검사"
+"• 빈손이면 주변 후보를 재시도하고 새 영상으로 재검출"
+"• 관절 보간과 이동량 제한으로 급격한 동작 억제"
+
+Bottom of section full-width integrated FSM diagram, heading "파지 검증을 통과한 블록만 운반"
+Five compact horizontal rectangular stages:
+"대상 선택" → "파지" → "파지 확인" → "운반" → "배치"
+Below verification draw return arrow to selection, label "실패 시 재검출·재시도".
+Under placement split into two small branches "미션 1  영역 배치" and "미션 2  접촉 적층".
+Bottom bold coral sentence: "공통 인식·파지·운반 흐름을 유지하고, 배치 전략만 교체한다."
+
+SECTION 3 tab exact: "미션 수행 및 의의"
+Two horizontally aligned mission panels, width 48% each. Left heading "미션 1 · 지정 영역 운반". Big clear illustration of 5 colored squat blocks placed flat inside red target rectangle in 3+2 pattern. Korean callouts "먼 줄 3개", "가까운 줄 2개". Text:
+"지정 영역의 슬롯으로 낮고 부드럽게 내려놓는다."
+"복귀 후 외부 블록을 다시 확인하며 반복한다."
+Small pill "과제 제한시간 180초".
+Right heading "미션 2 · 접촉 기반 적층". Big clear illustration of five precisely aligned squat blocks stacked in one tower, TWO gripper jaws near upper block, downward arrow and contact highlight. Height of each cuboid is half side width. Show small three-label flow "저속 하강 → 접촉 감지 → 정지·해제". Text:
+"블록 수로 높이를 추정하지 않고 접촉으로 상단을 찾는다."
+"완성된 타워의 5초 이상 안정 유지를 확인한다."
+Small pill "과제 제한시간 300초 · 안정 유지 5초".
+At bottom above footer, compact conclusion in pale pink strip, exact:
+"핵심 의의  |  색상 간섭을 이기는 형상 인식 · 실패를 회복하는 제어 · 배치 전략의 재사용"
+
+Carefully typeset Korean spelling accurately. Make everything visible and readable without overflow. Keep exact template header metadata and footer emblem; only fill empty body and rename/reposition three section tabs. No placeholder boxes or requests to insert photos. Clean finished poster with illustration-based visual content. Do not print prompt instructions, draft labels, invented experimental numbers, code filenames, English body headings, references from other teams, or watermarks.

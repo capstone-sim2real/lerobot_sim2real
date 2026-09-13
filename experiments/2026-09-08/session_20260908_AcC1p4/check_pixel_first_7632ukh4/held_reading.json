@@ -1,0 +1,26 @@
+{
+  "joint_degrees": {
+    "shoulder_pan": -6.285714285714286,
+    "shoulder_lift": 28.043956043956044,
+    "elbow_flex": -3.1648351648351647,
+    "wrist_flex": 82.9010989010989,
+    "wrist_roll": 4.615384615384615
+  },
+  "xyz_mm": [
+    214.31553059738485,
+    18.67894841765769,
+    1.540144871526955
+  ],
+  "tilt_from_down_deg": 17.779678435218084,
+  "pixel_before": [
+    556.1452026367188,
+    367.4369201660156
+  ],
+  "candidate_predicted_xy_mm": [
+    242.05299523182902,
+    29.388657381592015
+  ],
+  "candidate_xy_error_mm": 29.733227380141834,
+  "saved_at": "2026-09-08T02:03:04",
+  "status": "diagnostic_only_block_motion_not_yet_verified"
+}

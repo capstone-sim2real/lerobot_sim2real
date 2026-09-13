@@ -1,6 +1,8 @@
 # 평가 기록 시트 사용법 (`eval_log_template.csv`)
 
-PROJECT_CONTEXT.md §7 우선순위 2 기준으로 만든 rollout 기록 템플릿입니다.
+[AGENTS.md](../../AGENTS.md) §13의 정량 검증 원칙에 따라 사용하는 rollout 기록
+템플릿입니다. 현재 기본 경로는 CV+IK이므로 정책 체크포인트가 없는 실행도 기록할
+수 있습니다.
 
 ## 컬럼 설명
 
@@ -8,7 +10,7 @@ PROJECT_CONTEXT.md §7 우선순위 2 기준으로 만든 rollout 기록 템플�
 |---|---|
 | `date` | rollout 진행 날짜 |
 | `tester` | 실행자 |
-| `policy_checkpoint` | 사용한 체크포인트 (예: `act_my_task_step30000`) |
+| `policy_checkpoint` | ACT이면 체크포인트, CV+IK이면 `none` |
 | `mission` | `1차`(이동) / `2차`(적재) |
 | `condition_variable` | 이번 세트에서 바꾼 변수 (예: `chunk_size`, `lighting`, `object_position`). 첫 세트는 `baseline` |
 | `condition_value` | 그 변수의 값 (예: `chunk_size=16`) |
@@ -22,6 +24,12 @@ PROJECT_CONTEXT.md §7 우선순위 2 기준으로 만든 rollout 기록 템플�
 | `failure_stage` | 실패했다면 어느 단계에서 실패했는지 (예: `grasp`, `transport`, `place`, `hold`) |
 | `time_to_complete_s` | 완료까지 걸린 시간(초). 1차는 180초, 2차는 300초 제한 참고 |
 | `notes` | 특이사항 자유 기록 |
+
+현재 CV+IK 실험은 `notes`에 최소한 Git commit, `flow`, `pick_mode`, calibration
+파일/시각, `--set` override, 카메라 drift 결과와 외부 timeout 사용 여부를 적습니다.
+Task 1은 runner 내부 FSM budget을 끄므로 180초 평가를 재현했다면 외부 supervisor
+명령도 함께 남깁니다. Task 2는 PLACE와 5초 유지 판정이 완성된 뒤 같은 형식으로
+기록합니다.
 
 ## 프로토콜
 

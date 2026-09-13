@@ -1,0 +1,28 @@
+{
+  "fk_xyz_mm": [
+    162.23542656073445,
+    -231.033662572382,
+    43.052087188507365
+  ],
+  "fk_pixel": [
+    933.8451411156997,
+    502.7532700958451
+  ],
+  "block_pixel": [
+    903.9686279296875,
+    491.3659973144531
+  ],
+  "block_xy_mm": [
+    169.25306861993946,
+    -212.3696443601529
+  ],
+  "block_minus_fk_mm": [
+    7.017642059205002,
+    18.66401821222911
+  ],
+  "distance_mm": 19.939731088897435,
+  "distance_px": 31.973051489524575,
+  "block_motion_confirmation": "User reported arm withdrawn; no independent motion measurement",
+  "plane_z_mm": 16.15411111111111,
+  "wrist_roll_deg": 10.241758241758241
+}
