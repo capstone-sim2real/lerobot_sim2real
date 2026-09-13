@@ -291,12 +291,12 @@ _PAGE = """<!doctype html>
         drawText(context, String(index + 1), [point[0] + 5, point[1] - 5], '#55ff88');
       });
 
-      drawPolyline(context, detection.block_axis_px, '#ffff00', 2);
+      drawPolyline(context, detection.grasp_axis_px || detection.block_axis_px, '#ffff00', 3);
       drawCross(context, detection.center_px, '#00ffff');
       drawText(context, 'C', [detection.center_px[0] + 9, detection.center_px[1] - 9], '#00ffff');
       drawText(
         context,
-        `${Number(detection.block_angle_deg).toFixed(0)}°`,
+        `T ${Number(detection.grasp_yaw_deg ?? detection.block_angle_deg).toFixed(0)}°`,
         [detection.center_px[0] + 10, detection.center_px[1] + 19],
         '#ffff00'
       );

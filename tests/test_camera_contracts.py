@@ -155,6 +155,8 @@ def test_overlay_metadata_draws_existing_box_without_changing_detection_geometry
     assert metadata["center_px"] == pytest.approx([100.0, 120.0])
     np.testing.assert_allclose(metadata["box_px"], detection.box_mm, atol=1e-6)
     assert metadata["block_angle_deg"] == 0.0
+    assert "grasp_yaw_deg" in metadata
+    assert len(metadata["grasp_axis_px"]) == 2
     assert metadata["display_plan"] == "nominal_full_bias"
     assert "target_label" not in metadata
 
