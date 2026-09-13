@@ -73,6 +73,10 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE → (블록 남음 && 시간 
   둔다 — 예외 발생 시에도 실행되어야 하기 때문이다.
 - 현재 Task 1 zone-gather runner는 내부 FSM 시간 예산을 끈다. 평가의 180초 제한은
   외부 supervisor가 강제해야 하며, 내부 deadline을 구현하기 전까지 이를 숨기지 않는다.
+- **Task 3은 Task 1의 수집 루프 그 자체다.** SELECT/PICK/VERIFY/TRANSPORT 핸들러를
+  그대로 주입하고 `Task1TransportPlanner`의 슬롯 5개를 쓴다. 다른 것은 세 가지뿐이다:
+  파지 시도 1회(`task3.max_grasp_attempts`), 구역이 비면 DONE 대신 재배치 프롬프트,
+  그리고 녹화. 이 차이를 더 늘리지 않는다 — §15를 본다.
 
 ## §4 PLACE 전략 seam
 
@@ -254,3 +258,42 @@ uv run --extra dev pytest tests -q
 3. 실측으로 확인되지 않은 수치를 문서나 주석에 단정적으로 쓰지 않는다.
    가정값이면 가정값이라고 명시한다.
 4. 하드웨어를 움직이는 코드를 처음 실행할 때는 `--dry-run`을 먼저 지원하고 사용한다.
+
+## §15 Task 3 — ACT 데이터셋 자동 수집
+
+운영 가이드는 [docs/guide/SO101_TASK3_데이터수집.md](docs/guide/SO101_TASK3_데이터수집.md).
+
+1. **녹화는 `BaseRobotIO` 데코레이터에서만 한다.** 모든 팔 명령은 예외 없이
+   `send_joints()`를 지난다(`TrajectoryPlayer`의 네 메서드 모두). 그래서
+   `data/episode_recorder.RecordingRobotIO`가 런 전체를 녹화할 수 있는 단일
+   지점이고, FSM·모션·그래스프 코드는 Task 1/2가 이미 검증한 코드 그대로 남는다.
+   **녹화를 위해 제어 경로에 훅을 심지 않는다.**
+2. **에피소드 경계는 Task 1 구조에서 그대로 떨어진다.** `Task1SelectState.enter()`가
+   home 복귀 지점이므로, 그 호출 *뒤에* 에피소드를 닫으면 모든 에피소드가 home
+   복귀 동작으로 끝나고 다음 에피소드가 정착된 home에서 시작한다. 양 끝이 같은
+   자세라 시연이 닫힌 사이클이 된다. 카메라 폴링 대기는 에피소드 밖이다.
+3. **저장 규칙: 파지 성공 + 운반 완료.** PLACE가 끝나야 `task3_episode_ok`가 선다.
+   실패한 시연을 저장하면 정책이 그 실패를 학습한다. 파기는 무조건
+   `clear_episode_buffer()`이며, 파기 사유는 요약 JSON에 남긴다.
+4. **데이터셋 fps는 실제 틱 주기와 같아야 한다.** `_tick_sleep()`은 방금 한 작업과
+   무관하게 `1/fps`를 자므로 그 자체로는 주기를 못 만든다. LeRobotDataset은
+   `timestamp`를 `frame_index/fps`로 합성하므로 어긋나면 정책이 다른 속도로
+   재생된다. Task 3은 `motion.fps`를 올려 그 슬립을 무시할 수준으로 만들고
+   `RecordingRobotIO`가 절대 데드라인으로 페이싱한다. 실측(Orin, 카메라 2대):
+   목표 30 Hz에 30.06 Hz, 평균 33.3ms, p95 36.1ms.
+5. **이미지는 camera.server의 MJPEG 스트림에서 받는다** — §8의 단독 소유 규칙을
+   깨지 않기 위해서다. `camera/frame_source.py`가 백그라운드에서 디코드·리사이즈·
+   **BGR→RGB 변환**까지 마치므로 제어 스레드는 배열 복사만 한다. RGB 변환은
+   선택이 아니다: lerobot 카메라는 `ColorMode.RGB`가 기본이고 ACT 백본도 RGB
+   통계로 프리트레인돼 있다.
+6. **추론도 같은 파이프라인을 써야 한다.** 기록이 서버 MJPEG(JPEG q80, 다운스케일)
+   경유인데 추론에서 `robot.cameras`로 직접 열면 압축 아티팩트와 센서 크롭 FOV가
+   달라져 distribution shift가 생긴다. `MjpegFrameSource`를 재사용 모듈로 둔 이유다.
+7. **ACT는 모든 `observation.images.*`의 shape이 같기를 요구한다.** 모든 스트림을
+   `task3.image_width/height`로 리사이즈하고 `validate_task3`가 이를 강제한다.
+   한 데이터셋 안에서 카메라 구성을 바꾸지 않는다 — 바꾸려면 새 데이터셋이다.
+8. **Ctrl-C는 틱 경계에서만 푼다.** 시그널 핸들러는 플래그만 세우고 자기 자신을
+   `SIG_IGN`으로 교체한다. 두 번째 Ctrl-C가 parquet/비디오 finalize를 깨면
+   데이터셋 전체를 잃기 때문이다. 전체 런은 `VideoEncodingManager`로 감싼다.
+9. **가정값은 가정값이라고 쓴다**(§14.3). `min_episode_frames`(60),
+   `max_episode_frames`(3000)은 실측 전 가정값이다. 첫 라운드 후 교체한다.

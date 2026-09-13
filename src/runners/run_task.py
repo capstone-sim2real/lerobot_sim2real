@@ -13,6 +13,10 @@
     python -m runners.run_task --task 2 --dry-run      # read the ladder FIRST
     python -m runners.run_task --task 2 --set task2.max_levels=1
 
+    # Task 3 (alias for the dedicated ACT dataset collector)
+    python -m runners.run_task --task 3 --dry-run
+    python -m runners.run_task --task 3
+
     # One-block CV+IK grasp smoke test; no destination poses required
     python -m runners.run_task --task 1 --flow pick_lift_lower --color green
 
@@ -85,6 +89,7 @@ def make_pick_state(
     retreat_pose,
     retreat_after_grasp: bool = True,
     radial_tilt_extra_key: str | None = None,
+    max_grasp_attempts: int | None = None,
     client: ActPolicyClient | None = None,
     ik: TopDownIK | None = None,
 ):
@@ -105,6 +110,7 @@ def make_pick_state(
             retreat_pose=retreat_pose,
             retreat_after_grasp=retreat_after_grasp,
             radial_tilt_extra_key=radial_tilt_extra_key,
+            max_grasp_attempts=max_grasp_attempts,
             ik=ik,
         )
     if pick_mode == "act":
@@ -335,7 +341,7 @@ def dry_run_task2(cfg: AppConfig) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--task", type=int, choices=[1, 2], required=True)
+    parser.add_argument("--task", type=int, choices=[1, 2, 3], required=True)
     parser.add_argument("--pick-mode", choices=["cv_ik", "act"], default="cv_ik")
     parser.add_argument("--flow", choices=["task", "pick_lift_lower"], default="task")
     parser.add_argument("--color", help="Only select this colour (required by pick_lift_lower)")
@@ -345,6 +351,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    if args.task == 3:
+        if args.pick_mode != "cv_ik" or args.flow != "task" or args.color is not None:
+            parser.error("Task 3 uses its fixed CV+IK collection flow; omit --pick-mode, --flow and --color")
+        from runners.run_task3 import main as collect_main
+
+        collect_argv = ["--config", args.config]
+        for override in args.overrides:
+            collect_argv.extend(["--set", override])
+        if args.dry_run:
+            collect_argv.append("--dry-run")
+        return collect_main(collect_argv)
+
     cfg = load_config(args.config, overrides=args.overrides)
     run_id = time.strftime(f"task{args.task}_%Y%m%d_%H%M%S")
 

@@ -20,9 +20,18 @@ dev = [
 hardware = [
     "lerobot[feetech,kinematics]",
 ]
+# Task 3 dataset recording. Installed deliberately narrowly: a full
+# `uv sync` can replace the JetPack torch wheel, which is the only one
+# built for the Orin (docs/guide/SO101_데이터수집_관리.md §2), so install
+# these two with `uv pip install` rather than syncing the extra.
+collect = [
+    "datasets>=4.7.0,<5.0.0",
+    "av>=15.0.0,<16.0.0",
+]
 
 [project.scripts]
 so101-run = "runners.run_task:main"
+so101-collect = "runners.run_task3:main"
 so101-camera = "camera.server:main"
 so101-detect = "tools.view_detect:main"
 so101-calibrate = "tools.calibrate_homography:main"

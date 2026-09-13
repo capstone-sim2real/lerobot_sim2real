@@ -99,6 +99,33 @@ def gripper_frame_offset(
     )
 
 
+def tangent_square_grasp_yaw_deg(
+    x_mm: float,
+    y_mm: float,
+    block_angle_deg: float,
+    *,
+    base_xy_mm: tuple[float, float] = (0.0, 0.0),
+) -> float:
+    """Choose the square-face yaw closest to the workspace tangent.
+
+    ``block_angle_deg + k*90`` are equivalent face-aligned grasps for a
+    square.  Selecting against the geometric tangent makes the arm approach
+    with the least wrist twist around the base-centred workspace arc.  The
+    result is normalized to ``[-180, 180)`` so logs and overlays are stable.
+    """
+    dx = x_mm - base_xy_mm[0]
+    dy = y_mm - base_xy_mm[1]
+    if dx == 0.0 and dy == 0.0:
+        return (float(block_angle_deg) + 180.0) % 360.0 - 180.0
+    tangent = math.degrees(math.atan2(dy, dx)) + 90.0
+    candidates = [float(block_angle_deg) + 90.0 * k for k in range(-4, 5)]
+    yaw = min(
+        candidates,
+        key=lambda candidate: abs(((candidate - tangent) + 180.0) % 360.0 - 180.0),
+    )
+    return (yaw + 180.0) % 360.0 - 180.0
+
+
 class TopDownIK:
     """Solves (x_mm, y_mm, z_mm, yaw_deg) -> arm joint angles (degrees).
 
@@ -210,12 +237,12 @@ class TopDownIK:
         return -probe.joints["wrist_roll"]
 
     def grasp_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float) -> float:
-        """Jaw yaw for a square block: of the four equivalent alignments
-        (block_angle + k*90), the one closest to ``neutral_yaw_deg``.
+        """Jaw yaw for a square block: of the equivalent face alignments,
+        choose the one closest to the base-centred workspace tangent.
 
-        A square block grasps identically every 90 deg, so this aligns the
-        jaws with a pair of block faces while keeping wrist_roll within
-        +-45 deg of neutral (AGENTS.md §9)."""
+        This keeps the physical grasp direction as horizontal/tangential as
+        the detected block faces permit and avoids an unnecessary 90-degree
+        wrist choice."""
         return self.grasp_yaw_and_rotation_deg(x_mm, y_mm, z_mm, block_angle_deg)[0]
 
     def grasp_yaw_and_rotation_deg(
@@ -229,9 +256,8 @@ class TopDownIK:
         this angle (bounded to +-45 deg by the mod-90 fold). Returned from
         the same probe solve because the caller that wants one wants both.
         """
+        yaw = tangent_square_grasp_yaw_deg(x_mm, y_mm, block_angle_deg)
         neutral = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
-        candidates = [block_angle_deg + 90.0 * k for k in range(4)]
-        yaw = min(candidates, key=lambda c: abs(((c - neutral) + 180.0) % 360.0 - 180.0))
         return yaw, ((yaw - neutral) + 180.0) % 360.0 - 180.0
 
     def solve(

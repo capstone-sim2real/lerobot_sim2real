@@ -18,6 +18,7 @@ import numpy as np
 
 from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_config
 from control.grasp import biased_grasp_xy, grasp_candidate_points
+from control.ik import tangent_square_grasp_yaw_deg
 from perception.detector import workspace_radius_at_angle
 from perception import (
     BlockDetection,
@@ -119,8 +120,7 @@ def detection_metadata(
     candidate_px = calibration.board_to_pixel(candidate_mm)
     box_px = calibration.board_to_pixel(box_mm) if len(box_mm) else np.empty((0, 2))
 
-    # A detector edge axis is cheap and truthful. It is deliberately not
-    # labelled as the IK-selected wrist yaw used by the robot.
+    # Raw detector edge axis, retained as metadata for diagnostics.
     angle_rad = math.radians(detection.angle_deg)
     dx, dy = math.cos(angle_rad), math.sin(angle_rad)
     direction = np.asarray([dx, dy], dtype=np.float64)
@@ -138,6 +138,28 @@ def detection_metadata(
     )
     axis_px = calibration.board_to_pixel(axis_mm)
 
+    # This is the exact square-symmetry choice used by runtime IK: among the
+    # block's perpendicular face axes, draw the one nearest the workspace
+    # tangent.  It needs no IK solve and therefore stays cheap in the camera
+    # worker while remaining truthful to the commanded yaw.
+    grasp_yaw_deg = tangent_square_grasp_yaw_deg(
+        *centre,
+        detection.angle_deg,
+        base_xy_mm=calibration.base_xy_mm or (0.0, 0.0),
+    )
+    grasp_rad = math.radians(grasp_yaw_deg)
+    grasp_direction = np.asarray(
+        [math.cos(grasp_rad), math.sin(grasp_rad)], dtype=np.float64
+    )
+    grasp_axis_mm = np.asarray(
+        [
+            np.asarray(centre) - grasp_direction * half_axis_mm,
+            np.asarray(centre) + grasp_direction * half_axis_mm,
+        ],
+        dtype=np.float64,
+    )
+    grasp_axis_px = calibration.board_to_pixel(grasp_axis_mm)
+
     return {
         "color": detection.color,
         "center_mm": list(centre),
@@ -146,6 +168,8 @@ def detection_metadata(
         "box_px": _point_list(box_px),
         "block_angle_deg": float(detection.angle_deg),
         "block_axis_px": _point_list(axis_px),
+        "grasp_yaw_deg": float(grasp_yaw_deg),
+        "grasp_axis_px": _point_list(grasp_axis_px),
         "biased_center_mm": list(biased),
         "biased_center_px": [float(value) for value in biased_px],
         "candidates_mm": [

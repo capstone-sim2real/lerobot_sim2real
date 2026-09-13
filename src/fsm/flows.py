@@ -7,6 +7,8 @@ hardware smoke test does not need to fork the production Task 1 FSM.
 
 from __future__ import annotations
 
+from typing import Callable
+
 from config import AppConfig, SensingConfig
 from control.motion import MotionController
 from control.robot_io import BaseRobotIO
@@ -31,6 +33,8 @@ from fsm.task1 import (
     Task1TransportState,
 )
 from fsm.task2 import Task2PlaceState, Task2SelectState, Task2TransportState
+from fsm.task3 import Task3PlaceState, Task3SelectState
+from data.episode_recorder import EpisodeRecorder
 from control.grasp import GraspAttempt
 from perception.homography import PlaneCalibration
 
@@ -76,6 +80,47 @@ def build_task1_states(
         StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
         StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
         StateName.PLACE: Task1PlaceState(motion, player, cfg),
+    }
+
+
+def build_task3_states(
+    *,
+    robot: BaseRobotIO,
+    motion: MotionController,
+    perceive: Task1PerceiveFn,
+    pick_state: State,
+    cfg: AppConfig,
+    calib: PlaneCalibration,
+    planner: Task1TransportPlanner,
+    recorder: EpisodeRecorder,
+    prompt=input,
+    stop_requested: Callable[[], bool] = lambda: False,
+) -> dict[StateName, State]:
+    """Task 1's gather loop, recorded as ACT episodes.
+
+    PICK, VERIFY and TRANSPORT are Task 1's own handlers, unmodified: the
+    trajectories being recorded have to be the ones the mission actually
+    runs. Recording happens a layer below, in the ``RecordingRobotIO`` the
+    caller wraps ``robot`` with, so nothing in this flow knows about it
+    except the two states that own the episode boundary.
+    """
+    if pick_state.name is not StateName.PICK:
+        raise ValueError("pick_state must implement the PICK state")
+    player = TrajectoryPlayer(robot, cfg.motion)
+    return {
+        StateName.SELECT: Task3SelectState(
+            motion,
+            perceive,
+            calib,
+            cfg,
+            recorder,
+            prompt=prompt,
+            stop_requested=stop_requested,
+        ),
+        StateName.PICK: pick_state,
+        StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
+        StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
+        StateName.PLACE: Task3PlaceState(motion, player, cfg),
     }
 
 
