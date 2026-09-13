@@ -1,0 +1,49 @@
+% !TEX encoding = UTF-8 Unicode
+% Build with pdfLaTeX through build.sh; pnureport.cls is the unmodified PNU class.
+\documentclass{pnureport}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,longtable,array,tabularx,amssymb}
+\usepackage{graphicx,subcaption,placeins}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tikz,pgfplots}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,shapes.geometric}
+\pgfplotsset{compat=1.18}
+\hypersetup{pdftitle={컴퓨터 비전과 역기구학 기반 SO-ARM101 로봇팔의 블록 이동 및 적재 시스템},pdfauthor={Sim2Real},pdfsubject={졸업과제 최종보고서}}
+\renewcommand{\bibname}{참고 문헌}
+\graphicspath{{figures/}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{5pt}
+\setlength{\headheight}{16pt}
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{2}
+\emergencystretch=2em
+\raggedbottom
+\reporttitle{컴퓨터 비전과 역기구학 기반\\SO-ARM101 로봇팔의\\블록 이동 및 적재 시스템}
+\reportteam{Sim2Real}
+\reportauthor{202170116 윤민석 (0620yms@gmail.com)\\202055575 이동근 (ehdrms3835@gmail.com)\\202045106 김주환 (kjhpooh386@naver.com)}
+\reportadvisor{김종덕}
+\reportdate{2026년 9월}
+\begin{document}
+\maketitle
+\pagenumbering{roman}
+\input{sections/00_abstract}
+\clearpage
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+\input{sections/01_introduction}
+\input{sections/02_background}
+\input{sections/03_system}
+\input{sections/04_evaluation}
+\input{sections/05_conclusion}
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{참고 문헌}
+\begingroup
+\raggedright
+\bibliographystyle{unsrt}
+\bibliography{references}
+\endgroup
+\end{document}

@@ -1,0 +1,11 @@
+Use case: precise-object-edit / productivity-visual.
+Edit ONLY the provided industrial monochrome Korean PowerPoint six-slide contact sheet.
+The image has exactly 3 columns by 2 rows, 2048x768, and this arrangement, dimensions, colors, all illustrations, typography, slide edges, flow arrows, all other text and every number must remain unchanged.
+
+The only change is in the BOTTOM MIDDLE slide, numbered 09 and titled "파지 확인 후 운반".
+In its lower dark gray rounded box currently containing the two lines "다음 후보" and "(다른 블록 시도)", DELETE ONLY the secondary line "(다른 블록 시도)".
+Leave the box with exactly one centered, legible line: "다음 후보".
+Keep that box's size, position, dark gray fill, white text style, all incoming and outgoing arrows exactly as in the original.
+Do NOT add a replacement subtitle. Do NOT change any other text or any other panel.
+In particular, preserve the six panels, the yellow charcoal white industrial style, RMS 8.18 mm, 최대 LOO 26.64 mm, 슬롯 해제 4회, 후보 14회, HELD 4 / EMPTY 9 / 중단 1, 전체 미션 미완료, 180초 외부 제한 시험 1회 / 적재 실기 미수행.
+Return one full image with this single targeted text deletion.

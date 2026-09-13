@@ -1,0 +1,55 @@
+{
+  "slides": 14,
+  "pdf_pages": 14,
+  "zip_corruption": null,
+  "original_unchanged": true,
+  "missing_pdf_text": [],
+  "out_of_slide_shapes": [],
+  "speaker_notes": 14,
+  "video_shapes": [
+    {
+      "slide": 6,
+      "id": 20,
+      "target": "rId2"
+    },
+    {
+      "slide": 11,
+      "id": 20,
+      "target": "rId2"
+    },
+    {
+      "slide": 12,
+      "id": 20,
+      "target": "rId2"
+    }
+  ],
+  "media": [
+    {
+      "part": "ppt/media/media2.mp4",
+      "bytes": 12273605,
+      "sha256": "5519589d4cb570c32c44ccd82fdb475c599cc75b3d94859565330fe55ff7aaeb",
+      "identical_to_original": true
+    },
+    {
+      "part": "ppt/media/media1.mp4",
+      "bytes": 13857213,
+      "sha256": "56cd73e2cd47c84c28c1bac1b30b67877cac0210df315eee6d35dd3e95ae1970",
+      "identical_to_original": true
+    },
+    {
+      "part": "ppt/media/media3.mp4",
+      "bytes": 37372132,
+      "sha256": "7befdb0ab3d7a3d4a0b829bdb1a8c065c2d277e34e351098a5516dedbd7dfcb7",
+      "identical_to_original": false
+    }
+  ],
+  "pptx_sha256": "a5bc3f540e05c4b69da553eaab72c6d8fdb1c613e6c0b2c068f8fcdb072526aa",
+  "pdf_sha256": "bec1db9dd635d8990bf1af7172a7c318fe37e738f7e2fb5c65e0f7357aed0a14",
+  "pdf_file": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/seminar_final_review_20260911/졸업과제_세미나_발표자료_수정본_20260911.pdf",
+  "static_pdf_no_video_annotations": true,
+  "download_copies": [
+    "/home/ehdrms/Downloads/졸업과제_세미나_발표자료_수정본_20260911.pptx",
+    "/home/ehdrms/Downloads/졸업과제_세미나_발표자료_수정본_20260911.pdf"
+  ],
+  "static_pdf_text_matches": true
+}

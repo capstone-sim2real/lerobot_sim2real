@@ -1,0 +1,32 @@
+[
+  {
+    "id": "01_academic_blue",
+    "path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/01_academic_blue.png",
+    "source": "/home/ehdrms/.codex/generated_images/01a08d09-f86e-7823-9e89-47c331d6b32b/exec-1a09a4f5-ac2e-4aec-a7f1-eeb2a0f48dee.png",
+    "width": 2048,
+    "height": 768,
+    "bytes": 1473462,
+    "sha256": "b5a493ed0826266fbf4d410b0aafe89cdfab65673cbf570b59b73edec938b419",
+    "prompt_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/prompts/01_academic_blue.txt"
+  },
+  {
+    "id": "02_swiss_red",
+    "path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/02_swiss_red.png",
+    "source": "/home/ehdrms/.codex/generated_images/01a08d09-f86e-7823-9e89-47c331d6b32b/exec-d656b276-42ab-4173-8063-f2483c067554.png",
+    "width": 2048,
+    "height": 768,
+    "bytes": 1550213,
+    "sha256": "2f27f52706e45479e4e8efeaf2f5474011534aa6ef12c821a070e75f3d6b4136",
+    "prompt_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/prompts/02_swiss_red.txt"
+  },
+  {
+    "id": "03_editorial_sand",
+    "path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/03_editorial_sand.png",
+    "source": "/home/ehdrms/.codex/generated_images/01a08d09-f86e-7823-9e89-47c331d6b32b/exec-45413e3c-8134-47d1-9b0a-d4436f5f8c77.png",
+    "width": 2048,
+    "height": 768,
+    "bytes": 1834709,
+    "sha256": "e78c93830894c915d3f77d8a3a006ca2d9cd3877969f5ff1717d7ad8315dcf2b",
+    "prompt_path": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/imagegen_variations_20260911/prompts/03_editorial_sand.txt"
+  }
+]

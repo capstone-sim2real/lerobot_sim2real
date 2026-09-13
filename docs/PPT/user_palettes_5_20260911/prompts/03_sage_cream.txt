@@ -1,0 +1,42 @@
+Use case: productivity-visual. Produce ONE raster image containing SIX complete PowerPoint slide design mockups in a strict THREE COLUMNS by TWO ROWS contact sheet. Every cell is a complete 16:9 slide, same size, all six edges visible, very thin uniform gutters. Whole canvas panoramic 8:3, ideally high resolution 3840x1440 or supported equivalent. Flat direct frontal view, no perspective. Exactly six panels, no external title bar, no seventh panel.
+
+DESIGN GOAL: genuinely excellent contemporary Korean presentation design. Typography-led, borderless editorial layout, generous negative space, large short headlines, disciplined but asymmetric composition. Every slide has a purpose-specific composition, not six identical cards. Give the layout the visual clarity of a carefully designed architecture portfolio or design-conference presentation. Content occupies only about 55-65 percent of each slide, with deliberate empty space. Use crisp modern Korean sans-serif like Pretendard/SUIT, paired only with a clean Latin grotesk. Strong hierarchy, very few short words, minimum decorative clutter. Titles must be readable across the six-up sheet.
+
+Do NOT use generic AI business infographic styling: no shiny purple robot render, no robots on pedestals, no humanoids, no clip-art camera/cog icons, no repeated rounded UI cards, no drop shadows, no glossy buttons, no neon glow, no handwritten slogans, no stock people, no fake photographs, no gray textured experimental scene, no academic blue default outside the provided palette. No additional slogans. Use clean two-dimensional diagrams and abstract rectangular block geometry instead. No gradients. No decorative pictograms inside a row of boxes. Node labels and thin connectors can stand directly on the slide background.
+
+PALETTE: The following four exact user-provided HEX colors are authoritative. Apply them to large flat background fields, typography, diagrams and accents. Never introduce orange/red status colors, purple robots or a fifth decorative hue. Negative status can be communicated with bold outlined or reversed text using the provided dark color. Text contrast takes priority; only palette 03 is explicitly allowed one additional neutral ink. Do not print HEX codes or palette swatches inside the six slides.
+
+Shared six slide subjects, reading order:
+TOP LEFT — COVER.
+Short title exactly "CV+IK 기반" / "블록 조작 시스템". Small "SO-ARM101" and "Team Sim2Real". Mostly confident typography with a single abstract rectangular form suggesting blocks. No literal robot illustration and no photo.
+TOP MIDDLE — SYSTEM.
+Title "인식과 동작을 연결".
+Open unboxed typographic path "카메라 → CV → 좌표/IK → FSM → 로봇". Secondary thin branch to "웹 뷰어" for observation only; never loop viewer into robot control. Small bottom label "관측 / 계획 / 실행". Beautiful information architecture, not five identical icon cards.
+TOP RIGHT — PERCEPTION.
+Title "색과 형상으로 블록 검출".
+Three short labels "HSV 후보", "형상 필터", "영역 제외". A minimal flat plan-view rectangular workspace with a few filled quadrilaterals in palette tones, line boundaries and sparse detection outlines. Caption "검출 구조 개념도". This is abstract layout, not a claimed test image.
+BOTTOM LEFT — CALIBRATION.
+Title "픽셀에서 로봇 좌표로".
+Minimal two planar coordinate schematics and a transform arrow; label source "(u,v)", destination "(x,y) mm" and "좌표 대응 개념도". No three-dimensional XYZ target frame. Show only two genuine numeric callouts "RMS 8.18 mm" and "최대 LOO 26.64 mm", with small "9점 재수집 / 개발 목표 미달". Do not invent measured points, curves, progress charts or extra statistics.
+BOTTOM MIDDLE — GRASP.
+Title "파지 확인 후 운반".
+Open flow of words and fine lines "후보 검사 → 파지 → 센서 확인"; branch "확인" to "운반", and "미확인" to "다음 후보" with return arrow to candidate handling. The words "다음 후보" must have NO extra explanation in parentheses. Small line "중심 불가 시 대체 후보". Highlight this decision clearly.
+BOTTOM RIGHT — RESULTS.
+Title "실행 결과와 남은 과제".
+Elegant open data ledger, modest rather than gigantic hero statistics:
+"슬롯 해제 4회"
+"후보 실행 14회"
+"HELD 4 / EMPTY 9 / 중단 1"
+"전체 미션 미완료"
+Small footer "180초 외부 제한 시험 1회 / 적재 실기 미수행".
+Do not convert release events to accepted blocks, no 4/5, no percent sign, no stacking success, no giant warning triangle. Negative status is clear but visually calm.
+
+Keep literal Korean text correct. Small original slide numbers 01, 05, 06, 07, 09, 10 optional. Use only the supplied text, with editorial breaks as needed. This is a new design, not a recolor of an earlier template. Produce the whole six-slide contact sheet as ONE image.
+
+EXACT USER PALETTE: #80A1BA / #91C4C3 / #B4DEBD / #FFF7DD
+Only permitted neutral typography ink: #26343C
+
+ART DIRECTION FOR THIS SINGLE VARIANT:
+Mature pastel editorial: warm cream #FFF7DD canvas, large pale-sage #B4DEBD sections, muted aqua #91C4C3 and powder slate #80A1BA geometric accents. These exact four chromatic colors ONLY. For readable type and fine necessary diagram strokes use one neutral ink #26343C; do NOT darken or replace palette colors. Colors occupy broad flat areas, not small badges. Play with asymmetric margins, oversized clean typography, generous breathing room, square mosaic-like blocks as one controlled motif. Refined art-and-science exhibition aesthetic, not cute kindergarten, not handwritten, not pastel SaaS cards. Cover typographic and abstract, extremely spare. Six distinct page compositions within a gentle unified grid, precise hierarchy, no low-contrast colored paragraphs.
+
+Generate this one polished six-slide image now. Emphasize fresh editorial composition and large palette-colored fields.

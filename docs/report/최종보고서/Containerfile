@@ -1,0 +1,7 @@
+FROM docker.io/library/ubuntu:24.04
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    latexmk texlive-latex-extra texlive-lang-korean texlive-fonts-recommended \
+    texlive-science && rm -rf /var/lib/apt/lists/*
+WORKDIR /work
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ffmpeg && rm -rf /var/lib/apt/lists/*

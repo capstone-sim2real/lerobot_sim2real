@@ -1,0 +1,104 @@
+[
+  {
+    "asset": "figures/setup_early.png",
+    "source": "docs/report/중간보고서/figure/setup_front.png",
+    "transformation": "byte-for-byte copy",
+    "sha256": "b045fa1584af227016013329b198cd0da34c9e232c09aaf473c6689d1eb55e3b"
+  },
+  {
+    "asset": "figures/blocks.png",
+    "source": "docs/report/중간보고서/figure/blocks5.png",
+    "transformation": "byte-for-byte copy",
+    "sha256": "1f5b4842a092a63d7216ad57af3e82831ed0d5e9ab0c1623994e4767df7aca60"
+  },
+  {
+    "asset": "figures/grasp_before.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/original/before.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "4329c506a4aea472dae5171e3c0cfb276f5cb9698612c6685daad9d0dfecba28"
+  },
+  {
+    "asset": "figures/grasp_lifted.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/original/lifted.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "82cc6b5a1e1f5355861a9a848ea8ef7c0760db1a59a1f73a9451439d1421a980"
+  },
+  {
+    "asset": "figures/grasp_inner.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/repeat/pick1/closed.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "ebf3d789e63808a0c7a5c5d8eadd01aa0d2ee22e90d7f24e1f0f298098ff7401"
+  },
+  {
+    "asset": "figures/grasp_retry.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/pick_validation/repeat/pick1_retry_clear/closed.jpg",
+    "transformation": "byte-for-byte copy",
+    "sha256": "d28e65da11965a82a74f7fd6f1fe5513c8fc18ccb0b8c36b72c4b13671fa77e3"
+  },
+  {
+    "asset": "figures/drift_initial.csv",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/drift_60s.csv",
+    "transformation": "byte-for-byte copy",
+    "sha256": "c18b2c0e90ecab3ed34bd8015675657488aa27a5a59c29e12117e6c316b6745e"
+  },
+  {
+    "asset": "figures/drift_retry.csv",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/stability_retry_Kjz2Pr/drift_60s.csv",
+    "transformation": "byte-for-byte copy",
+    "sha256": "5dd478f55a05ae7de1934d1fa2a4394bcfb8995c6769cd07f5c711f96fb3152c"
+  },
+  {
+    "asset": "figures/demo_000.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 0 seconds; original framing retained",
+    "sha256": "a017d02e3531d316deb9b86e4293e20bb65856a2ec4cd41d9b9de1883df36071"
+  },
+  {
+    "asset": "figures/demo_060.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 60 seconds; original framing retained",
+    "sha256": "e8a45a317177925942a989fc623ee07915aa1f1ba469f5633458a3217647bafa"
+  },
+  {
+    "asset": "figures/demo_104.jpg",
+    "source": "docs/report/Chats/KakaoTalk_Chats_2026-09-10_13.52.49_-1446408419/92e3f87c6652e3de778dfcedde65e76559a28a96f1e972d4d74f1bead563e7fe.mp4",
+    "source_sha256": "fa3655ac10156fdb2c7f7cb2fffeba95bc7d840ad7a3c678deb3f2f03a31fb5a",
+    "transformation": "ffmpeg JPEG frame at 104 seconds; original framing retained",
+    "sha256": "4132e8985b10a1f7fe3062b04f5194e7b2dc9130f93bd359f334028777e2a4e4"
+  },
+  {
+    "asset": "figures/workspace_20260908.png",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/zone_preview.png",
+    "transformation": "byte-for-byte copy; existing region and slot overlay retained",
+    "sha256": "3b8ada785609b8b9da76ffc69593c720634c5e245ac1cbbff8f0f8168d8a150b"
+  },
+  {
+    "asset": "figures/calibration_map.tex",
+    "source": [
+      "evidence/20260908/accepted_points.csv",
+      "evidence/20260908/venue_accepted.json"
+    ],
+    "transformation": "analysis/summarize_evidence.py; saved homography residuals in robot base mm, true-scale arrows; nominal 200 x 100 mm rectangle centered on registered zone corners",
+    "sha256": "19a569ce4eb189faaa8ec6a8389b5ff09ad44cec397308afd3f179ea33d21f44"
+  },
+  {
+    "asset": "figures/task1_timeline.tex",
+    "source": "evidence/20260908/task1_run.txt",
+    "transformation": "analysis/summarize_evidence.py; timestamped state intervals and candidate starts, incomplete last interval marked",
+    "sha256": "dad92e98ef9f2e8bec3f68f5e669ff3490f4904743128f0aeeb480b899d819db"
+  },
+  {
+    "asset": "figures/calibration_p4_contact.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/p4_live.jpg",
+    "transformation": "byte-for-byte copy; paired P4 capture; identical crop in LaTeX, saved pixel center annotated on clear image",
+    "sha256": "89c8d8ac81e4830ab6186e0a9962c6f6268405d1080846be120c8fa4677529ac"
+  },
+  {
+    "asset": "figures/calibration_p4_clear.jpg",
+    "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/p4_clean.jpg",
+    "transformation": "byte-for-byte copy; paired P4 capture; identical crop in LaTeX, saved pixel center annotated on clear image",
+    "sha256": "c36c03619de4dc93350c8106e0e7b40676a33429fd3f6094f5c12abfee7724cd"
+  }
+]

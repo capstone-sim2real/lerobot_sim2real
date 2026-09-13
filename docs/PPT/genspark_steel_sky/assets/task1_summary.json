@@ -1,0 +1,23 @@
+{
+  "run_id": "task1_20260908_030956",
+  "clock_origin": "2026-09-08T03:10:05.080000",
+  "external_timeout_s": 180,
+  "counts": {
+    "candidate_starts": 14,
+    "sensor_held": 4,
+    "sensor_empty": 9,
+    "interrupted_no_result": 1,
+    "pick_entries": 6,
+    "verify_passes": 4,
+    "slot_release_events": 4,
+    "done_transitions": 0
+  },
+  "disconnect_log_s": 173.964,
+  "physical_stop_s": null,
+  "human_accepted_blocks": null,
+  "human_mission_success": false,
+  "human_result_source": "Archived session README: blue remained outside",
+  "red_first_pick_s": 51.492,
+  "red_selection_to_release_s": 69.815,
+  "timing_note": "Timeout includes initialization; signal and physical stop times are not logged."
+}

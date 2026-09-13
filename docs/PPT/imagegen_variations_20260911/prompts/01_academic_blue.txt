@@ -1,0 +1,44 @@
+Use case: productivity-visual.
+Generate ONE high-resolution image containing exactly SIX different PowerPoint slide designs, a clean contact sheet of one coherent Korean engineering presentation. Layout must be EXACTLY THREE COLUMNS by TWO ROWS, reading left to right, top to bottom. Each tile is a 16:9 widescreen slide. Overall canvas is panoramic 8:3, ideally 3840x1440 or nearest wide supported resolution. All six full slide edges visible, aligned equal rectangles, narrow consistent gutters. Front-facing flat artwork, no perspective, no laptop or mockup room, no tilted or overlapping cards. This is one image, not six separate outputs. Do not add an extra title panel. Make the design elegant, legible and usable in an actual 10-minute Korean university robotics presentation.
+
+This is a DESIGN STUDY, not new scientific evidence. Any robot visual must be a schematic or explicitly labeled "개념 이미지". Do not invent experiment photographs, plotted measurements, heat maps, accuracy improvements or task success. When a photo layout is appropriate, use a clearly intentional image field with a small elegant SO-101 bench-top robot schematic, rather than a fake experimental photograph. The robot is a small purple open-frame SO-101 arm with a parallel gripper, not a humanoid or industrial factory robot.
+
+All ten design alternatives use these exact same six content panels. Typography mainly Korean with the few exact Latin technical labels below; do not flood pages with filler body text. Preserve all digits exactly. At most three short content lines per slide except the flow diagram. Clear editorial hierarchy, high contrast, large visible headings, sophisticated whitespace, professional optical alignment. Vary layout by slide purpose while keeping a unified design system.
+
+TOP LEFT, slide 01, cover:
+Main text "CV+IK 기반" and "블록 조작 시스템". Secondary "SO-ARM101" and "Team Sim2Real". Small subtitle "컴퓨터 비전 / 역기구학 / FSM". Feature a restrained conceptual drawing of a small robot arm and blocks. No invented university logo.
+
+TOP MIDDLE, slide 05, system architecture:
+Title "인식과 동작을 FSM으로 연결".
+Diagram main path "카메라 → CV → 좌표/IK → FSM → 로봇".
+Separate branch "웹 뷰어" for observation, not a robot control input.
+Small footer "관측 / 계획 / 실행". Make the process visual, not a wall of text.
+
+TOP RIGHT, slide 06, vision:
+Title "색과 형상으로 블록 검출".
+Three short labels "HSV 후보", "형상 필터", "영역 제외".
+A clearly conceptual top-down workspace with blocks and a rectangular target boundary, sparse detection bounding boxes. Do not simulate actual detection metrics. Caption "검출 화면 구성 예시".
+
+BOTTOM LEFT, slide 07, calibration:
+Title "픽셀에서 로봇 좌표로".
+Simple pixel-plane to robot-plane correspondence diagram, caption "좌표 대응 개념도".
+Two carefully typeset numeric callouts: "RMS 8.18 mm", "최대 LOO 26.64 mm".
+Small qualifier "9점 재수집 / 개발 목표 미달". These are calibration residuals, not actual jaw precision. No invented line/scatter data.
+
+BOTTOM MIDDLE, slide 09, grasp/FSM:
+Title "파지 확인 후 운반".
+Flow with "후보 검사 → 파지 → 센서 확인" then a real two-way decision: "확인" goes to "운반", "미확인" goes to "다음 후보" and returns to candidate handling. Add "중심 불가 시 대체 후보" as one short line. Use branch arrows clearly, avoid routing failure into transport.
+
+BOTTOM RIGHT, slide 10, results:
+Title "실행 결과와 남은 과제".
+Primary numeric callout "슬롯 해제 4회".
+Secondary grouped counts "후보 14회", "HELD 4 / EMPTY 9 / 중단 1".
+Visible orange/differentiated status "전체 미션 미완료".
+Small footer "180초 외부 제한 시험 1회 / 적재 실기 미수행".
+Do not show 4/5 or any percent sign. Do not imply 4 accepted blocks or stacking success.
+
+Slide numbers 01,05,06,07,09,10 may be small. Reproduce Korean text accurately. No excessive decorative jargon. No generic business stock photos. Avoid tiny paragraphs. This should look like six thoughtfully art-directed slides, not one infographic divided casually into cells.
+
+
+STYLE 01 — ACADEMIC BLUE. Use a crisp white canvas and white slides with deep navy (#142F4C) typography, cobalt (#245FDD) highlights and pale ice-blue fields. Restrained Korean university engineering defense, precise grid, left-aligned headings, spacious schematic illustrations with consistent thin navy strokes. Title cover has large stacked typography on left and an elegant purple SO-101 conceptual arm on right. Other slides use varying clean modular arrangements: architecture central arrow band, vision large workspace image to left with three compact annotation steps at right, calibration coordinates across center with two metric modules below, FSM as a generous branch diagram, results as a big dark-blue 4 beside evidence and orange status. Tiny navy section bars and thin gray dividers, no gradients, no decorative blobs, no big numbered graphic backgrounds. Everything scholarly, calm and immediately legible. Prioritize professional final-presentation usability. The two-way sensor decision must show confirmed branch to transport and unconfirmed branch only to next candidate.
+

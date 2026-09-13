@@ -1,0 +1,38 @@
+{
+  "workspace_20260908.png": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/workspace_20260908.png",
+    "sha256": "3b8ada785609b8b9da76ffc69593c720634c5e245ac1cbbff8f0f8168d8a150b"
+  },
+  "blocks.png": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/blocks.png",
+    "sha256": "1f5b4842a092a63d7216ad57af3e82831ed0d5e9ab0c1623994e4767df7aca60"
+  },
+  "demo_000.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/demo_000.jpg",
+    "sha256": "a017d02e3531d316deb9b86e4293e20bb65856a2ec4cd41d9b9de1883df36071"
+  },
+  "demo_060.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/demo_060.jpg",
+    "sha256": "e8a45a317177925942a989fc623ee07915aa1f1ba469f5633458a3217647bafa"
+  },
+  "demo_104.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/demo_104.jpg",
+    "sha256": "4132e8985b10a1f7fe3062b04f5194e7b2dc9130f93bd359f334028777e2a4e4"
+  },
+  "calibration_p4_contact.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/calibration_p4_contact.jpg",
+    "sha256": "89c8d8ac81e4830ab6186e0a9962c6f6268405d1080846be120c8fa4677529ac"
+  },
+  "calibration_p4_clear.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/calibration_p4_clear.jpg",
+    "sha256": "c36c03619de4dc93350c8106e0e7b40676a33429fd3f6094f5c12abfee7724cd"
+  },
+  "grasp_lifted.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/grasp_lifted.jpg",
+    "sha256": "82cc6b5a1e1f5355861a9a848ea8ef7c0760db1a59a1f73a9451439d1421a980"
+  },
+  "grasp_inner.jpg": {
+    "source": "/home/ehdrms/workspace/lerobot_sim2real-final-report/docs/PPT/genspark_steel_sky/assets/grasp_inner.jpg",
+    "sha256": "ebf3d789e63808a0c7a5c5d8eadd01aa0d2ee22e90d7f24e1f0f298098ff7401"
+  }
+}

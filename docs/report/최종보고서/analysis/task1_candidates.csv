@@ -1,0 +1,15 @@
+candidate,cycle,target,candidate_name,start_s,result_s,outcome,sensor_position,sensor_load,source_start_line,source_result_line
+1,1,green,centre,1.072,11.515,HELD,21.3,500.0,13,29
+2,2,yellow,centre,21.966,33.506,EMPTY,2.5,44.0,38,42
+3,2,yellow,left,33.506,40.359,EMPTY,2.5,44.0,43,47
+4,2,yellow,back,40.36,46.059,HELD,21.1,500.0,48,64
+5,3,red,centre,56.462,69.322,EMPTY,2.5,44.0,72,77
+6,3,red,left,69.322,78.737,EMPTY,2.5,44.0,78,83
+7,3,red,back,78.737,88.395,EMPTY,2.5,44.0,84,89
+8,3,red,right,88.396,98.017,EMPTY,2.5,44.0,90,95
+9,3,red,front,98.018,107.214,EMPTY,2.5,44.0,96,101
+10,4,red,centre,110.126,119.429,HELD,20.3,500.0,106,122
+11,5,wood,centre,129.127,138.636,HELD,20.3,500.0,133,149
+12,6,blue,centre,148.691,161.411,EMPTY,2.5,44.0,196,201
+13,6,blue,left,161.411,170.37,EMPTY,2.5,44.0,202,207
+14,6,blue,back,170.37,,INTERRUPTED_NO_SENSOR_RESULT,,,208,
