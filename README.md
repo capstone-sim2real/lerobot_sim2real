@@ -109,6 +109,27 @@ Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인
 
 자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
 
+### Task 3 — ACT 데이터셋 자동 수집
+
+Task 1의 수집 루프를 그대로 돌리면서 성공한 사이클 하나를 LeRobot 에피소드로
+녹화합니다. 사람은 블록 5개를 배치하는 일만 합니다.
+
+```bash
+uv pip install --python .venv/bin/python "datasets>=4.7.0,<5.0.0" "av>=15.0.0,<16.0.0"
+so101-camera                                 # 손목캠도 쓰면 --wrist-device /dev/videoN
+so101-collect --dry-run                      # 카메라·슬롯·features 확인, 팔은 정지
+so101-collect                                # Ctrl-C 로 종료
+# 동일한 Task 3 진입점 별칭
+so101-run --task 3 --dry-run
+so101-run --task 3
+```
+
+한 에피소드 = `home → 파지 → 운반 → 릴리스 → home 복귀`. 파지는 **1회만**
+시도하고 운반까지 성공한 것만 저장합니다. 지정구역 밖이 비면 재배치를 요청하고
+계속 수집합니다. Ctrl-C는 미완 에피소드만 버리고 나머지는 보존합니다.
+
+자세한 내용은 [Task 3 데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md).
+
 ## Repository Layout
 
 ```text
@@ -120,7 +141,8 @@ Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인
 │   └── report/                시점별 제출·피벗 기록(역사 자료)
 ├── experiments/               날짜별 실장비 증거와 실패 기록
 ├── src/
-│   ├── camera/                단일 소유 카메라 서버와 표시용 오버레이
+│   ├── camera/                단일 소유 카메라 서버, 오버레이, 녹화용 프레임 소스
+│   ├── data/                  Task 3 LeRobot 에피소드 녹화
 │   ├── perception/            homography, 색·형상 검출, 선택
 │   ├── control/               IK, 파지, 궤적, 센싱
 │   ├── fsm/                   Task 흐름과 상태 구현
@@ -141,6 +163,7 @@ Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
 - [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
+- [Task 3 ACT 데이터셋 자동 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)
 - [캘리브레이션 자료 위치](docs/calibration/README.md)
 - [정량 평가 기록](docs/eval/README.md)
 - [과거 ACT/SmolVLA 데이터 수집 기록](docs/guide/SO101_데이터수집_관리.md)
