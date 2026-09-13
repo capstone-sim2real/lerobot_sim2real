@@ -1,0 +1,46 @@
+[
+  {
+    "file": "media3.mp4",
+    "streams": [
+      {
+        "codec_name": "hevc",
+        "codec_type": "video",
+        "width": 1920,
+        "height": 1080,
+        "nb_frames": "1631",
+        "duration": "54.336667"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "width": null,
+        "height": null,
+        "nb_frames": "2342",
+        "duration": "54.330000"
+      }
+    ],
+    "audio_adts_sha256": "ce35fb680aeb0bc238a77f4da2a00e097401acf7a005cb2f94aa8219946a3a78"
+  },
+  {
+    "file": "media3_h264.mp4",
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1920,
+        "height": 1080,
+        "nb_frames": "1631",
+        "duration": "54.366667"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "width": null,
+        "height": null,
+        "nb_frames": "2342",
+        "duration": "54.330000"
+      }
+    ],
+    "audio_adts_sha256": "ce35fb680aeb0bc238a77f4da2a00e097401acf7a005cb2f94aa8219946a3a78"
+  }
+]

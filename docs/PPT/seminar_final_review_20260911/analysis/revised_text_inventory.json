@@ -1,0 +1,2070 @@
+[
+  {
+    "slide_original": 1,
+    "text": "부산대학교 졸업과제 세미나",
+    "size_pt": 16,
+    "box_in": [
+      0.75,
+      1.58,
+      9.8,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 1,
+    "text": "컴퓨터 비전과 역기구학 기반 SO-ARM101\n로봇팔의 블록 이동 및 적재 시스템",
+    "size_pt": 29,
+    "box_in": [
+      0.75,
+      2.46,
+      11.6,
+      1.5
+    ]
+  },
+  {
+    "slide_original": 1,
+    "text": "Team Sim2Real",
+    "size_pt": 21,
+    "box_in": [
+      0.78,
+      4.38,
+      10,
+      0.42
+    ]
+  },
+  {
+    "slide_original": 1,
+    "text": "윤민석 / 김주환 / 이동근",
+    "size_pt": 17,
+    "box_in": [
+      0.78,
+      4.99,
+      10,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 1,
+    "text": "블록 인식  /  좌표 변환  /  파지 확인  /  미션 실행",
+    "size_pt": 15,
+    "box_in": [
+      0.78,
+      6.5,
+      11.8,
+      0.36
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "01  PROJECT",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "프로젝트 목표와 작업 환경",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "같은 규격의 블록 5개를 고정 카메라와 로봇팔로 조작",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "02 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "시스템 구성 개념도",
+    "size_pt": 12,
+    "box_in": [
+      0.84,
+      6.14,
+      5.12,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "1차 미션  /  지정 영역 배치",
+    "size_pt": 18,
+    "box_in": [
+      6.82,
+      2.3000000000000003,
+      5.76,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "180초 안에 20 × 10 cm 영역으로 운반\n경계 2 cm 걸침 허용, 적재는 불인정",
+    "size_pt": 18,
+    "box_in": [
+      6.82,
+      2.8000000000000003,
+      5.76,
+      1.13
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "2차 미션  /  블록 적재",
+    "size_pt": 18,
+    "box_in": [
+      6.82,
+      4.46,
+      5.76,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "300초 안에 적재 후 5초 이상 유지\n동일한 블록 5개로 수행",
+    "size_pt": 18,
+    "box_in": [
+      6.82,
+      4.96,
+      5.76,
+      1.0999999999999999
+    ]
+  },
+  {
+    "slide_original": 2,
+    "text": "공통 흐름: 인식 → 파지 → 확인 → 운반 → 배치",
+    "size_pt": 14,
+    "box_in": [
+      6.8,
+      6.41,
+      5.8,
+      0.33
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "02  APPROACH",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "모방학습에서 CV + IK로 전환",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "고정된 작업 조건을 활용하고, 실패를 단계별로 확인할 수 있는 구조를 선택",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "03 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "초기 ACT 실험",
+    "size_pt": 18,
+    "box_in": [
+      0.75,
+      2.3000000000000003,
+      3.48,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "단일 블록 이동\n50회 중 29회 성공\n성공률 58%",
+    "size_pt": 21,
+    "box_in": [
+      0.75,
+      2.8000000000000003,
+      3.48,
+      2.62
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "초기 실험 조건의 결과\n최종 방식과 동일 조건 비교 없음",
+    "size_pt": 13,
+    "box_in": [
+      0.78,
+      4.61,
+      3.45,
+      0.7
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "확장 과정의 어려움",
+    "size_pt": 18,
+    "box_in": [
+      4.9,
+      2.3000000000000003,
+      3.48,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "새 위치와 시야 변화에 대응\n데이터 수집과 재학습 부담\n접촉 실패의 원인 분리 필요",
+    "size_pt": 18,
+    "box_in": [
+      4.9,
+      2.8000000000000003,
+      3.48,
+      2.62
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "최종 CV + IK",
+    "size_pt": 18,
+    "box_in": [
+      9.049999999999999,
+      2.3000000000000003,
+      3.5300000000000002,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "색과 형상으로 위치 검출\n기구학으로 자세 계산\n센서와 FSM으로 실패 대응",
+    "size_pt": 18,
+    "box_in": [
+      9.049999999999999,
+      2.8000000000000003,
+      3.5300000000000002,
+      2.62
+    ]
+  },
+  {
+    "slide_original": 7,
+    "text": "전환의 근거: 고정 평면과 규격 블록이라는 조건, 실패를 추적하고 수정할 수 있는 구조",
+    "size_pt": 18,
+    "box_in": [
+      0.8,
+      6.08,
+      11.74,
+      0.45
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "03  ARCHITECTURE",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "인식에서 실행까지 연결한 시스템",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "카메라 / OpenCV / PlaCo 기반 기구학 / LeRobot 입출력 / FSM",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "04 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "카메라 영상",
+    "size_pt": 17,
+    "box_in": [
+      0.7100000000000001,
+      2.34,
+      2.46,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "최신 프레임",
+    "size_pt": 13,
+    "box_in": [
+      0.7100000000000001,
+      2.82,
+      2.46,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 20,
+    "box_in": [
+      3.37,
+      2.47,
+      0.3,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "평면 보정 / 검출",
+    "size_pt": 17,
+    "box_in": [
+      3.8600000000000003,
+      2.34,
+      2.46,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "블록 XY와 각도",
+    "size_pt": 13,
+    "box_in": [
+      3.8600000000000003,
+      2.82,
+      2.46,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 20,
+    "box_in": [
+      6.52,
+      2.47,
+      0.3,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "파지 후보 / IK",
+    "size_pt": 17,
+    "box_in": [
+      7.01,
+      2.34,
+      2.46,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "실행할 관절 자세",
+    "size_pt": 13,
+    "box_in": [
+      7.01,
+      2.82,
+      2.46,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 20,
+    "box_in": [
+      9.67,
+      2.47,
+      0.3,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "관절 이동 / 센싱",
+    "size_pt": 17,
+    "box_in": [
+      10.16,
+      2.34,
+      2.46,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "명령과 측정 상태",
+    "size_pt": 13,
+    "box_in": [
+      10.16,
+      2.82,
+      2.46,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "FSM  /  파지가 확인된 경우에만 운반으로 전이",
+    "size_pt": 18,
+    "box_in": [
+      0.58,
+      3.61,
+      12,
+      0.34
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "SELECT",
+    "size_pt": 15,
+    "box_in": [
+      0.65,
+      4.38,
+      1.9,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "대상 선택",
+    "size_pt": 12,
+    "box_in": [
+      0.65,
+      4.82,
+      1.9,
+      0.25
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 19,
+    "box_in": [
+      2.71,
+      4.57,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "PICK",
+    "size_pt": 15,
+    "box_in": [
+      3.18,
+      4.38,
+      1.9,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "후보 파지",
+    "size_pt": 12,
+    "box_in": [
+      3.18,
+      4.82,
+      1.9,
+      0.25
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 19,
+    "box_in": [
+      5.24,
+      4.57,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "VERIFY",
+    "size_pt": 15,
+    "box_in": [
+      5.709999999999999,
+      4.38,
+      1.9,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "파지 확인",
+    "size_pt": 12,
+    "box_in": [
+      5.709999999999999,
+      4.82,
+      1.9,
+      0.25
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 19,
+    "box_in": [
+      7.77,
+      4.57,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "TRANSPORT",
+    "size_pt": 15,
+    "box_in": [
+      8.24,
+      4.38,
+      1.9,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "운반",
+    "size_pt": 12,
+    "box_in": [
+      8.24,
+      4.82,
+      1.9,
+      0.25
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "→",
+    "size_pt": 19,
+    "box_in": [
+      10.3,
+      4.57,
+      0.35,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "PLACE",
+    "size_pt": 15,
+    "box_in": [
+      10.77,
+      4.38,
+      1.9,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "배치",
+    "size_pt": 12,
+    "box_in": [
+      10.77,
+      4.82,
+      1.9,
+      0.25
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "미확인 → 후보 재시도 또는 대상 재선택",
+    "size_pt": 15,
+    "box_in": [
+      2.27,
+      5.88,
+      7.8,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 8,
+    "text": "공통 파지 흐름에 지정 영역 배치 / 적재 전략을 연결",
+    "size_pt": 16,
+    "box_in": [
+      0.58,
+      6.48,
+      12,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "04  PERCEPTION",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "색과 형상으로 블록을 검출",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "색이 같은 경계 테이프를 구분하고, 실제 작업 대상만 남기는 과정",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "05 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "실제 검출 화면 / 블록 후보, 방향, 지정 영역 표시",
+    "size_pt": 12,
+    "box_in": [
+      0.84,
+      6.36,
+      6.98,
+      0.26
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "01  색 후보",
+    "size_pt": 18,
+    "box_in": [
+      8.67,
+      2.3000000000000003,
+      3.9099999999999997,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "HSV 범위로 후보 영역 생성",
+    "size_pt": 16,
+    "box_in": [
+      8.67,
+      2.8000000000000003,
+      3.9099999999999997,
+      0.6099999999999999
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "02  형상 확인",
+    "size_pt": 18,
+    "box_in": [
+      8.67,
+      3.9000000000000004,
+      3.9099999999999997,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "면적, 종횡비, 채움 정도 검사",
+    "size_pt": 16,
+    "box_in": [
+      8.67,
+      4.4,
+      3.9099999999999997,
+      0.6099999999999999
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "03  작업 대상 선택",
+    "size_pt": 18,
+    "box_in": [
+      8.67,
+      5.5,
+      3.9099999999999997,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 5,
+    "text": "영역 안 / 작업 범위 밖 제외",
+    "size_pt": 16,
+    "box_in": [
+      8.67,
+      6.0,
+      3.9099999999999997,
+      0.6099999999999999
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "05  MONITORING",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "검출 결과와 파지 후보의 실시간 관찰",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "영상과 측정 상태를 함께 보여 주는 카메라 웹 뷰어",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "06 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "검출 결과",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      2.3200000000000003,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "블록 중심과 각도",
+    "size_pt": 16,
+    "box_in": [
+      9.44,
+      2.8200000000000003,
+      3.14,
+      0.47
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "파지 후보",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      3.79,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "기본점과 보정 후보",
+    "size_pt": 16,
+    "box_in": [
+      9.44,
+      4.29,
+      3.14,
+      0.47
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "FK 표시의 의미",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      5.26,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 6,
+    "text": "관절값으로 계산한 위치\n실제 턱의 영상 추적과 구분",
+    "size_pt": 15,
+    "box_in": [
+      9.44,
+      5.76,
+      3.14,
+      0.8499999999999999
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "06  CALIBRATION",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "영상 좌표와 로봇 좌표를 대응시키는 과정",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "블록 윗면에서 수집한 대응점으로 호모그래피 H를 추정",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "07 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "블록 윗면에서 재수집한 9개 대응점",
+    "size_pt": 13,
+    "box_in": [
+      0.83,
+      5.54,
+      5.25,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "RMS  8.18 mm",
+    "size_pt": 19,
+    "box_in": [
+      0.84,
+      6.07,
+      2.62,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "최대 LOO  26.64 mm",
+    "size_pt": 16,
+    "box_in": [
+      3.36,
+      6.1,
+      2.76,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "01  로봇 좌표 기록",
+    "size_pt": 18,
+    "box_in": [
+      6.91,
+      2.3000000000000003,
+      5.67,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "윗면 중앙에 TCP 정렬\n관절값 → FK → 베이스 기준 XY",
+    "size_pt": 16,
+    "box_in": [
+      6.91,
+      2.8000000000000003,
+      5.67,
+      0.6199999999999999
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "02  영상 좌표 기록",
+    "size_pt": 18,
+    "box_in": [
+      6.91,
+      3.8200000000000003,
+      5.67,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "블록은 그대로, 팔만 이동\n같은 윗면 중앙의 픽셀 좌표 수집",
+    "size_pt": 16,
+    "box_in": [
+      6.91,
+      4.32,
+      5.67,
+      0.6199999999999999
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "03  대응쌍으로 H 추정",
+    "size_pt": 18,
+    "box_in": [
+      6.91,
+      5.34,
+      5.67,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 9,
+    "text": "(u, v) → H → (x, y) mm\n고정 카메라 / 블록 윗면 평면",
+    "size_pt": 16,
+    "box_in": [
+      6.91,
+      5.84,
+      5.67,
+      0.6199999999999999
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "07  KINEMATICS",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "중심점 실패에도 실행 가능한 파지 후보 탐색",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "후보별 IK 도달성을 확인하고, 실제 파지는 센서로 다시 판단",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "08 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "기본점과 전 / 후 / 좌 / 우 후보",
+    "size_pt": 18,
+    "box_in": [
+      0.81,
+      2.32,
+      5.09,
+      0.37
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "기본",
+    "size_pt": 14,
+    "box_in": [
+      3.17,
+      5.16,
+      0.65,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "전",
+    "size_pt": 14,
+    "box_in": [
+      3.5700000000000003,
+      3.4299999999999997,
+      0.65,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "후",
+    "size_pt": 14,
+    "box_in": [
+      3.5700000000000003,
+      5.659999999999999,
+      0.65,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "우",
+    "size_pt": 14,
+    "box_in": [
+      1.6700000000000004,
+      4.54,
+      0.65,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "좌",
+    "size_pt": 14,
+    "box_in": [
+      4.7299999999999995,
+      4.54,
+      0.65,
+      0.32
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "반경 / 접선 방향의 15 mm 오프셋",
+    "size_pt": 15,
+    "box_in": [
+      0.84,
+      3.01,
+      4.99,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "후보 배치 개념도 / 실제 성공 위치를 뜻하지 않음",
+    "size_pt": 11,
+    "box_in": [
+      0.83,
+      6.23,
+      5.05,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "후보 계산",
+    "size_pt": 18,
+    "box_in": [
+      6.65,
+      2.3000000000000003,
+      5.93,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "중심이 실패해도 도달 가능한 후보가 있으면 실행",
+    "size_pt": 16,
+    "box_in": [
+      6.65,
+      2.8000000000000003,
+      5.93,
+      0.5
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "실행 후 검증",
+    "size_pt": 18,
+    "box_in": [
+      6.65,
+      3.8000000000000003,
+      5.93,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "위치와 부하로 파지 확인, 미확인 시 다음 후보",
+    "size_pt": 16,
+    "box_in": [
+      6.65,
+      4.3,
+      5.93,
+      0.5
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "중립 손목 정렬",
+    "size_pt": 18,
+    "box_in": [
+      6.65,
+      5.3,
+      5.93,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 10,
+    "text": "정사각형의 90° 대칭 중 중립에 가까운 방향 선택\nIK 오차는 모델 내부의 목표 도달 오차",
+    "size_pt": 16,
+    "box_in": [
+      6.65,
+      5.8,
+      5.93,
+      0.81
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "08  ENGINEERING",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "실기에서 드러난 문제와 설계 대응",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "검출, 자세, 접촉의 문제를 나누어 제어 조건에 반영",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "09 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "색상 간섭",
+    "size_pt": 21,
+    "box_in": [
+      0.75,
+      2.35,
+      3.51,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "테이프와 블록의 색 중복",
+    "size_pt": 17,
+    "box_in": [
+      0.75,
+      3.1,
+      3.51,
+      0.68
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "색 후보에 형상 조건 추가\n면적 / 종횡비 / 채움 정도",
+    "size_pt": 17,
+    "box_in": [
+      0.75,
+      4.2,
+      3.51,
+      1.0
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "손목 서보 과열",
+    "size_pt": 21,
+    "box_in": [
+      4.91,
+      2.35,
+      3.51,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "고정 방향 유지 중 손목 비틀림",
+    "size_pt": 17,
+    "box_in": [
+      4.91,
+      3.1,
+      3.51,
+      0.68
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "중립에 가까운 방향 선택\n블록의 90° 대칭 활용",
+    "size_pt": 17,
+    "box_in": [
+      4.91,
+      4.2,
+      3.51,
+      1.0
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "빈손 운반 위험",
+    "size_pt": 21,
+    "box_in": [
+      9.07,
+      2.35,
+      3.51,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "목표 도달과 실제 파지는 다름",
+    "size_pt": 17,
+    "box_in": [
+      9.07,
+      3.1,
+      3.51,
+      0.68
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "그리퍼 위치와 부하 확인\n미확인 시 운반 전이 금지",
+    "size_pt": 17,
+    "box_in": [
+      9.07,
+      4.2,
+      3.51,
+      1.0
+    ]
+  },
+  {
+    "slide_original": 11,
+    "text": "측정 자세에서 시작 → 관절 변화량 제한 → LeRobot 입출력 클램프 → 파지 확인",
+    "size_pt": 17,
+    "box_in": [
+      0.81,
+      6.05,
+      11.71,
+      0.47
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "09  RESULTS",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "1차 미션: 5개 블록의 운반과 배치",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "블록 검출부터 다음 대상의 재선택까지 연속 동작으로 연결",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "10 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "실제 동작에서 확인한 결과",
+    "size_pt": 18,
+    "box_in": [
+      0.75,
+      2.3000000000000003,
+      5.46,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "블록 5개를 지정 영역으로 운반\n파지와 배치를 순차적으로 반복",
+    "size_pt": 21,
+    "box_in": [
+      0.75,
+      2.8000000000000003,
+      5.46,
+      1.2
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "실패 대응",
+    "size_pt": 18,
+    "box_in": [
+      0.75,
+      4.56,
+      5.46,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "파지 미확인 시 다른 후보 또는 대상 재선택",
+    "size_pt": 16,
+    "box_in": [
+      0.75,
+      5.06,
+      5.46,
+      0.51
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "추가 평가: 반복 성공률과 미션 완료시간",
+    "size_pt": 16,
+    "box_in": [
+      0.76,
+      6.2,
+      5.43,
+      0.36
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "실제 동작 영상의 최종 배치 장면",
+    "size_pt": 17,
+    "box_in": [
+      6.92,
+      5.79,
+      5.59,
+      0.39
+    ]
+  },
+  {
+    "slide_original": 3,
+    "text": "파지 → 운반 → 배치 → 다음 블록 선택",
+    "size_pt": 14,
+    "box_in": [
+      6.92,
+      6.31,
+      5.59,
+      0.3
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "10  DEMONSTRATION",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "1차 미션 동작 영상",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "블록을 선택하고, 파지한 뒤, 지정 영역으로 운반하는 과정",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "11 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "01  검출 / 파지",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      2.3200000000000003,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "대상 선택과 접근",
+    "size_pt": 15,
+    "box_in": [
+      9.44,
+      2.8200000000000003,
+      3.14,
+      0.69
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "02  운반 / 배치",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      3.87,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "블록을 목표 영역으로 이동",
+    "size_pt": 15,
+    "box_in": [
+      9.44,
+      4.37,
+      3.14,
+      0.69
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "03  반복",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      5.42,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 4,
+    "text": "남은 블록을 다시 검출",
+    "size_pt": 15,
+    "box_in": [
+      9.44,
+      5.92,
+      3.14,
+      0.69
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "11  STACKING",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "2차 미션: 3층 적재 성공",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "추가 실기 결과를 반영하고, 4층 이상에서 남은 자세 제약을 구분",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "12 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "현재 성과",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      2.3200000000000003,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "블록 3층 적재 성공",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      2.8200000000000003,
+      3.14,
+      0.7
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "남은 제약",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      4.04,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "4층 이상 접근 시\n그리퍼 자세와 도달성",
+    "size_pt": 16,
+    "box_in": [
+      9.44,
+      4.54,
+      3.14,
+      0.5999999999999999
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "다음 검증",
+    "size_pt": 18,
+    "box_in": [
+      9.44,
+      5.66,
+      3.14,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 13,
+    "text": "높이별 자세 조정과 반복 시험",
+    "size_pt": 15,
+    "box_in": [
+      9.44,
+      6.16,
+      3.14,
+      0.44999999999999996
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "12  CONCLUSION",
+    "size_pt": 10,
+    "box_in": [
+      0.55,
+      0.24,
+      11,
+      0.21
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "확보한 성과와 다음 단계",
+    "size_pt": 27,
+    "box_in": [
+      0.55,
+      0.64,
+      12.2,
+      0.58
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "인식, 좌표, 기구학, 센싱을 실제 장비의 미션 흐름으로 통합",
+    "size_pt": 14,
+    "box_in": [
+      0.55,
+      1.3,
+      12.2,
+      0.38
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "PUSAN NATIONAL UNIVERSITY  /  Team Sim2Real",
+    "size_pt": 9,
+    "box_in": [
+      0.55,
+      7.15,
+      10,
+      0.18
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "13 / 14",
+    "size_pt": 10,
+    "box_in": [
+      12.15,
+      7.1,
+      0.63,
+      0.27
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "확보한 성과",
+    "size_pt": 18,
+    "box_in": [
+      0.75,
+      2.3000000000000003,
+      5.569999999999999,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "CV + IK 기반 5개 블록 운반 / 배치\n파지 확인과 실패 후보 재시도 구현\n카메라 관제와 캘리브레이션 도구 개발\n추가 실기에서 3층 적재 성공",
+    "size_pt": 18,
+    "box_in": [
+      0.75,
+      2.8000000000000003,
+      5.569999999999999,
+      2.38
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "남은 검증",
+    "size_pt": 18,
+    "box_in": [
+      7.01,
+      2.3000000000000003,
+      5.569999999999999,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "최종 조건의 미션 반복 성공률\n실패 후보의 시간 비용 관리\n4층 이상 적재 자세와 안정성\n사람이 확인한 결과와 센서 판정 대조",
+    "size_pt": 18,
+    "box_in": [
+      7.01,
+      2.8000000000000003,
+      5.569999999999999,
+      2.38
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "다음 일정",
+    "size_pt": 16,
+    "box_in": [
+      0.8,
+      5.79,
+      11.73,
+      0.34
+    ]
+  },
+  {
+    "slide_original": 12,
+    "text": "최종 시연 리허설과 반복 평가 / 검증된 실행 기록을 학습 데이터로 확장",
+    "size_pt": 16,
+    "box_in": [
+      0.8,
+      6.27,
+      11.73,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "TEAM SIM2REAL  /  Q&A",
+    "size_pt": 13,
+    "box_in": [
+      0.75,
+      1.21,
+      9.6,
+      0.28
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "감사합니다",
+    "size_pt": 34,
+    "box_in": [
+      0.75,
+      2.16,
+      10.4,
+      0.85
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "컴퓨터 비전과 역기구학 기반 블록 이동 및 적재 시스템",
+    "size_pt": 19,
+    "box_in": [
+      0.78,
+      3.24,
+      11.64,
+      0.5
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "윤민석",
+    "size_pt": 17,
+    "box_in": [
+      0.78,
+      4.41,
+      1.25,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "비전 검출 / 미션 제어 / 자세 보정",
+    "size_pt": 17,
+    "box_in": [
+      2.3,
+      4.41,
+      10.15,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "김주환",
+    "size_pt": 17,
+    "box_in": [
+      0.78,
+      5.03,
+      1.25,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "학습 접근 분석 / 평가 기록 / 보고서와 발표",
+    "size_pt": 17,
+    "box_in": [
+      2.3,
+      5.03,
+      10.15,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "이동근",
+    "size_pt": 17,
+    "box_in": [
+      0.78,
+      5.65,
+      1.25,
+      0.35
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "대체 파지 후보 / 관제와 캘리브레이션 도구",
+    "size_pt": 17,
+    "box_in": [
+      2.3,
+      5.65,
+      10.15,
+      0.4
+    ]
+  },
+  {
+    "slide_original": 14,
+    "text": "부산대학교 졸업과제 세미나",
+    "size_pt": 12,
+    "box_in": [
+      0.78,
+      6.82,
+      11.78,
+      0.3
+    ]
+  }
+]
