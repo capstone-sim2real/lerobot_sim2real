@@ -260,8 +260,8 @@ class MotionConfig:
     # How long to keep holding the hover trying to reach that tolerance. The
     # servos may not have the resolution for it at all, so this is a short
     # bounded wait and then the descent goes ahead from wherever it got —
-    # never move_timeout_s, which would add seconds of dead time to every
-    # attempt (and there are five attempts per block).
+    # never move_timeout_s, which would add seconds of dead time to both the
+    # initial attempt and its single rotated retry.
     grasp_hover_settle_s: float = 0.8
     # lift height above the grasp plane; the actual hover is the highest
     # top-down-reachable z up to this cap (the envelope shrinks with reach)
@@ -302,13 +302,13 @@ class MotionConfig:
     # were measured closing on its near edge (~5-10mm into a 40mm block
     # instead of ~20mm), so the grasp point is pushed outward. This measured
     # bias may be reduced by the reachability fallback.
-    grasp_radial_offset_mm: float = 12.0
+    grasp_radial_offset_mm: float = 0.0
     # Additional F/forward offset requested for every block and retry. Unlike
     # the measured bias above, this part survives reachability bias scaling.
-    grasp_forward_offset_mm: float = 10.0
+    grasp_forward_offset_mm: float = 0.0
     # Uniform +10mm toward the gripper-relative left (the tangent of the
     # base-centred reach circle), applied to every block and every retry.
-    grasp_tangential_offset_mm: float = 10.0
+    grasp_tangential_offset_mm: float = 5.0
     # Which frame the offsets above (and the retry offsets below) live in.
     #
     # False: the NEUTRAL-yaw gripper frame — radial is base -> target, and
@@ -327,7 +327,7 @@ class MotionConfig:
     # Extra bias on the left half of the workspace (y > left_half_y_mm),
     # where the measured grasp success is lower. Adds to the global bias.
     left_half_y_mm: float = 0.0
-    left_half_radial_offset_mm: float = 10.0
+    left_half_radial_offset_mm: float = 0.0
     left_half_tangential_offset_mm: float = 0.0
     # Optional ramp on top of that step, per 100mm of y past left_half_y_mm.
     # OFF by default: the 15 calibration points give a tangential-residual/y
@@ -338,20 +338,19 @@ class MotionConfig:
     # worse further out; turn it on only with a before/after measurement.
     left_ramp_radial_mm_per_100mm: float = 0.0
     left_ramp_tangential_mm_per_100mm: float = 0.0
-    # Retry grasp points as (radial, tangential) mm from the biased centre.
-    # The runtime sorts these by the F/back component, farthest first
-    # (+tangential is left, +radial is further out).
-    # 15mm is the full half-gap the 70mm jaws leave around a 40mm block, so a
-    # retry lands dead centre when the aim was off by that much in that
-    # direction, and still just contains the block when the aim was right.
-    # Labels are derived from the signs, so diagonals work here too. Empty
-    # disables retrying.
+    # Optional legacy position retries as (radial, tangential) mm. Production
+    # leaves this empty: PICK retries once at the same XY with the jaw plane
+    # rolled by ``grasp_retry_roll_deg`` instead of searching around the block.
     grasp_retry_offsets_mm: list[list[float]] = field(
-        default_factory=lambda: [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
+        default_factory=list
     )
+    # One same-position retry after an empty grasp or obstructed descent.
+    # The planner chooses +angle or -angle, whichever gives the smaller
+    # absolute wrist_roll while remaining reachable.
+    grasp_retry_roll_deg: float = 90.0
     # A descent that ends this far short of its goal (action units) counts as
-    # blocked rather than arrived. Only reorders the retries — the jaws are
-    # closed and checked either way.
+    # blocked rather than arrived. A blocked PICK descent must never close the
+    # jaws; it lifts immediately and proceeds to the rotated retry.
     descent_blocked_tol: float = 4.0
     # Abort the descent once the measured pose trails the pose just commanded
     # by this much (action units). Without it, a gripper that lands on a block
@@ -469,7 +468,7 @@ class Task1Config:
     )
     # Per-slot command correction away from the base for measured under-reach.
     slot_radial_offset_mm: list[float] = field(
-        default_factory=lambda: [20.0, 20.0, 20.0, 20.0, 20.0]
+        default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0]
     )
     # Picks take no distance-ramped radial correction any more -- both the
     # oblique-camera ramp and the P-row front offsets over-corrected in the
@@ -477,7 +476,7 @@ class Task1Config:
     # hard at the boundary. Of the measured points P1 (157 mm) is the sole
     # one inside 175 mm; P8 (196 mm) is the next closest and takes nothing.
     pick_near_boost_max_radius_mm: float = 175.0
-    pick_near_boost_mm: float = 20.0
+    pick_near_boost_mm: float = 0.0
     # At long reach a perfectly vertical gripper saturates wrist_flex near
     # +95 deg. Gradually tip the approach axis radially outward so the wrist
     # opens while remaining within ik.max_tilt_error_deg.
@@ -511,7 +510,7 @@ class Task2Config:
     # Task 1's measured command under-reach. Needed here not for accuracy --
     # a tower only needs consistency -- but so the block physically lands
     # inside zone_polygon_mm, which is what makes the detector ignore it.
-    stack_radial_offset_mm: float = 20.0
+    stack_radial_offset_mm: float = 0.0
     block_height_mm: float = 20.0  # AGENTS.md §1
     # Ceiling on the pre-solved ladder, not a promise: levels the IK cannot
     # reach are reported by the dry-run, never silently clipped.
@@ -588,6 +587,87 @@ class Task2Config:
     # Contact in the top part of the descent is a mis-stack, not a landing.
     min_descent_fraction: float = 0.5
     max_descent_retries: int = 1
+
+
+@dataclass
+class Task3Config:
+    """Automated ACT dataset collection: Task 1's gather loop, recorded.
+
+    Task 3 *is* Task 1 -- same SELECT/PICK/VERIFY/TRANSPORT and the same five
+    zone slots -- with three differences (AGENTS.md §3): every arm command is
+    recorded into a LeRobotDataset episode, only the centre grasp point is
+    tried, and the empty-region proof prompts for a new block arrangement
+    instead of finishing the run. Everything else is read from ``task1``.
+    """
+
+    # Dataset fps. This is not a wish: ``RecordingRobotIO`` paces every tick
+    # to it, because LeRobotDataset synthesises timestamps as frame_index/fps
+    # and a policy trained on a mislabelled rate replays at the wrong speed.
+    record_fps: float = 30.0
+    # TrajectoryPlayer._tick_sleep sleeps 1/fps on top of the work it just
+    # did, so it cannot itself hold a true rate. Task 3 raises motion.fps so
+    # that sleep becomes negligible and the recorder is the only metronome.
+    # motion.fps feeds nothing else -- the per-tick joint cap is
+    # motion.max_step_per_tick -- so the safety envelope is unchanged.
+    motion_fps_override: float = 300.0
+    # Requirement: one grasp attempt per episode. A failed grasp is a
+    # discarded episode, never a retry ring (which would teach the policy to
+    # fumble). ``None`` would restore Task 1's five-point ring.
+    max_grasp_attempts: int = 1
+
+    repo_id: str = "local/so101_task3"
+    # Empty means $HF_LEROBOT_HOME/{repo_id}. LeRobotDataset.create refuses an
+    # existing directory; the runner appends a _YYYYMMDD_HHMMSS stamp.
+    root: str = ""
+    stamp_repo_id: bool = True
+    robot_type: str = "so101_follower"
+    # Orin Nano has no NVENC; h264_nvenc fails with "Operation not permitted".
+    video_codec: str = "h264"
+
+    # Dataset camera name -> camera.server MJPEG URL. camera.server is the
+    # single owner of /dev/video* (AGENTS.md §8), so recording reads its
+    # stream rather than opening the device a second time. Add the wrist
+    # entry once the camera is remounted and served by so101-camera.
+    cameras: dict[str, str] = field(
+        default_factory=lambda: {"top": "http://127.0.0.1:8090/video/shoulder.mjpg"}
+    )
+    # ACT treats several observation.images.* keys as camera views and
+    # requires them to share one shape, so every stream is resized to this.
+    image_width: int = 640
+    image_height: int = 480
+
+    # A frame older than this is not evidence of the present; the tick is
+    # skipped rather than recorded against a stale image.
+    max_frame_age_s: float = 0.5
+    # Consecutive skips that mean the camera is gone, not merely late. The
+    # episode is discarded: a gap teaches the policy a jump that never
+    # happened.
+    max_stale_ticks: int = 10
+    # Assumptions pending measurement of real episode lengths (AGENTS.md
+    # §14.3). The floor exists because ACT's default chunk_size is 100
+    # frames; the ceiling catches an arm stuck in a loop.
+    min_episode_frames: int = 60
+    max_episode_frames: int = 3000
+
+    # After the outside region is proved empty, stop and ask for a new
+    # arrangement instead of finishing (the arm waits at home).
+    prompt_on_round_complete: bool = True
+    # Sweeps that saved nothing before the operator is asked to intervene.
+    # Without it an unreachable block loops forever, since Task 3 never
+    # abandons a colour.
+    max_rounds_without_progress: int = 3
+
+    # One task sentence per colour, attached to every frame of that episode.
+    task_templates: dict[str, str] = field(
+        default_factory=lambda: {
+            "red": "Pick up the red block and place it inside the red tape area.",
+            "yellow": "Pick up the yellow block and place it inside the red tape area.",
+            "green": "Pick up the green block and place it inside the red tape area.",
+            "blue": "Pick up the blue block and place it inside the red tape area.",
+            "wood": "Pick up the wooden block and place it inside the red tape area.",
+        }
+    )
+
 
 @dataclass
 class LoggingConfig:
@@ -676,6 +756,7 @@ class AppConfig:
     fsm: FsmConfig = field(default_factory=FsmConfig)
     task1: Task1Config = field(default_factory=Task1Config)
     task2: Task2Config = field(default_factory=Task2Config)
+    task3: Task3Config = field(default_factory=Task3Config)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     calibration_capture: CalibrationCaptureConfig = field(
@@ -720,6 +801,7 @@ def load_config(
     validate_perception_colors(cfg.perception)
     validate_task1(cfg)
     validate_task2(cfg)
+    validate_task3(cfg)
     return cfg
 
 
@@ -776,6 +858,8 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
 
 
 def validate_task1(cfg: AppConfig) -> None:
+    if not 0.0 <= cfg.motion.grasp_retry_roll_deg <= 180.0:
+        raise ValueError("motion.grasp_retry_roll_deg must be in [0, 180]")
     if cfg.task1.empty_timeout_s < 5.0:
         raise ValueError("task1.empty_timeout_s must be at least 5 seconds")
     if cfg.task1.scan_interval_s <= 0:
@@ -869,6 +953,56 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError("task2.min_descent_fraction must be in [0, 1)")
     if cfg.task2.max_descent_retries < 0:
         raise ValueError("task2.max_descent_retries must be non-negative")
+
+
+def validate_task3(cfg: AppConfig) -> None:
+    """Fail at startup, never mid-collection.
+
+    Every check here guards something that would otherwise be discovered
+    after the arm has already recorded episodes into a dataset whose
+    metadata is then wrong or unusable.
+    """
+    if cfg.task3.record_fps <= 0:
+        raise ValueError("task3.record_fps must be positive")
+    if cfg.task3.motion_fps_override <= cfg.task3.record_fps:
+        raise ValueError(
+            "task3.motion_fps_override must exceed record_fps; the recorder can only "
+            "hold the dataset rate if TrajectoryPlayer's own tick sleep is shorter"
+        )
+    if cfg.task3.max_grasp_attempts < 1:
+        raise ValueError("task3.max_grasp_attempts must be at least one")
+    if not cfg.task3.repo_id:
+        raise ValueError("task3.repo_id must not be empty")
+    if not cfg.task3.cameras:
+        raise ValueError(
+            "task3.cameras must name at least one camera.server MJPEG stream; "
+            "ACT requires at least one observation.images.* feature"
+        )
+    if cfg.task3.image_width <= 0 or cfg.task3.image_height <= 0:
+        raise ValueError("task3.image_width and image_height must be positive")
+    if cfg.task3.max_frame_age_s <= 0:
+        raise ValueError("task3.max_frame_age_s must be positive")
+    if cfg.task3.max_stale_ticks < 1:
+        raise ValueError("task3.max_stale_ticks must be at least one")
+    if not 0 < cfg.task3.min_episode_frames < cfg.task3.max_episode_frames:
+        raise ValueError(
+            "task3.min_episode_frames must be positive and below max_episode_frames"
+        )
+    if cfg.task3.max_rounds_without_progress < 1:
+        raise ValueError("task3.max_rounds_without_progress must be at least one")
+    # A colour the detector can name but the dataset cannot describe would
+    # abort the run at the moment that block is first grasped.
+    missing = sorted(set(cfg.perception.color_prototypes) - set(cfg.task3.task_templates))
+    if missing:
+        raise ValueError(
+            f"task3.task_templates is missing {missing}; every detectable colour needs "
+            f"a task sentence, because the colour is only known once a block is selected"
+        )
+    for color, sentence in cfg.task3.task_templates.items():
+        if not str(sentence).strip():
+            raise ValueError(f"task3.task_templates[{color!r}] is empty")
+
+
 def apply_override(cfg: AppConfig, override: str) -> None:
     """Apply one ``a.b.c=value`` override in place.
 

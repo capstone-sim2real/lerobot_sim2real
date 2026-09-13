@@ -153,6 +153,7 @@ def test_task1_assigns_slots_in_verified_grasp_order():
 
 def test_task1_pick_boosts_only_the_ultra_near_band():
     cfg = AppConfig()
+    cfg.task1.pick_near_boost_mm = 20.0
     base = (0.0, 0.0)
 
     # Inside the ultra-near radius the pick is pushed a flat 20 mm outward.
@@ -182,6 +183,7 @@ def test_task1_tilt_opens_everywhere_and_increases_at_long_reach():
 
 def test_task1_selection_corrects_pick_only_not_active_detections(monkeypatch):
     cfg = AppConfig()
+    cfg.task1.pick_near_boost_mm = 20.0
     cfg.task1.scan_interval_s = 0.0
     monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
     # Ultra-near, so the boost is live and the two centres must differ.
@@ -255,6 +257,7 @@ class _AlwaysReachableIk:
 
 def test_task1_all_slots_are_commanded_twenty_mm_farther():
     cfg = AppConfig()
+    cfg.task1.slot_radial_offset_mm = [20.0] * len(cfg.task1.slot_uv)
     calib = _calibration()
     raw = zone_slot_centres(calib, cfg.task1.slot_uv)
     planner = Task1TransportPlanner(calib, cfg, _AlwaysReachableIk())

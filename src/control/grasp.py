@@ -301,6 +301,52 @@ def _plan_at_scale(
             radial_tilt_deg=radial_tilt_deg,
         )
     ]
+    # Production retry: same XY and Z, jaw plane rotated by 90 degrees. Both
+    # signs are physically the same perpendicular jaw line; choose the solve
+    # that stays closest to wrist-roll neutral and inside the IK gate.
+    retry_roll = abs(float(cfg.motion.grasp_retry_roll_deg))
+    if retry_roll:
+        primary_yaw = yaw_deg
+        if primary_yaw is None:
+            neutral_yaw = getattr(ik, "neutral_yaw_deg", None)
+            primary_yaw = (
+                float(neutral_yaw(base_xy[0], base_xy[1], grasp_z))
+                if callable(neutral_yaw)
+                else 0.0
+            )
+        rotated: list[GraspAttempt] = []
+        for sign in (1.0, -1.0):
+            retry_yaw = primary_yaw + sign * retry_roll
+            retry_hover_z = highest_reachable_hover(
+                ik,
+                *base_xy,
+                grasp_z,
+                cfg,
+                retry_yaw,
+                radial_tilt_deg,
+            )
+            candidate = _solve_attempt(
+                ik,
+                cfg,
+                "roll_90",
+                base_xy,
+                (0.0, 0.0),
+                grasp_z,
+                retry_hover_z,
+                retry_yaw,
+                radial_tilt_deg=radial_tilt_deg,
+            )
+            rotated.append(candidate)
+        attempts.append(
+            min(
+                rotated,
+                key=lambda candidate: (
+                    not candidate.reachable,
+                    abs(candidate.hover.joints.get("wrist_roll", float("inf"))),
+                    candidate.hover.position_error_mm + candidate.grasp.position_error_mm,
+                ),
+            )
+        )
     for (label, _xy), offset in zip(candidate_points[1:], cfg.motion.grasp_retry_offsets_mm, strict=True):
         attempts.append(
             _solve_attempt(
@@ -333,9 +379,8 @@ def plan_grasp_attempts(
 ) -> GraspPlan:
     """Solve every grasp point that might be tried, before the arm moves.
 
-    All candidates share one hover height, searched at the aim point: the
-    offsets are small next to the reach envelope, so re-running the search
-    per candidate would cost many IK solves to land on the same height.
+    Positional candidates share the primary hover height. The rotated retry
+    searches its own reachable hover because wrist-roll reach can differ.
 
     The grasp bias pushes the aim point *outward*, so near the edge of the
     workspace it can push a perfectly reachable block past the point where
@@ -344,23 +389,18 @@ def plan_grasp_attempts(
     only one was. So the bias is backed off rather than surrendering the
     block: full bias first, then half, then none.
 
-    ``block_angle_deg`` turns the jaws to grip two faces of a square block
-    instead of two corners. It is routed through ``grasp_yaw_deg``, never
-    used as an absolute yaw: the mod-90 fold keeps ``wrist_roll`` within
-    +-45 deg of neutral, and it is holding a *fixed base-frame* yaw that
-    overheated that servo on 2026-08-31 (AGENTS.md §7).
+    ``block_angle_deg`` turns the jaws parallel to the yellow grasp axis used
+    by the camera overlay. It is routed through ``grasp_yaw_deg``, which picks
+    the square-symmetric face axis nearest the local workspace tangent. There
+    is deliberately no neutral-yaw fallback: silently changing yaw would make
+    the physical gripper perpendicular to the displayed plan.
     """
     yaw_deg, jaw_rot_deg = None, 0.0
     if block_angle_deg is not None:
         # Once, outside the scale loop: this costs a probe solve.
         yaw_deg, jaw_rot_deg = ik.grasp_yaw_and_rotation_deg(x_mm, y_mm, grasp_z, block_angle_deg)
 
-    for yaw in ([yaw_deg, None] if yaw_deg is not None else [None]):
-        if yaw is None and yaw_deg is not None and log is not None:
-            log("  rotated jaws unreachable here — falling back to the neutral yaw")
-        # The neutral fallback puts the jaws back on the neutral axes, so the
-        # offsets must not be rotated for it either.
-        rot = jaw_rot_deg if yaw is not None else 0.0
+    for yaw, rot in [(yaw_deg, jaw_rot_deg)]:
         plan = None
         for scale in (1.0, 0.5, 0.0):
             plan = _plan_at_scale(
@@ -380,7 +420,7 @@ def plan_grasp_attempts(
                     log(f"  gripper tipped outward by {abs(radial_tilt_deg):.1f} deg for far reach")
                 return plan
     if log is not None:
-        log("  no bias setting puts this block in reach")
+        log("  displayed grasp yaw is unreachable; refusing a perpendicular fallback")
     return plan
 
 
@@ -394,9 +434,8 @@ def attempt_grasp(
 ) -> tuple[GraspOutcome, GraspCheck | None]:
     """One open-descend-close-check cycle, leaving the arm back at hover.
 
-    BLOCKED and EMPTY are both failures that closed the jaws and found
-    nothing; BLOCKED adds that the descent also stopped short, which points
-    at the lateral position rather than the depth.
+    EMPTY means the jaws closed and found nothing. BLOCKED means the descent
+    stopped short; in that case the jaws are deliberately never closed.
     """
     log(f"      open jaws, move to hover z={attempt.hover_z_mm:.0f}mm")
     player.set_gripper(cfg.sensing.gripper_open_pos)
@@ -416,10 +455,14 @@ def attempt_grasp(
     log(f"      descend to grasp z={attempt.grasp_z_mm:.0f}mm")
     _, blocked = player.descend(attempt.grasp.joints)
 
-    # Always close, whatever the descent reported. Whether this position can
-    # hold the block is only knowable by closing the jaws on it: a descent
-    # that stopped a few mm short may still grasp, and check_grasp is the
-    # authority (AGENTS.md §10). ``blocked`` only reorders what is tried next.
+    # Early obstruction normally means one jaw landed on the block. Closing
+    # there only performs an empty pinch above it and may shove the block.
+    # Keep the jaws open, lift clear, and let the one 90-degree retry run.
+    if blocked:
+        log("      descent blocked before grasp depth; keep jaws open and lift")
+        player.move_to(attempt.hover.joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+        return GraspOutcome.BLOCKED, None
+
     player.set_gripper(cfg.sensing.gripper_close_pos)
     # check_grasp settles for grasp_settle_s itself; do not sleep again first.
     check = check_grasp(robot, cfg.sensing)
@@ -438,14 +481,19 @@ def run_grasp_attempts(
     cfg: AppConfig,
     plan: GraspPlan,
     *,
+    max_attempts: int | None = None,
     log: Callable[[str], None] = print,
 ) -> GraspAttempt | None:
     """Work through the planned grasp points until one holds.
 
-    The biased centre remains the first attempt. Every retry after it is
-    ordered by its F/back component, farthest first. Unreachable
-    candidates are dropped here instead of aborting the run — only the first
-    attempt has to clear the IK gate for the pick to be worth starting.
+    The biased centre remains the first attempt. Production plans then contain
+    exactly one same-position ``roll_90`` attempt. Optional legacy positional
+    candidates, if explicitly configured, retain their configured order.
+    Unreachable candidates are dropped instead of aborting the run.
+
+    ``max_attempts`` truncates that queue. Task 3 passes 1 so a recorded
+    episode contains one clean grasp or nothing. ``None`` keeps the initial
+    attempt plus the single rotated retry used by Tasks 1 and 2.
     """
     usable = [a for a in plan.attempts if a.reachable]
     for dropped in (a for a in plan.attempts if not a.reachable):
@@ -457,15 +505,22 @@ def run_grasp_attempts(
             f"grasp by {dropped.grasp.position_error_mm:.0f}mm)"
         )
     log(f"  {len(usable)} of {len(plan.attempts)} grasp points usable")
-    centre = [a for a in usable if a.label == "centre"]
-    retries = sorted(
-        (a for a in usable if a.label != "centre"),
-        # offset_mm[0] is the configured F/back axis in the gripper frame.
-        # Sorting on it makes F the first retry even when calibration error
-        # or a turned jaw makes the board-frame radius slightly misleading.
-        key=lambda a: -a.offset_mm[0],
+    centre = [attempt for attempt in usable if attempt.label == "centre"]
+    rotated = [attempt for attempt in usable if attempt.label == "roll_90"]
+    legacy_position_retries = sorted(
+        (
+            attempt
+            for attempt in usable
+            if attempt.label not in {"centre", "roll_90"}
+        ),
+        key=lambda attempt: -attempt.offset_mm[0],
     )
-    queue = centre + retries
+    queue = centre + rotated + legacy_position_retries
+    if max_attempts is not None:
+        dropped = len(queue) - max_attempts
+        queue = queue[:max_attempts]
+        if dropped > 0:
+            log(f"  retry ring disabled: trying {len(queue)} of {len(queue) + dropped} grasp points")
     while queue:
         attempt = queue.pop(0)
         log(

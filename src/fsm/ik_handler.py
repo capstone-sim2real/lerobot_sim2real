@@ -46,6 +46,7 @@ class CvIkPickState(State):
         retreat_pose: Pose | None,
         retreat_after_grasp: bool = True,
         radial_tilt_extra_key: str | None = None,
+        max_grasp_attempts: int | None = None,
         ik: TopDownIK | None = None,
         player: TrajectoryPlayer | None = None,
         project_root: Path | str = ".",
@@ -57,6 +58,9 @@ class CvIkPickState(State):
         self._retreat_pose = retreat_pose
         self._retreat_after_grasp = retreat_after_grasp
         self._radial_tilt_extra_key = radial_tilt_extra_key
+        # None keeps the one rotated retry. Task 3 pins this to 1 so a
+        # recorded episode holds one clean grasp attempt or is discarded.
+        self._max_grasp_attempts = max_grasp_attempts
         self._ik = ik or TopDownIK(cfg.ik, project_root=project_root)
         self._player = player or TrajectoryPlayer(robot, cfg.motion)
 
@@ -126,7 +130,14 @@ class CvIkPickState(State):
             return self._retry_or_skip(ctx, "unreachable")
 
         try:
-            held = run_grasp_attempts(self._player, self._robot, self._cfg, plan, log=logger.info)
+            held = run_grasp_attempts(
+                self._player,
+                self._robot,
+                self._cfg,
+                plan,
+                max_attempts=self._max_grasp_attempts,
+                log=logger.info,
+            )
             if held is None:
                 return self._retry_or_skip(ctx, "empty")
             ctx.extras["ik_pick_attempt"] = held
