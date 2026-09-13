@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <defs>
+    <style>.kr{font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif}</style>
+    <marker id="navyArrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M0 0L11 5.5L0 11Z" fill="#17344d"/>
+    </marker>
+    <marker id="pinkArrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M0 0L11 5.5L0 11Z" fill="#ed4765"/>
+    </marker>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#17344d" flood-opacity="0.13"/>
+    </filter>
+  </defs>
+
+  <rect x="20" y="20" width="1160" height="1160" rx="80" fill="#f3f8fa"/>
+  <text x="600" y="155" text-anchor="middle" class="kr" fill="#10253f"
+        font-size="72" font-weight="850">로봇 좌표 (2D)</text>
+
+  <!-- Base origin and coordinate axes: +x forward, +y camera-left. -->
+  <path d="M690 850V290" fill="none" stroke="#ed4765" stroke-width="17"
+        stroke-linecap="round" marker-end="url(#pinkArrow)"/>
+  <path d="M690 850H235" fill="none" stroke="#17344d" stroke-width="17"
+        stroke-linecap="round" marker-end="url(#navyArrow)"/>
+  <text x="738" y="325" class="kr" fill="#df3455" font-size="72" font-weight="900">x</text>
+  <text x="235" y="935" class="kr" fill="#17344d" font-size="72" font-weight="900">y</text>
+
+  <!-- Block centre and its x/y projections. -->
+  <path d="M405 490H690M405 490V850" fill="none" stroke="#ed4765"
+        stroke-width="9" stroke-dasharray="22 20" opacity="0.65"/>
+  <g transform="translate(405 490) rotate(-8)" filter="url(#shadow)">
+    <rect x="-62" y="-62" width="124" height="124" rx="20"
+          fill="#ed4765" stroke="#c92c49" stroke-width="8"/>
+    <path d="M-34 0H34M0-34V34" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="405" y="390" text-anchor="middle" class="kr" fill="#d93254"
+        font-size="61" font-weight="850">(x, y)</text>
+
+  <!-- Minimal top-view robot base marking (0,0). -->
+  <path d="M575 900H805L845 1045H535Z" fill="#17344d"/>
+  <rect x="590" y="815" width="200" height="135" rx="25" fill="#ffffff"
+        stroke="#17344d" stroke-width="14"/>
+  <circle cx="690" cy="850" r="21" fill="#ed4765"/>
+  <text x="690" y="1120" text-anchor="middle" class="kr" fill="#10253f"
+        font-size="58" font-weight="850">(0, 0)</text>
+</svg>
