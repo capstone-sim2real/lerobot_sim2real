@@ -7,7 +7,7 @@
     "mission_failures": 2,
     "success_criterion": "all five blocks placed inside accepted zone within 180 seconds",
     "failure_reason": "block pushed beyond robot reach during grasp attempt; then timeout",
-    "grasp_attempts_including_retries": 217,
+    "grasp_attempts_including_retries": 170,
     "grasp_successes": 148,
     "first_attempt_success_count": null
   },
@@ -34,7 +34,7 @@
   },
   "superseded_report_claims": [
     "28 successes out of 28 runs",
-    "148/217 is first-attempt grasp success",
+    "Per-attempt grasp success including retries is first-attempt grasp success",
     "3-level trials uncounted; final 4-level results are 1/1; 5-level never attempted",
     "height reach counts demonstrate final stable height or five-second hold"
   ]
