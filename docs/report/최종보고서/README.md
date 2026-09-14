@@ -2,12 +2,14 @@
 
 2026-09-14 갱신. ACT·SmolVLA 실험과 환경 민감성·진단의 어려움에서 출발하여, CV+IK 전환, 실기 실패 분석과 변경, 반복 미션 및 실행 데이터 수집으로 이어지는 개발 과정을 정리했다.
 
-- [제출 PDF](final_report.pdf) (38쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
+- [제출 PDF](final_report.pdf) (49쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
 - [결과·구현의 근거와 해석 범위](SOURCES.md), [빌드·검토 기록](VALIDATION.md).
 - [집계와 캘리브레이션 재현](analysis/README.md), [후속 시행별 기록 양식](evaluation/README.md).
 - [팀이 확인한 최신 집계](evidence/20260914/team_results.json), [그림 출처와 SHA-256](asset_manifest.json).
 
 `sections/`를 유일한 본문 원본으로 사용한다. `final_report_revised.tex`와 `sections_revised/`는 같은 원본을 읽는 호환 진입점이며, 빌드 시 `final_report_revised.pdf`도 제출 PDF와 동일하게 갱신한다.
+
+서식 기준은 사용자가 지정한 `docs/report/reference/example/report_ko/`이다. 해당 `pnureport.cls`를 원본 바이트 그대로 사용하여 나눔명조 11pt, 줄간격 1.5배, 사방 3cm 여백과 예시의 표지·장 제목·머리말 형식을 적용한다.
 
 ## 최신 결과의 집계 기준
 
@@ -36,4 +38,4 @@ bash docs/report/최종보고서/build.sh
 podman build -t localhost/so101-report-tex:ubuntu24.04 -f docs/report/최종보고서/Containerfile docs/report/최종보고서
 ```
 
-학과 서식의 5개 장 구조와 저장소의 `pnureport.cls`를 유지했다. 구현 설명의 기준은 main `0394cd054f415adb67bbb39fc5e7ad23afdb3bc8`이며, 과거 실험의 정확한 실행 버전으로 소급하지 않는다. 코드·설정·실험 원본을 수정하거나 새로운 하드웨어 시험을 수행한 작업은 아니다.
+5개 본문 장과 최신 실험 내용을 유지하고 `report_ko` 예시 서식을 적용했다. 구현 설명의 기준은 main `0394cd054f415adb67bbb39fc5e7ad23afdb3bc8`이며, 과거 실험의 정확한 실행 버전으로 소급하지 않는다. 코드·설정·실험 원본을 수정하거나 새로운 하드웨어 시험을 수행한 작업은 아니다.

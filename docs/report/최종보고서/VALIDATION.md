@@ -1,6 +1,6 @@
 # 최종보고서 검증 기록
 
-검토일: 2026-09-14. 최신 팀 집계와 main `0394cd054f415adb67bbb39fc5e7ad23afdb3bc8`의 구현을 반영한 개정이다. 문서·수치 재계산·정적 PDF 검증을 수행했으며 새로운 하드웨어 시험은 수행하지 않았다.
+검토일: 2026-09-14. 최신 팀 집계와 main `0394cd054f415adb67bbb39fc5e7ad23afdb3bc8`의 구현을 반영한 내용 검증에 이어, 사용자가 지정한 `docs/report/reference/example/report_ko/` 서식을 적용했다. 수치 재계산 기록은 앞선 내용 개정에서 수행한 결과이며, 이번 서식 변경에서는 본문·근거·그림의 바이트 유지와 정적 PDF를 검증했다. 새로운 하드웨어 시험은 수행하지 않았다.
 
 ## 내용 일관성
 
@@ -26,24 +26,32 @@ python3 docs/report/최종보고서/analysis/summarize_evidence.py
 - `asset_manifest.json`의 27개 자산 SHA-256과 `analysis/source_hashes.json`의 보관 원기록 해시를 확인했다. 기존 사진·원기록 바이트를 유지했다.
 - 최신 30회·20회의 값은 사용자가 제공한 팀 집계이며 원시 실행 로그를 재집계한 결과가 아니다. Task3의 파일 구조·프레임 정합 검사는 기존 팀 보고를 따른다. 이번에는 저장된 종료·에피소드 로그 그림과 구현을 대조했으며 전체 데이터셋 검사를 재실행하지 않았다.
 
-## 빌드와 정적 검토
+## report_ko 서식 적용과 정적 검토
+
+사용자가 지정한 `docs/report/reference/example/report_ko/`의 TeX·클래스·예시 PDF를 확인했다. `pnureport.cls`는 원본 바이트 그대로 복사했으며 SHA-256은 `a58ee24016d55b6e0397dcd95906bdcfe68fcb1b514c7c2fe386b85753158859`이다.
+
+- 본문은 나눔명조 11pt, 줄간격 1.5배, 사방 3cm 여백이다. 예시 클래스의 표지·벡터 로고·장 제목·머리말·꼬리말을 사용한다. 명시적인 자간 오버라이드는 추가하지 않았다.
+- `final_report.tex`에서 이전 서식용 `fix-cm`을 제거하고, 참고 문헌의 목차 항목을 유지했다. 클래스가 직접 표지를 생성하므로 사용되지 않는 `titlepage` 옵션은 생략했다. 클래스 원본은 수정하지 않았다.
+- 서식 적용 전후 `sections/`, `sections_revised/`, `analysis/`, `evidence/`, `figures/`의 모든 보관 파일과 `references.bib`가 바이트 단위로 같다. 최신 실험 수치·본문 문구·그림 원본을 유지했다.
+
+저장소 루트에서 실행했다.
 
 ```bash
 bash docs/report/최종보고서/build.sh
-pdftotext -layout docs/report/최종보고서/final_report.pdf /tmp/so101-final-report-20260914.txt
-git diff --check
+pdftotext -layout docs/report/최종보고서/final_report.pdf /tmp/so101-report-template-20260914/after.txt
+git -c core.whitespace=-blank-at-eof diff --check
 ```
 
-- Podman의 기존 Ubuntu 24.04 LaTeX 이미지로 빌드 성공. A4, **38쪽**, **7,673,719바이트**.
-- 최종 `build/final_report.log`에서 LaTeX 경고, 미정의 참조·인용, Overfull/Underfull, 누락 글리프 경고 없음. 추출 텍스트의 U+FFFD 대체문자 없음.
-- 참고 문헌 원본 9개와 생성된 BibTeX 항목 9개가 일치한다. 서지 정보는 변경하지 않았다.
-- 초록(PDF 2쪽), 전환 과정과 미션 규격(5–6쪽), 최신 결과(24–25쪽), 캘리브레이션 이력·표·그림(27–28쪽), 결론(36쪽)을 PNG로 렌더링하여 배치·잘림을 확인했다. 검토 파일은 `/tmp/so101-report-review-20260914/`에 있다.
-- 본문은 `sections/`로 통일했다. `final_report_revised.tex`와 `sections_revised/`는 동일 원본을 읽는다. 두 PDF가 바이트 단위로 일치함을 확인했다.
-- 저장소의 `pnureport.cls`는 HEAD와 바이트가 같으며 SHA-256은 `7b6d399bf6c4d4c9d6f73e58adca19b5a248f7f3cad609959768050e948bbee6`이다. 본문 진입점에서 `fix-cm`을 사용해 제목 글꼴 크기 대체 경고만 해소했다.
-- `git diff --check` 통과. 변경된 추적 파일은 최종보고서 디렉터리에 한정한다. 새 CSV 스냅샷의 원래 CRLF를 유지했으며 실험 원본과 소스 코드는 변경하지 않았다.
+- Podman의 기존 Ubuntu 24.04 LaTeX 이미지로 빌드 성공. A4, **49쪽**, **10,001,072바이트**. 줄간격과 여백 변경으로 기존 38쪽에서 늘어났다.
+- 최종 `build/final_report.log`에서 LaTeX 경고, 미정의 참조·인용, Overfull/Underfull, 누락 글리프 경고 없음. 추출 텍스트에 U+FFFD 대체문자 없음.
+- 초록은 PDF 2쪽 한 페이지에 들어가고 주요어까지 포함한다. 초록 PDF의 내장 글꼴에서 `nanummj`를 확인했고, 줄 간격의 PDF 좌표 차이 중앙값은 **20.324pt**로 1.5배 설정에 대응한다.
+- 추출 텍스트에서 93.3%·68.2%·83.2%, 적재 20/20·17/20·0/20, RMS 5.15mm·최대 LOO 13.53mm를 확인했다. 참고 문헌 9개를 유지했다.
+- 표지·초록(PDF 1–2쪽), 적재 결과표(32쪽), 캘리브레이션·드리프트 그림(36쪽)을 PNG로 렌더링하여 서식과 배치를 확인했다. 검토 파일과 수치 검증 결과는 `/tmp/so101-report-template-20260914/`에 있다.
+- 본문은 계속 `sections/` 한 곳에서 관리하며, `final_report_revised.tex`와 `sections_revised/`는 동일 원본을 읽는다. 두 PDF가 바이트 단위로 같다.
+- 원본 클래스의 마지막 빈 줄을 보존하여 일반 `git diff --check`는 해당 줄만 지적한다. `core.whitespace=-blank-at-eof` 검사로 나머지 공백 오류가 없음을 확인했다.
 
 제출 PDF와 호환 PDF의 공통 SHA-256:
 
-`3808b8028f00f4124d93b13e4e025a296d0814be971a156b3e7835c2e21a6bf0`
+`471df80244629a28aee338078b4776eabebb722496a04fdf752b525afca129c1`
 
 이번 검증은 문서와 근거 파일의 일관성 및 PDF 조판 검증이다. 로컬 94건·Orin 99건 테스트 수는 9월 8일의 기존 기록이며 이번에 로봇 코드 테스트나 물리적 미션을 다시 실행한 것으로 보고하지 않았다. 저장소 동기화 상태는 Git 이력을 따른다.

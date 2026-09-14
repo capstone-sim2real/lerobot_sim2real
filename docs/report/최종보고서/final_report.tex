@@ -1,6 +1,5 @@
 % !TEX encoding = UTF-8 Unicode
-% Build with pdfLaTeX through build.sh; pnureport.cls is the unmodified PNU class.
-\RequirePackage{fix-cm}
+% Build with pdfLaTeX through build.sh; pnureport.cls is copied unchanged from report_ko.
 \documentclass{pnureport}
 \usepackage[T1]{fontenc}
 \usepackage{booktabs,longtable,array,tabularx,amssymb}
@@ -40,6 +39,8 @@
 \input{sections/04_evaluation}
 \input{sections/05_conclusion}
 \clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{참고 문헌}
 \begingroup
 \raggedright
 \bibliographystyle{unsrt}
