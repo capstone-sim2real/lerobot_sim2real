@@ -1,0 +1,74 @@
+{
+  "source": "User clarification in report revision conversation on 2026-09-14",
+  "evidence_type": "Team retrospective account and supplied aggregate; per-trial logs and model-specific benchmark tables not supplied",
+  "task": "Pick a single block and move it to the central target; vary starting position, not block count",
+  "stages": [
+    {
+      "order": 1,
+      "models": [
+        "ACT",
+        "SmolVLA"
+      ],
+      "start_distribution": "random across the full workspace",
+      "demonstration_episodes": 100,
+      "episode_count_precision": "approximate",
+      "success_rate_percent_range": [
+        2,
+        10
+      ],
+      "rate_precision": "approximate retrospective range; no model-specific split",
+      "evaluation_attempts": null
+    },
+    {
+      "order": 2,
+      "start_distribution": "primarily a specific starting position",
+      "demonstration_episodes": 51,
+      "episode_count_precision": "user supplied count",
+      "evaluation_attempts": 50,
+      "evaluation_successes": 29,
+      "success_criterion": "single-block pick and move to target",
+      "model_specific_results": null
+    },
+    {
+      "order": 3,
+      "models": [
+        "ACT",
+        "SmolVLA"
+      ],
+      "start_distribution": "random across the full workspace again",
+      "demonstration_episodes": null,
+      "recalled_episode_count": 122,
+      "recalled_count_confirmed": false,
+      "report_approximate_episode_count": 120,
+      "episode_count_precision": "user recalled about 122 with uncertainty; report uses about 120",
+      "success_rate_percent_range": [
+        10,
+        20
+      ],
+      "rate_precision": "approximate retrospective range; no model-specific split",
+      "evaluation_attempts": null
+    }
+  ],
+  "hybrid_attempt": {
+    "approach": "ACT with CV/IK",
+    "act_selection_reason": "Faster inference and consistently higher success than SmolVLA in team experiments",
+    "benchmark_scope": "Team observations only; no exact latency or paired evaluation counts supplied",
+    "tuning_observation": "Difficult to achieve reliable task success above roughly 60 percent",
+    "evaluation_attempts": null
+  },
+  "pivot": {
+    "trigger": "Small camera position changes required collecting demonstrations again; manually recording more than 100 episodes was burdensome",
+    "idea": "Build CV+IK execution first, record its executions, and use the resulting demonstrations for imitation learning",
+    "implemented": "CV+IK execution and Task3 automatic dataset recording",
+    "policy_retraining_completed": false
+  },
+  "interpretation_limits": [
+    "Do not sum stage episode counts or infer exact corpus overlap",
+    "Do not assign recalled success ranges to a specific model",
+    "Do not treat changed workspace and training conditions as a controlled effect of dataset size",
+    "Do not compare single-block task success directly with final five-block mission success",
+    "Original historical reports and raw evidence remain unchanged; this clarification governs the current final-report narrative"
+  ],
+  "sum_episode_counts_into_total": false,
+  "overlap_between_stage_datasets": null
+}
