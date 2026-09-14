@@ -1,0 +1,50 @@
+{
+  "20260901": {
+    "points": {
+      "original": "experiments/legacy/calibration/points.csv",
+      "snapshot": "evidence/calibration/20260901-points.csv",
+      "sha256": "97d279c64da4d2bd852a005f7b7fe4b46b3893286860f1f360e08fafbceb7152"
+    },
+    "profile": {
+      "original": "experiments/2026-09-08/session_20260908_AcC1p4/archive/previous/venue_lab.json",
+      "snapshot": "evidence/calibration/20260901-profile.json",
+      "sha256": "0b1364803e8f5e4a95598132247c4386dfd7acc769c6e7fefdb2a44870c1f180"
+    }
+  },
+  "20260908": {
+    "points": {
+      "original": "docs/report/최종보고서/evidence/20260908/accepted_points.csv",
+      "snapshot": "evidence/calibration/20260908-points.csv",
+      "sha256": "1f076d76e26988c0564333830afcc6f4daa3df16e3a57d93dc83e2eedecce0f1"
+    },
+    "profile": {
+      "original": "docs/report/최종보고서/evidence/20260908/venue_accepted.json",
+      "snapshot": "evidence/calibration/20260908-profile.json",
+      "sha256": "f8b243178403feb26348a4fd46c900b440406a1949e25dd7609171e1768428d1"
+    }
+  },
+  "20260911": {
+    "points": {
+      "original": "experiments/2026-09-11/calibration_new/points.csv",
+      "snapshot": "evidence/calibration/20260911-points.csv",
+      "sha256": "981adc0598c36c26a04442bf050f7ec90250f5a8445410de4f328827b03195bc"
+    },
+    "profile": {
+      "original": "experiments/NEW_SESSION/calibration/venue_lab.before_new_session.json",
+      "snapshot": "evidence/calibration/20260911-profile.json",
+      "sha256": "3938663c252c68afcb9a393df5b6f95f0e1b4eb85a9381e10fa0c067a150a222"
+    }
+  },
+  "20260913": {
+    "points": {
+      "original": "experiments/NEW_SESSION/calibration/points.csv",
+      "snapshot": "evidence/calibration/20260913-points.csv",
+      "sha256": "abd02d9a6446291b7cdcd5143dbfa8bed66a84f5e5e5967126a7422537e5e758"
+    },
+    "profile": {
+      "original": "src/configs/calib/venue_lab.json",
+      "snapshot": "evidence/calibration/20260913-profile.json",
+      "sha256": "d1bef68fd562d648fc499e8a0ab90763849024bd5440494b7c9d043a07454e7c"
+    }
+  }
+}

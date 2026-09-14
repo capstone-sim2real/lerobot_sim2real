@@ -1,4 +1,26 @@
-# 보관 실험의 재집계
+# 최신 결과와 캘리브레이션 재현
+
+최신 미션·파지 합계와 집계 정의는 [`../evidence/20260914/team_results.json`](../evidence/20260914/team_results.json)에 있다. 1차 28/30회와 148/217회, 2차 20회의 수행 중 최대 높이와 94/113회를 보존한다. 시행별 CSV는 제공되지 않아 생성하지 않았다.
+
+저장소 루트에서 프로젝트 환경으로 실행한다. 기존 수치 함수를 재사용하며 로봇·카메라에 연결하거나 활성 프로필을 변경하지 않는다.
+
+```bash
+PYTHONPATH=src .venv/bin/python docs/report/최종보고서/analysis/summarize_calibration.py
+```
+
+`../evidence/calibration/manifest.json`의 4개 날짜·8개 스냅샷 해시를 확인하고, 저장 H와 재적합 H 및 RMS·최대 LOO를 대조한다. NumPy/OpenCV와 기존 프로젝트 모듈이 필요하다. PDF 빌드 자체는 아래 생성물을 사용하므로 재집계 환경 없이 가능하다.
+
+| 생성물 | 내용 |
+|---|---|
+| `calibration_profiles_summary.json` | 9월 1·8·11·13일의 RMS, 최대 LOO, FK z 평균·모표준편차와 점별 오차 |
+| `calibration_latest_residuals.csv` | 최신 9점 잔차와 LOO |
+| `../figures/calibration_history_table.tex` | 초기 팀 집계와 네 프로필의 비교 표 |
+| `../figures/calibration_latest_table.tex` | 최신 점별 잔차 표 |
+| `../figures/calibration_latest_map.tex` | 최신 FK/평면 변환 좌표, 실제 축척의 잔차와 등록 영역 |
+
+아래 절의 9월 8일 로그 집계와 `calibration_map.tex`는 과거 진단 자료다. 최신 30회/20회와 합치지 않는다.
+
+# 9월 8일 보관 실험의 재집계
 
 보고서 루트에서 `python3 analysis/summarize_evidence.py`를 실행한다. Python 표준 라이브러리만 사용하며 하드웨어, LeRobot과 네트워크에 접근하지 않는다. PDF 빌드는 생성된 TeX 그림을 사용하므로 Python을 실행하지 않아도 가능하다.
 
@@ -34,4 +56,4 @@
 
 ## 지정 영역의 도식 표현
 
-그림 4.2의 지정 영역은 규격 200×100mm의 축 정렬 직사각형으로 표현한다. 중심은 등록한 네 꼭짓점의 평균이며 가로축은 Base Y, 세로축은 Base X이다. 이 직사각형은 위치 관계를 보여주는 개략도이며, 원본 `zone_polygon_mm`이나 homography를 다시 보정한 결과가 아니다. 대응점, 잔차 화살표와 모든 수치 분석은 저장 원자료를 그대로 사용한다.
+과거 생성물 `figures/calibration_map.tex`의 지정 영역은 규격 200×100mm의 축 정렬 직사각형으로 표현한다. 중심은 등록한 네 꼭짓점의 평균이며 가로축은 Base Y, 세로축은 Base X이다. 이 직사각형은 위치 관계를 보여주는 개략도이며, 원본 `zone_polygon_mm`이나 homography를 다시 보정한 결과가 아니다. 대응점, 잔차 화살표와 모든 수치 분석은 저장 원자료를 그대로 사용한다.

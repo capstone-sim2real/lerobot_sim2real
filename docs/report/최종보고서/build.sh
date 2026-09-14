@@ -10,3 +10,5 @@ podman run --rm --security-opt label=disable \
     latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error \
     -outdir=build final_report.tex
 cp "$report_dir/build/final_report.pdf" "$report_dir/final_report.pdf"
+# Keep the former revised filename compatible with the single submission source.
+cp "$report_dir/build/final_report.pdf" "$report_dir/final_report_revised.pdf"

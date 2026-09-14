@@ -100,5 +100,80 @@
     "source": "experiments/2026-09-08/session_20260908_AcC1p4/teleop_ehdrms_ox0ydl6s/p4_clean.jpg",
     "transformation": "byte-for-byte copy; paired P4 capture; identical crop in LaTeX, saved pixel center annotated on clear image",
     "sha256": "c36c03619de4dc93350c8106e0e7b40676a33429fd3f6094f5c12abfee7724cd"
+  },
+  {
+    "asset": "figures/aruco_markers.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/aruco_markers.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "b337428110ca112b829eae0d550bfbfad45194093f4ddabd2f7ceb659b532474"
+  },
+  {
+    "asset": "figures/calibration_history_table.tex",
+    "source": [
+      "evidence/calibration/manifest.json",
+      "analysis/summarize_calibration.py"
+    ],
+    "transformation": "Generated from immutable calibration snapshots using existing project calibration functions",
+    "sha256": "fc10c0e2f144710f99b4b8f055f98ab20e51be1db47ad372bba48fb9d94e46e5"
+  },
+  {
+    "asset": "figures/calibration_latest_map.tex",
+    "source": [
+      "evidence/calibration/manifest.json",
+      "analysis/summarize_calibration.py"
+    ],
+    "transformation": "Generated from immutable calibration snapshots using existing project calibration functions",
+    "sha256": "a54801dbe4d98f7e23e038b0b46a23d513b87f9bb7fa4c2d3f05d10db037f312"
+  },
+  {
+    "asset": "figures/calibration_latest_table.tex",
+    "source": [
+      "evidence/calibration/manifest.json",
+      "analysis/summarize_calibration.py"
+    ],
+    "transformation": "Generated from immutable calibration snapshots using existing project calibration functions",
+    "sha256": "cf55bd626a84848ba7e4fd889adc4efc61d64b5079621c57dc104e2d26effe05"
+  },
+  {
+    "asset": "figures/camera_overlay.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/camera_overlay.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "8e2b887bd72c4ea30599db2c8185af304579a71e15702a644a49c7c4802ea938"
+  },
+  {
+    "asset": "figures/pnu_emblem.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/pnu_emblem.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "58586b465ad79ea6047a05259b0b604983acca4d648174f8115bc0f04b3afd63"
+  },
+  {
+    "asset": "figures/task3_dataset_structure.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/task3_dataset_structure.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "8934146eb0500af2f8eb88a847423fdfd331c25ea73f1d683262378f003b5f86"
+  },
+  {
+    "asset": "figures/task3_episode_log.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/task3_episode_log.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "a072294f65e8b7d72f1c1445d192e070db0d446e9d57f6d8b3c4f5aef105b022"
+  },
+  {
+    "asset": "figures/task3_run_log.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/task3_run_log.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "e137089f5a16a7f8225ca7e46d13f481df78b626cdce7d2a022ca82fb0d90d35"
+  },
+  {
+    "asset": "figures/wrist_camera_mount.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/wrist_camera_mount.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "d5e24c4d2b85012a1eb88342c624ccc8d1b7666d525df81151172783164b2422"
+  },
+  {
+    "asset": "figures/wrist_camera_view.png",
+    "source": "git:0394cd054f415adb67bbb39fc5e7ad23afdb3bc8:docs/report/최종보고서/figures/wrist_camera_view.png",
+    "transformation": "Existing repository asset retained byte-for-byte; original capture metadata not independently verified in this revision",
+    "sha256": "f25f3b5c8d8a0364547bb5cfd04bf3bd162471111c332578521c72fdeb49d840"
   }
 ]

@@ -1,0 +1,41 @@
+{
+  "source": "User clarification in report revision conversation on 2026-09-14",
+  "evidence_type": "team aggregate; per-run raw logs not supplied in repository",
+  "task1": {
+    "mission_attempts": 30,
+    "mission_successes": 28,
+    "mission_failures": 2,
+    "success_criterion": "all five blocks placed inside accepted zone within 180 seconds",
+    "failure_reason": "block pushed beyond robot reach during grasp attempt; then timeout",
+    "grasp_attempts_including_retries": 217,
+    "grasp_successes": 148,
+    "first_attempt_success_count": null
+  },
+  "task2": {
+    "mission_attempts": 20,
+    "target_stack_levels": 5,
+    "release_mode": "direct release as current main",
+    "height_metric": "maximum height reached during each attempt; not final height or 5-second hold",
+    "cumulative_height_reach_counts": {
+      "3": 20,
+      "4": 17,
+      "5": 0
+    },
+    "grasp_attempts_including_retries": 113,
+    "grasp_successes": 94,
+    "final_height_counts": null,
+    "five_second_hold_counts": null
+  },
+  "experimental_control_features": {
+    "aruco_position_estimation_used_in_control": true,
+    "wrist_camera_color_gate_used_in_control": true,
+    "implemented_in_current_main": false,
+    "per_feature_effect_measured": false
+  },
+  "superseded_report_claims": [
+    "28 successes out of 28 runs",
+    "148/217 is first-attempt grasp success",
+    "3-level trials uncounted; final 4-level results are 1/1; 5-level never attempted",
+    "height reach counts demonstrate final stable height or five-second hold"
+  ]
+}
