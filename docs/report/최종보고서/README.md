@@ -2,7 +2,7 @@
 
 2026-09-14 갱신. ACT·SmolVLA 실험과 환경 민감성·진단의 어려움에서 출발하여, CV+IK 전환, 실기 실패 분석과 변경, 반복 미션 및 실행 데이터 수집으로 이어지는 개발 과정을 정리했다.
 
-- [제출 PDF](final_report.pdf) (49쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
+- [제출 PDF](final_report.pdf) (48쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
 - [결과·구현의 근거와 해석 범위](SOURCES.md), [빌드·검토 기록](VALIDATION.md).
 - [집계와 캘리브레이션 재현](analysis/README.md), [후속 시행별 기록 양식](evaluation/README.md).
 - [팀이 확인한 최신 집계](evidence/20260914/team_results.json), [그림 출처와 SHA-256](asset_manifest.json).

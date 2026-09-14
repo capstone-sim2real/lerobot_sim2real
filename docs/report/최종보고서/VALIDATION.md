@@ -32,7 +32,7 @@ python3 docs/report/최종보고서/analysis/summarize_evidence.py
 
 - 본문은 나눔명조 11pt, 줄간격 1.5배, 사방 3cm 여백이다. 예시 클래스의 표지·벡터 로고·장 제목·머리말·꼬리말을 사용한다. 명시적인 자간 오버라이드는 추가하지 않았다.
 - `final_report.tex`에서 이전 서식용 `fix-cm`을 제거하고, 참고 문헌의 목차 항목을 유지했다. 클래스가 직접 표지를 생성하므로 사용되지 않는 `titlepage` 옵션은 생략했다. 클래스 원본은 수정하지 않았다.
-- 서식 적용 전후 `sections/`, `sections_revised/`, `analysis/`, `evidence/`, `figures/`의 모든 보관 파일과 `references.bib`가 바이트 단위로 같다. 최신 실험 수치·본문 문구·그림 원본을 유지했다.
+- `41d57d2`의 서식 적용 당시 전후 `sections/`, `sections_revised/`, `analysis/`, `evidence/`, `figures/`의 모든 보관 파일과 `references.bib`가 바이트 단위로 같다. 최신 실험 수치·본문 문구·그림 원본을 유지했다.
 
 저장소 루트에서 실행했다.
 
@@ -42,16 +42,20 @@ pdftotext -layout docs/report/최종보고서/final_report.pdf /tmp/so101-report
 git -c core.whitespace=-blank-at-eof diff --check
 ```
 
-- Podman의 기존 Ubuntu 24.04 LaTeX 이미지로 빌드 성공. A4, **49쪽**, **10,001,072바이트**. 줄간격과 여백 변경으로 기존 38쪽에서 늘어났다.
+- Podman의 기존 Ubuntu 24.04 LaTeX 이미지로 빌드 성공. A4, **48쪽**, **9,940,144바이트**. 줄간격과 여백 변경으로 기존 38쪽에서 늘어났다.
 - 최종 `build/final_report.log`에서 LaTeX 경고, 미정의 참조·인용, Overfull/Underfull, 누락 글리프 경고 없음. 추출 텍스트에 U+FFFD 대체문자 없음.
 - 초록은 PDF 2쪽 한 페이지에 들어가고 주요어까지 포함한다. 초록 PDF의 내장 글꼴에서 `nanummj`를 확인했고, 줄 간격의 PDF 좌표 차이 중앙값은 **20.324pt**로 1.5배 설정에 대응한다.
 - 추출 텍스트에서 93.3%·68.2%·83.2%, 적재 20/20·17/20·0/20, RMS 5.15mm·최대 LOO 13.53mm를 확인했다. 참고 문헌 9개를 유지했다.
-- 표지·초록(PDF 1–2쪽), 적재 결과표(32쪽), 캘리브레이션·드리프트 그림(36쪽)을 PNG로 렌더링하여 서식과 배치를 확인했다. 검토 파일과 수치 검증 결과는 `/tmp/so101-report-template-20260914/`에 있다.
+- `41d57d2` 서식 적용 당시 표지·초록(PDF 1–2쪽), 적재 결과표(32쪽), 캘리브레이션·드리프트 그림(36쪽)을 PNG로 렌더링하여 서식과 배치를 확인했다. 검토 파일과 수치 검증 결과는 `/tmp/so101-report-template-20260914/`에 있다.
 - 본문은 계속 `sections/` 한 곳에서 관리하며, `final_report_revised.tex`와 `sections_revised/`는 동일 원본을 읽는다. 두 PDF가 바이트 단위로 같다.
 - 원본 클래스의 마지막 빈 줄을 보존하여 일반 `git diff --check`는 해당 줄만 지적한다. `core.whitespace=-blank-at-eof` 검사로 나머지 공백 오류가 없음을 확인했다.
 
+## 사용자 정정 반영
+
+사용자 지시에 따라 초록·평가·결론에서 Task3 평균 제어 주기에 대한 설명과 그에 따른 성능 해석을 삭제했다. 해당 통계를 담은 종료 로그 그림도 제출 PDF에서 제외했다. 원본 이미지 파일은 보관하며, 자동 수집량·미션 및 파지 집계·캘리브레이션 수치와 `report_ko` 서식을 유지했다. 재빌드한 PDF의 추출 텍스트에서 삭제 대상 문구의 부재와 기존 핵심 수치의 유지를 확인했고, 빌드 경고 없이 두 PDF가 동일하게 생성되었다. 이 수정의 `git diff --check`는 통과했다.
+
 제출 PDF와 호환 PDF의 공통 SHA-256:
 
-`471df80244629a28aee338078b4776eabebb722496a04fdf752b525afca129c1`
+`e488d5bcb1893a7ed9de4e4cf16c61b1f8aae6ff6e4bc52ee4ce8c5e0c045c3d`
 
 이번 검증은 문서와 근거 파일의 일관성 및 PDF 조판 검증이다. 로컬 94건·Orin 99건 테스트 수는 9월 8일의 기존 기록이며 이번에 로봇 코드 테스트나 물리적 미션을 다시 실행한 것으로 보고하지 않았다. 저장소 동기화 상태는 Git 이력을 따른다.
