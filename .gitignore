@@ -44,3 +44,7 @@ models/
 
 # Live session IPC and telemetry
 /var/
+
+# Local report source materials
+/docs/report/Chats/
+/docs/report/reference/
