@@ -2,7 +2,7 @@
 
 2026-09-14 갱신. SO-101 블록 이동·적재 시스템의 구현과 평가를 정리했다. 초기 모방학습 실험과 CV+IK 선정 근거는 연구 내용에서 설명하며, 실행 자료의 자동 수집과 향후 정책 재학습을 구분한다. LLM이 기존 제어 기능을 도구로 선택·호출하는 구상은 미구현 후속 연구로 제시한다.
 
-- [제출 PDF](final_report.pdf) (48쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
+- [제출 PDF](final_report.pdf) (41쪽), [LaTeX 진입점](final_report.tex), 장별 본문 `sections/`.
 - [결과·구현의 근거와 해석 범위](SOURCES.md), [빌드·검토 기록](VALIDATION.md).
 - [집계와 캘리브레이션 재현](analysis/README.md), [후속 시행별 기록 양식](evaluation/README.md).
 - [팀이 확인한 최신 집계](evidence/20260914/team_results.json), [초기 모방학습 실험 순서와 전환 동기](evidence/20260914/learning_history.json).
