@@ -20,6 +20,7 @@ let token = null;
 try { token = sessionStorage.getItem(TOKEN_KEY); } catch (_) { /* storage unavailable */ }
 let control = { state: "idle" };
 let isOperator = false;
+let directPending = false;
 let streamingBubble = null;
 const toolChips = new Map();
 let events = null;
@@ -291,6 +292,7 @@ function applyControl(snapshot) {
   $("home-button").disabled = !(snapshot.state === "stopped" && isOperator);
   $("home-button").textContent = snapshot.state === "homing" ? "복귀 중…" : "다시 시도(그리퍼 열기+home)";
   if (snapshot.message) $("stopped-message").textContent = snapshot.message;
+  enablePixelButtons();
   if (!idle && recognizing && recognition) { try { recognition.abort(); } catch (_) {} }
   $("input").placeholder = idle ? "예: 노란 블록을 적재 구역 좌상단으로 옮겨줘"
     : snapshot.state === "stopped" ? "비상정지 상태입니다. 자동 복귀가 실패했으니 다시 시도해 주세요." : "로봇이 동작 중입니다…";
@@ -334,12 +336,14 @@ function pressStop() {
   api("/api/stop");
 }
 $("stop").addEventListener("click", pressStop);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") pressStop(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.repeat) pressStop(); });
 $("home-button").addEventListener("click", () => api("/api/home"));
 $("lock-retry").addEventListener("click", acquireLease);
 $("reset").addEventListener("click", () => api("/api/reset"));
 
 async function directRequest(path, body) {
+  if (directPending || control.state !== "idle" || !isOperator) return;
+  directPending = true;
   try {
     const { status, data } = await api(path, body);
     if (status !== 202 && status !== 403) {
@@ -347,6 +351,8 @@ async function directRequest(path, body) {
     }
   } catch (error) {
     showToast(`서버에 명령을 보내지 못했습니다: ${error.message}`, "bad");
+  } finally {
+    directPending = false;
   }
 }
 
@@ -558,50 +564,57 @@ function wireLayerToggle(grid, gridLayer, regionLayer) {
 }
 
 function drawPlaces(places) {
-  const svg = $("overlay");
-  const [w, h] = places.image_size;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  const sector = places.sector_px;
-  if (sector && sector.arc.length) {
-    // base + arc closes the reach envelope into the sector the camera page
-    // draws; drawn first so it never sits on top of a clickable place
-    const outline = [sector.base, ...sector.arc].map((p) => p.join(",")).join(" ");
-    svg.appendChild(svgEl("polygon", { class: "sector-poly", points: outline }));
+  const svg=$('overlay');
+  svg.replaceChildren();
+  svg.setAttribute('viewBox',`0 0 ${places.image_size.join(' ')}`);
+  const sector=places.sector_px;
+  if(sector?.arc?.length) {
+    svg.append(svgEl('polygon',{class:'pixel-workspace',points:[sector.base,...sector.arc].map(p=>p.join(',')).join(' ')}));
   }
-  const grid = places.grid && places.grid.cells.length ? places.grid : null;
-  const gridLayer = grid ? buildGridLayer(grid) : null;
-  if (gridLayer) svg.appendChild(gridLayer);
-  if (places.zone_polygon_px.length) {
-    svg.appendChild(svgEl("polygon", { class: "zone-poly", points: places.zone_polygon_px.map((p) => p.join(",")).join(" ") }));
-  }
-  const zone = places.zone_polygon_px;
-  const cellHalf = zone.length === 4 ? Math.max(18, Math.abs(zone[1][0] - zone[0][0]) / 7) : 30;
-  for (const slot of places.slots) {
-    const [x, y] = slot.px;
-    const cell = svgEl("rect", { class: "slot-cell", x: x - cellHalf, y: y - cellHalf * 0.8, width: cellHalf * 2, height: cellHalf * 1.6, rx: 6 });
-    const title = svgEl("title", {});
-    title.textContent = slot.korean;
-    cell.appendChild(title);
-    cell.addEventListener("click", () => insertText(`적재 구역 ${slot.korean}`));
-    svg.appendChild(cell);
-    const label = svgEl("text", { class: "slot-text", x, y: y + 8, "text-anchor": "middle" });
-    label.textContent = slot.korean;
-    svg.appendChild(label);
-  }
-  const regionLayer = svgEl("g", { id: "regions-layer" });
-  for (const region of places.regions) {
-    const [x, y] = region.px;
-    if (!(x >= 0 && y >= 0 && x <= w && y <= h)) continue;
-    const dot = svgEl("circle", { class: "region-dot", cx: x, cy: y, r: 11 });
-    const title = svgEl("title", {});
-    title.textContent = `부채꼴 ${region.korean}`;
-    dot.appendChild(title);
-    dot.addEventListener("click", () => insertText(`부채꼴 ${region.korean}`));
-    regionLayer.appendChild(dot);
-  }
-  svg.appendChild(regionLayer);
-  wireLayerToggle(grid, gridLayer, regionLayer);
 }
+
+let pixelTarget=null;
+let pixelSelectionGeneration=0;
+function enablePixelButtons() {
+  const enabled=Boolean(pixelTarget) && selectedCamera()==='shoulder' && control?.state==='idle' && isOperator;
+  for(const id of ['move-pixel','place-pixel','pixel-to-chat'])$(id).disabled=!enabled;
+}
+$('camera-wrap').addEventListener('click',async event=>{
+  if(selectedCamera()!=='shoulder')return;
+  const image=$('camera');
+  if(!image.naturalWidth || !image.naturalHeight)return;
+  const rect=image.getBoundingClientRect();
+  const u=Math.floor((event.clientX-rect.left)*image.naturalWidth/rect.width);
+  const v=Math.floor((event.clientY-rect.top)*image.naturalHeight/rect.height);
+  const generation=++pixelSelectionGeneration;
+  pixelTarget=null;enablePixelButtons();
+  const overlay=$('pixel-target-overlay');overlay.replaceChildren();
+  overlay.setAttribute('viewBox',`0 0 ${image.naturalWidth} ${image.naturalHeight}`);
+  const mark=svgEl('circle',{cx:u,cy:v,r:9,fill:'#f59e0b',stroke:'white','stroke-width':3});overlay.append(mark);
+  $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) 확인 중…`;
+  try {
+    const params=new URLSearchParams({u,v,width:image.naturalWidth,height:image.naturalHeight});
+    const response=await fetch('/api/pixel-target?'+params,{signal:AbortSignal.timeout(5000),cache:'no-store'});
+    const data=await response.json();
+    if(generation!==pixelSelectionGeneration)return;
+    if(!response.ok)throw Error(data.error||'선택할 수 없는 위치입니다.');
+    pixelTarget=data.target;mark.setAttribute('fill','#2563eb');
+    $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) · X ${pixelTarget.x_mm.toFixed(1)} / Y ${pixelTarget.y_mm.toFixed(1)} / Z ${pixelTarget.z_mm.toFixed(2)} mm · 블록 윗면 고정. 실행 시 IK 검사`;
+    enablePixelButtons();
+  } catch(error) {
+    if(generation!==pixelSelectionGeneration)return;
+    mark.setAttribute('fill','#dc2626');$('pixel-target-status').textContent=error.message;
+  }
+});
+function pixelArguments() {
+  const {u,v,calibration_id}=pixelTarget;return {u,v,calibration_id};
+}
+$('move-pixel').addEventListener('click',()=>{if(pixelTarget)manual('move_to_pixel',pixelArguments());});
+$('place-pixel').addEventListener('click',()=>{if(pixelTarget)manual('place_at_pixel',pixelArguments());});
+$('pixel-to-chat').addEventListener('click',()=>{
+  if(!pixelTarget)return;
+  $('chat-tab').click();insertText(`헤드캠 선택 픽셀 (u=${pixelTarget.u}, v=${pixelTarget.v}), calibration_id=${pixelTarget.calibration_id}`);
+});
 
 async function loadConfig() {
   const response = await fetch("/api/config");
@@ -616,6 +629,7 @@ async function loadConfig() {
   });
   try {const draft=sessionStorage.getItem('so101-draft');if(draft!==null){$('input').value=draft;sessionStorage.removeItem('so101-draft');}} catch (_) {}
   document.body.dataset.camera=selected;
+  if(selected==='wrist')$('pixel-target-status').textContent='픽셀 위치 선택은 헤드캠에서만 가능합니다.';
   const img = $("camera");
   img.onerror = () => { $("camera-missing").hidden = false; };
   img.onload = () => { $("camera-missing").hidden = true; };
@@ -757,4 +771,45 @@ pollHealth();
     setTimeout(poll,1000);
   }
   poll();
+})();
+
+
+// Discrete keyboard commands reuse the existing manual buttons and server gate.
+(() => {
+  const toggle=document.getElementById('keyboard-toggle');
+  const status=document.getElementById('keyboard-status');
+  const held=new Set();
+  let armed=false;
+  const bindings={KeyW:'[data-jog="forward"]',KeyS:'[data-jog="back"]',
+    KeyA:'[data-jog="left"]',KeyD:'[data-jog="right"]',
+    KeyJ:'[data-jog="up"]',KeyK:'[data-jog="down"]',
+    KeyQ:'#roll-ccw',KeyE:'#roll-cw',KeyG:'#pick-here',KeyP:'#place-here',
+    KeyO:'#open-gripper',KeyH:'#manual-home'};
+  const editable=target=>target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]'));
+  function setArmed(value) {
+    armed=value;held.clear();toggle.setAttribute('aria-pressed',String(armed));
+    toggle.textContent=armed?'키보드 끄기':'키보드 켜기';
+    status.textContent=armed?'활성 · 키를 누를 때마다 한 단계 실행':'꺼짐 · 버튼을 눌러 활성화';
+    document.querySelector('.keyboard-control').classList.toggle('keyboard-armed',armed);
+  }
+  toggle.addEventListener('click',()=>setArmed(!armed));
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape') {setArmed(false);return;}
+    if(!armed || !bindings[event.code])return;
+    if(event.repeat || held.has(event.code)) {event.preventDefault();return;}
+    if(event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || editable(event.target) || document.hidden || document.getElementById('direct-controls').hidden)return;
+    event.preventDefault();held.add(event.code);
+    if(control.state!=='idle' || !isOperator || directPending)return;
+    const button=document.querySelector(bindings[event.code]);
+    if(button && !button.disabled) {
+      button.classList.add('key-pressed');button.click();
+      setTimeout(()=>button.classList.remove('key-pressed'),150);
+    }
+  });
+  document.addEventListener('keyup',event=>held.delete(event.code));
+  window.addEventListener('blur',()=>setArmed(false));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)setArmed(false);});
+  document.addEventListener('focusin',event=>{if(editable(event.target))setArmed(false);});
+  document.getElementById('chat-tab').addEventListener('click',()=>setArmed(false));
+  setArmed(false);
 })();
