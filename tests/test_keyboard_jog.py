@@ -62,7 +62,7 @@ def test_start_reserves_worker_without_moving_and_http_contract():
         assert update(0,[1,0,0],'wrong').status_code==409
         assert update(0,[1,0,0]).status_code==200
         assert update(0,[-1,0,0]).status_code==409
-        assert client.post('/api/keyboard/stop',headers=headers,json={'session_id':sid}).status_code==200
+        assert client.post('/api/keyboard/stop',headers={'x-operator-token':headers['x-operator-token']},json={'session_id':sid}).status_code==200
         assert update(1,[1,0,0]).status_code==409
         holder['service'].wait_idle()
         assert holder['service'].gate.snapshot()['state']=='idle'

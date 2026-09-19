@@ -165,6 +165,13 @@ so101-agent  :8099 ── 시리얼 버스 단독 소유 (버스 락)
 브라우저 ── 채팅(SSE) + Web Speech STT + <img src=":8090/video/shoulder.mjpg">
 ```
 
+에이전트 서버의 책임은 다음 모듈로 나뉜다. `agent/server.py`는 프로세스 수명주기,
+정적 웹 자산과 SSE 연결만 조립하고, `agent/manual_api.py`는 인증된 수동 명령의 HTTP
+검증을 담당한다. 연속 키보드 입력의 deadman 상태는 `agent/keyboard_jog.py`, IK 경로
+생성은 `agent/jog_planner.py`, 고정 주기 재생과 다음 경로 선계산은
+`agent/jog_executor.py`가 맡는다. 세 모듈 모두 같은 RobotWorker에서 실행되므로 버스
+단독 소유 계약은 바뀌지 않는다.
+
 에이전트 도구는 관찰·동작 primitive 및 에피소드 시작/저장/폐기/현황/마무리로
 통일한다. 데이터 수집은 이 도구들의 조합이며 Task 3 FSM을 도구로 실행하지 않는다.
 `session/collection.py`가 기존 `RecordingRobotIO`와 `EpisodeRecorder`를 연결하고,
@@ -211,7 +218,7 @@ hover가 6.7mm 모자란다. 기울임 램프가 없으면 2층까지밖에 못 
 uv run --extra hardware --extra dev pytest -q
 ```
 
-2026-09-08 현재 동일 명령으로 99개 테스트가 통과했다. 하드웨어 동작 성공을
+현재 필수 회귀 테스트는 121개가 통과하고 2개가 선택 의존성 없이 건너뛴다. 하드웨어 동작 성공을
 뜻하지 않으며, 당시 실장비 결과는 [실험 기록](../experiments/README.md)에 둔다.
 실행 중 IPC와 관절 로그는 Git에서 제외한 `var/so101/`, FSM transition과 summary는
 기본적으로 `logs/pick_stack/`에 저장한다.

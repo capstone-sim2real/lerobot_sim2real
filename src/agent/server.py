@@ -27,7 +27,6 @@ import asyncio
 import collections
 import json
 import logging
-import math
 import os
 import threading
 import time
@@ -233,19 +232,6 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     def token_of(request: Request) -> str | None:
         return request.headers.get("x-operator-token") or request.query_params.get("token")
 
-    def reply(result: tuple[int, dict]) -> JSONResponse:
-        code, body = result
-        return JSONResponse(body, status_code=code)
-
-    def current_control_ui(request: Request) -> bool:
-        return request.headers.get("x-so101-control-version") == CONTROL_UI_VERSION
-
-    def stale_control_ui() -> JSONResponse:
-        return JSONResponse(
-            {"error": "조작 화면이 이전 버전입니다. Ctrl+Shift+R로 새로고침해 주세요."},
-            status_code=428,
-        )
-
     @app.get("/")
     async def index():
         # A cached control script is unsafe: newly added buttons can look
@@ -338,97 +324,8 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         body["camera_ok"] = await asyncio.to_thread(camera_ok, cfg)
         return body
 
-    @app.post("/api/lease")
-    async def lease(request: Request):
-        token = svc().acquire_lease(token_of(request))
-        return {"token": token}
-
-    @app.post("/api/lease/release")
-    async def lease_release(request: Request):
-        return {"released": svc().gate.release_lease(token_of(request) or "")}
-
-    @app.post("/api/lease/force-release")
-    async def lease_force_release(request: Request):
-        host = request.client.host if request.client else ""
-        if host not in ("127.0.0.1", "::1", "localhost"):
-            return JSONResponse({"error": "local only"}, status_code=403)
-        svc().gate.force_release()
-        return {"released": True}
-
-    @app.post("/api/chat")
-    async def chat(request: Request):
-        body = await request.json()
-        return reply(svc().chat(token_of(request), str(body.get("text", ""))))
-
-    @app.post("/api/jog")
-    async def jog(request: Request):
-        body = await request.json()
-        try:
-            vector = [float(body.get(k, 0.0)) for k in ("forward_mm", "left_mm", "up_mm")]
-        except (TypeError, ValueError):
-            return JSONResponse({"error": "numbers required"}, status_code=400)
-        if not all(math.isfinite(v) for v in vector):
-            return JSONResponse({"error": "numbers required"}, status_code=400)
-        if not current_control_ui(request):
-            return stale_control_ui()
-        return reply(svc().jog(token_of(request), *vector))
-
-    @app.post("/api/keyboard/start")
-    async def keyboard_start(request: Request):
-        if not current_control_ui(request):
-            return stale_control_ui()
-        return reply(svc().keyboard_start(token_of(request)))
-
-    @app.post("/api/keyboard/update")
-    async def keyboard_update(request: Request):
-        if not current_control_ui(request):
-            return stale_control_ui()
-        body = await request.json()
-        if not isinstance(body, dict) or not isinstance(body.get("vector"), list):
-            return JSONResponse({"error": "keyboard direction required"}, status_code=400)
-        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
-                                         body.get("seq"), body["vector"]))
-
-    @app.post("/api/keyboard/release")
-    async def keyboard_release(request: Request):
-        body = await request.json()
-        if not isinstance(body, dict):
-            return JSONResponse({"error": "keyboard session required"}, status_code=400)
-        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
-                                         0, [], release=True))
-
-    @app.post("/api/keyboard/stop")
-    async def keyboard_stop(request: Request):
-        body = await request.json()
-        if not isinstance(body, dict):
-            return JSONResponse({"error": "keyboard session required"}, status_code=400)
-        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
-                                         0, [], stop=True))
-
-    @app.post("/api/manual")
-    async def manual(request: Request):
-        body = await request.json()
-        name = body.get("tool")
-        if not isinstance(name, str):
-            return JSONResponse({"error": "'tool' is required"}, status_code=400)
-        arguments = body.get("arguments") or {}
-        if not isinstance(arguments, dict):
-            return JSONResponse({"error": "'arguments' must be an object"}, status_code=400)
-        if not current_control_ui(request):
-            return stale_control_ui()
-        return reply(svc().direct(token_of(request), name, arguments))
-
-    @app.post("/api/stop")
-    async def stop():
-        return svc().stop()
-
-    @app.post("/api/home")
-    async def home(request: Request):
-        return reply(svc().home(token_of(request)))
-
-    @app.post("/api/reset")
-    async def reset(request: Request):
-        return reply(svc().reset_chat(token_of(request)))
+    from agent.manual_api import register_manual_api
+    register_manual_api(app, svc, control_ui_version=CONTROL_UI_VERSION)
 
     @app.get("/api/events")
     async def events(request: Request):
