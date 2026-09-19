@@ -29,8 +29,10 @@
     for (const d of packet?.detections || []) {
       if (color && d.color !== color) continue;
       if (flags.boxes) {
-        drawPolyline(ctx, d.box_px, "#55ff88", 2.5, true);
-        drawText(ctx, colors[d.color] || d.color, offset(d.center_px), "#55ff88");
+        const boxColor = d.in_zone ? "#ff9f43" : "#55ff88";
+        const label = (colors[d.color] || d.color) + (d.in_zone ? " · 영역 안" : "");
+        drawPolyline(ctx, d.box_px, boxColor, 2.5, true);
+        drawText(ctx, label, offset(d.center_px), boxColor);
       }
       if (flags.centers) drawCross(ctx, d.center_px, "#00ffff");
       if (flags.axes) drawPolyline(ctx, d.grasp_axis_px || d.block_axis_px, "#ffff00", 3);

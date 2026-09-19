@@ -254,13 +254,15 @@ _PAGE = """<!doctype html>
     const {drawPolyline, drawCross, drawText} = window.CameraOverlayDrawing;
 
     const drawDetection = (context, detection) => {
-      drawPolyline(context, detection.box_px, '#55ff88', 2.5, true);
+      const boxColor = detection.in_zone ? '#ff9f43' : '#55ff88';
+      drawPolyline(context, detection.box_px, boxColor, 2.5, true);
+      if (detection.in_zone) drawText(context, '영역 안', [detection.center_px[0]+10, detection.center_px[1]-25], boxColor);
       (detection.box_px || []).forEach((point, index) => {
         context.beginPath();
         context.arc(point[0], point[1], 3, 0, Math.PI * 2);
-        context.fillStyle = '#55ff88';
+        context.fillStyle = boxColor;
         context.fill();
-        drawText(context, String(index + 1), [point[0] + 5, point[1] - 5], '#55ff88');
+        drawText(context, String(index + 1), [point[0] + 5, point[1] - 5], boxColor);
       });
 
       drawPolyline(context, detection.grasp_axis_px || detection.block_axis_px, '#ffff00', 3);
