@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -67,317 +68,8 @@ def _cell_span(cfg: AppConfig) -> int:
 
 
 def build_tools(cfg: AppConfig) -> list[ToolDef]:
-    agent = cfg.agent
-    rel = agent.relative
-    colors = sorted(cfg.perception.color_prototypes)
-    labels = list(agent.zone_slots.labels)
-    columns = list(agent.table_regions.columns_deg)
-    rows = list(agent.table_regions.rows_fraction)
-    slot_index = {label: i for i, label in enumerate(labels)}
-
-    color = {"type": "string", "enum": colors, "description": "Block colour."}
-    slot = {
-        "type": "string",
-        "enum": labels,
-        "description": (
-            "Target-zone cell as seen on the operator's camera page: 'top' is the row of three "
-            "FARTHEST from the robot, 'bottom' the row of two nearest; 'left' is the image left. "
-            f"Korean: {', '.join(f'{k}={e}' for k, e in zip(agent.zone_slots.korean_labels, labels))}."
-        ),
-    }
-    column = {
-        "type": "string",
-        "enum": columns,
-        "description": (
-            "Column of the fan-shaped table workspace (camera view, left = image left). "
-            "'leftmost'/'rightmost' are the extreme columns ('가장 왼쪽/오른쪽')."
-        ),
-    }
-    row = {
-        "type": "string",
-        "enum": rows,
-        "description": (
-            "Row of the workspace: 'near' = closest to the robot = bottom of the camera image "
-            "('아래'), 'far' = top of the image ('위')."
-        ),
-    }
-    forward_desc = "mm away from the robot base (negative = toward the base / '가까이')."
-    left_desc = "mm to the left as seen on the camera page (negative = right)."
-    span = _cell_span(cfg)
-    cell_frame = (
-        "Chessboard cell of the table, as the operator sees it on the camera page: "
-        "x grows to the IMAGE RIGHT, y grows AWAY from the robot (image up). (0, 0) is the "
-        "reference square at the bottom centre of the reachable band, and negative values are "
-        "normal. One cell is one chessboard square. The operator page writes clicks as "
-        "'격자 (3, 4)'; plain '3,4' in a sentence means the same. Only cells inside the "
-        "fan-shaped workspace exist - call describe_places for the real range, and a cell "
-        "outside it comes back as invalid_arguments naming the range."
-    )
-    cell_x = {"type": "integer", "description": "Cell x " + cell_frame, "minimum": -span, "maximum": span}
-    cell_y = {"type": "integer", "description": "Cell y " + cell_frame, "minimum": -span, "maximum": span}
-
-    def slot_arg(args: dict[str, Any]) -> int:
-        return slot_index[args["slot"]]
-
-    pixel_args = _obj({
-        "u": {"type":"integer", "minimum":0, "description":"Original head-camera pixel column selected by the operator."},
-        "v": {"type":"integer", "minimum":0, "description":"Original head-camera pixel row selected by the operator."},
-        "calibration_id": {"type":"string", "description":"Calibration ID supplied with the operator's pixel selection; never invent one."},
-    }, ["u","v","calibration_id"])
-    tools = [
-        ToolDef(ToolSpec("move_to_pixel", "Move the EMPTY gripper to an operator-selected head-camera pixel on the fixed one-block top plane. Lifts before traversing; does not close jaws. Use only explicit pixel selection, never guess pixels.", pixel_args),
-                lambda sk,a: sk.move_to_pixel(a['u'],a['v'],a['calibration_id'])),
-        ToolDef(ToolSpec("place_at_pixel", "Place a held block at an operator-selected head-camera pixel. Fixed single-block plane, no stacking. Use only explicit pixel selection.",pixel_args),
-                lambda sk,a: sk.place_at_pixel(a['u'],a['v'],a['calibration_id'])),
-        ToolDef(
-            ToolSpec(
-                "get_state",
-                "Current robot and world state from memory: what is held, whether the arm is home, "
-                "the last camera scene. Does not move the arm or take a new photo. Cheap.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.get_state(),
-            moves_arm=False,
-        ),
-        ToolDef(
-            ToolSpec(
-                "observe_scene",
-                "Return the arm home (to clear the camera view), take a fresh camera frame and list "
-                "every detected block, whether it is inside the target zone, and which zone cells "
-                "are occupied.",
-                _obj({"include_zone": {"type": "boolean", "description": "Also list blocks already in the zone. Default true."}}),
-            ),
-            lambda sk, a: sk.observe_scene(a.get("include_zone", True)),
-        ),
-        ToolDef(
-            ToolSpec(
-                "describe_places",
-                "List the exact names accepted for zone cells (with occupancy) and table regions, "
-                "plus which direction words mean what. Call this when unsure of a place name.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.describe_places(),
-            moves_arm=False,
-        ),
-        ToolDef(
-            ToolSpec(
-                "pick_block",
-                "Find one block by colour (inside or outside the zone) and grasp it. INTERNALLY "
-                "already retries with the gripper rotated 90 degrees and re-approaches from home up "
-                "to the configured limit - never call it again for the same colour unless "
-                "retry_advice is retry_ok or the user asks for an adjusted grasp. The block stays "
-                "held afterwards. forward_mm/left_mm shift the grasp point (e.g. '5mm 더 멀리 집어줘' "
-                "-> forward_mm=5, relative_to_last=true). If that same block is currently held it is "
-                "put back first.",
-                _obj(
-                    {
-                        "color": color,
-                        "forward_mm": _mm("Grasp point shift, " + forward_desc, rel.max_pick_offset_mm),
-                        "left_mm": _mm("Grasp point shift, " + left_desc, rel.max_pick_offset_mm),
-                        "relative_to_last": {
-                            "type": "boolean",
-                            "description": "Add the shift to the previous grasp shift for this colour ('더').",
-                        },
-                    },
-                    ["color"],
-                ),
-            ),
-            lambda sk, a: sk.pick_block(
-                a["color"], a.get("forward_mm", 0.0), a.get("left_mm", 0.0), a.get("relative_to_last", False)
-            ),
-        ),
-        ToolDef(
-            ToolSpec(
-                "place_at_slot",
-                "Put the currently HELD block into a named target-zone cell and release it, then "
-                "return home and verify with the camera. Optional forward_mm/left_mm offset the drop "
-                "point from the cell centre.",
-                _obj(
-                    {
-                        "slot": slot,
-                        "forward_mm": _mm("Drop offset, " + forward_desc, rel.max_shift_mm),
-                        "left_mm": _mm("Drop offset, " + left_desc, rel.max_shift_mm),
-                    },
-                    ["slot"],
-                ),
-            ),
-            lambda sk, a: sk.place_at_slot(slot_arg(a), a.get("forward_mm", 0.0), a.get("left_mm", 0.0)),
-        ),
-        ToolDef(
-            ToolSpec(
-                "place_on_table",
-                "Put the HELD block down on the table (outside the zone) at a named region of the "
-                "fan-shaped workspace. Omit column/row to let the robot choose the nearest free spot. "
-                "If the named spot is taken a nearby free spot is used and reported.",
-                _obj({"column": column, "row": row}),
-            ),
-            lambda sk, a: sk.place_on_table(a.get("column"), a.get("row")),
-        ),
-        ToolDef(
-            ToolSpec(
-                "place_at_cell",
-                "Put the HELD block down on one chessboard cell of the table ('(3, 4)에 놓아줘'). "
-                "Use this when the operator names coordinates; use place_on_table when they name a "
-                "region ('가장 왼쪽 아래'). If the cell is taken a nearby free spot is used and "
-                "reported. Cells inside the target zone are refused - those have names.",
-                _obj({"x": cell_x, "y": cell_y}, ["x", "y"]),
-            ),
-            lambda sk, a: sk.place_at_cell(a["x"], a["y"]),
-        ),
-        ToolDef(
-            ToolSpec(
-                "place_here",
-                "Lower and release the HELD block right below the gripper's current position "
-                "('여기 내려놔'), typically after move_arm.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.place_here(),
-        ),
-        ToolDef(
-            ToolSpec(
-                "move_block_to_slot",
-                "Pick a block by colour and place it into a named zone cell in one call. Preferred for "
-                "'X 블록을 적재 구역 Y로 옮겨줘'. Refuses without moving if the cell is occupied.",
-                _obj({"color": color, "slot": slot}, ["color", "slot"]),
-            ),
-            lambda sk, a: sk.move_block_to_slot(a["color"], slot_arg(a)),
-        ),
-        ToolDef(
-            ToolSpec(
-                "move_block_to_table",
-                "Pick a block by colour (also one already inside the zone - '다시 밖으로 꺼내줘') and put "
-                "it on the table at a named workspace region, or the nearest free spot when "
-                "column/row are omitted.",
-                _obj({"color": color, "column": column, "row": row}, ["color"]),
-            ),
-            lambda sk, a: sk.move_block_to_table(a["color"], a.get("column"), a.get("row")),
-        ),
-        ToolDef(
-            ToolSpec(
-                "move_block_to_cell",
-                "Pick a block by colour and put it on one chessboard cell in one call. Preferred for "
-                "'X 블록을 (3, 4)로 옮겨줘'. Refuses without moving if that is not a cell of the "
-                "workspace.",
-                _obj({"color": color, "x": cell_x, "y": cell_y}, ["color", "x", "y"]),
-            ),
-            lambda sk, a: sk.move_block_to_cell(a["color"], a["x"], a["y"]),
-        ),
-        ToolDef(
-            ToolSpec(
-                "shift_block",
-                "Move a block that is lying somewhere (table or zone) by a relative offset, e.g. "
-                "'그 블록 20mm만 더 왼쪽으로' -> left_mm=20. Checks the destination before grasping, "
-                "then re-measures with the camera and reports the actually measured displacement.",
-                _obj(
-                    {
-                        "color": color,
-                        "forward_mm": _mm(forward_desc, rel.max_shift_mm),
-                        "left_mm": _mm(left_desc, rel.max_shift_mm),
-                    },
-                    ["color", "forward_mm", "left_mm"],
-                ),
-            ),
-            lambda sk, a: sk.shift_block(a["color"], a["forward_mm"], a["left_mm"]),
-        ),
-        ToolDef(
-            ToolSpec(
-                "move_arm",
-                f"Jog the gripper by a small relative vector (max {rel.max_jog_mm:g}mm per call; larger "
-                "requests are refused, so split them). up_mm is HEIGHT. If the arm is at home it "
-                "first rises to working height. Does not open or close the gripper.",
-                _obj(
-                    {
-                        "forward_mm": _mm(forward_desc, rel.max_jog_mm),
-                        "left_mm": _mm(left_desc, rel.max_jog_mm),
-                        "up_mm": _mm("mm upward (negative = down).", rel.max_jog_mm),
-                    }
-                ),
-            ),
-            lambda sk, a: sk.move_arm(a.get("forward_mm", 0.0), a.get("left_mm", 0.0), a.get("up_mm", 0.0)),
-        ),
-        ToolDef(
-            ToolSpec(
-                "move_to_cell",
-                "Fly the EMPTY-or-holding gripper over one chessboard cell at its current height, in "
-                "one move ('(3, 4) 위로 가줘'). Unlike move_arm there is no per-call distance cap, "
-                "because a cell is an address rather than a nudge. Does not open or close the jaws; "
-                "follow with pick_here or place_here.",
-                _obj({"x": cell_x, "y": cell_y}, ["x", "y"]),
-            ),
-            lambda sk, a: sk.move_to_cell(a["x"], a["y"]),
-        ),
-        ToolDef(
-            ToolSpec(
-                "rotate_gripper",
-                f"Spin the jaws in place (max {rel.max_gripper_roll_deg:g} degrees per call; larger "
-                "requests are refused, so split them). Does not move x/y/z. Positive turns one way, "
-                "negative the other - direction is not calibrated to a compass, so ask the student "
-                "which way if it matters.",
-                _obj({"delta_deg": _mm("Degrees to rotate.", rel.max_gripper_roll_deg)}, ["delta_deg"]),
-            ),
-            lambda sk, a: sk.rotate_gripper(a["delta_deg"]),
-        ),
-        ToolDef(
-            ToolSpec(
-                "pick_here",
-                "Manual 'claw machine' grab: close the gripper on whatever is directly below the arm's "
-                "current position, with no colour lookup (position the arm with move_arm first). "
-                "Internally retries with a rotated gripper like pick_block. The held item's colour is "
-                "unknown afterwards.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.pick_here(),
-        ),
-        ToolDef(
-            ToolSpec(
-                "return_to_home",
-                "Return the arm to its home pose (rising first if it is low). Keeps a held block held.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.return_to_home(),
-        ),
-        ToolDef(
-            ToolSpec(
-                "open_gripper",
-                "Open the jaws where the arm is now, dropping anything held. Recovery only - prefer "
-                "the place_* tools to put a block down.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.open_gripper(),
-        ),
-        ToolDef(
-            ToolSpec(
-                "run_task1",
-                "Run rule-based mission 1 unchanged: gather every block outside the zone into the five "
-                "zone cells until the outside has been empty for the hold time. Takes minutes. Cells "
-                "already occupied are kept.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.run_task(1),
-        ),
-        ToolDef(
-            ToolSpec(
-                "run_task2",
-                "Run rule-based mission 2 unchanged: stack every outside block into one tower in the "
-                "zone. Takes minutes.",
-                _obj({}),
-            ),
-            lambda sk, a: sk.run_task(2),
-        ),
-    ]
-    if agent.enable_task3_tool:
-        tools.append(
-            ToolDef(
-                ToolSpec(
-                    "run_task3",
-                    "Run one round of mission 3 (ACT demonstration dataset collection): gather every "
-                    "outside block while recording. Requires an empty zone. Takes minutes.",
-                    _obj({}),
-                ),
-                lambda sk, a: sk.run_task(3),
-            )
-        )
-    return tools
+    from .primitive_tools import build_primitive_tools
+    return build_primitive_tools(cfg)
 
 
 # ── argument validation (the subset of JSON Schema the tools use) ──────
@@ -404,6 +96,8 @@ def validate_arguments(schema: dict[str, Any], args: Any) -> str | None:
         if kind in ("number", "integer"):
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 return f"'{name}' must be a number"
+            if not math.isfinite(value):
+                return f"'{name}' must be finite"
             if kind == "integer" and int(value) != value:
                 return f"'{name}' must be a whole number"
             if "minimum" in prop and value < prop["minimum"]:
@@ -458,6 +152,15 @@ class ToolRegistry:
                     raise
                 result = result_from_exception(action, exc)
             try:
+                callback = getattr(type(skills), "on_tool_result", None)
+                if callback is not None:
+                    callback(skills, action, result)
+            except Exception as exc:
+                result = result_from_exception(action, exc)
+                collection = getattr(skills, "collection", None)
+                if collection is not None:
+                    collection.discard("recording_error")
+            try:
                 result.state = skills.state_dict()
             except BaseException as exc:  # noqa: BLE001 - state is best effort
                 result.state = {"state_error": str(exc)}
@@ -482,7 +185,7 @@ class ToolRegistry:
             return ToolResult(call.id, call.name, result.to_envelope(), is_error=True)
         args = dict(call.arguments)
         result = self.run_skill(call.name, lambda skills: tool.run(skills, args))
-        return ToolResult(call.id, call.name, result.to_envelope(), is_error=not result.ok)
+        return ToolResult(call.id, call.name, result.to_envelope(), is_error=not result.ok, images=result.images)
 
     def last_fault(self, results: list[ToolResult]) -> bool:
         from session.results import ROBOT_FAULT_REASONS

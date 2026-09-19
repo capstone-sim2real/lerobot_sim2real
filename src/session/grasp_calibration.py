@@ -18,10 +18,10 @@ from fsm.task1 import corrected_pick_xy, far_reach_tilt_deg
 from session.arm_session import HeldBlock
 from session.relative import offset_xy
 from session.results import SkillResult
-from session.skills import Skills
+from session.primitives import PrimitiveSkills
 
 
-class CalibrationSkills(Skills):
+class CalibrationSkills(PrimitiveSkills):
     def __init__(self, session, output_dir):
         super().__init__(session)
         self.output = Path(output_dir).resolve()

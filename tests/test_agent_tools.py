@@ -22,15 +22,14 @@ def _never(_job):
 def test_tool_list_and_enums_follow_config():
     cfg = AppConfig()
     names = [t.spec.name for t in build_tools(cfg)]
-    assert len(names) == 22 and "run_task3" not in names
-    cfg.agent.enable_task3_tool = True
-    assert "run_task3" in [t.spec.name for t in build_tools(cfg)]
+    assert len(names) == 15 and not any(n.startswith("run_task") for n in names)
+    assert "begin_episode" in names and "save_episode" in names
 
     cfg.perception.color_prototypes["purple"] = [[140, 120]]
     specs = {t.spec.name: t.spec for t in build_tools(cfg)}
-    assert "purple" in specs["pick_block"].input_schema["properties"]["color"]["enum"]
-    assert specs["place_at_slot"].input_schema["properties"]["slot"]["enum"] == cfg.agent.zone_slots.labels
-    jog = specs["move_arm"].input_schema["properties"]["left_mm"]
+    assert "purple_1" in specs["move_to_target"].input_schema["properties"]["object_id"]["enum"]
+    assert specs["move_to_target"].input_schema["properties"]["slot"]["enum"] == cfg.agent.zone_slots.labels
+    jog = specs["move_relative"].input_schema["properties"]["left_mm"]
     assert jog["maximum"] == cfg.agent.relative.max_jog_mm
     for spec in specs.values():
         schema = spec.input_schema
@@ -58,9 +57,9 @@ def test_bad_arguments_never_reach_the_robot():
 
 
 def test_validate_arguments_messages():
-    schema = next(t.spec.input_schema for t in build_tools(AppConfig()) if t.spec.name == "pick_block")
-    assert validate_arguments(schema, {"color": "red"}) is None
-    assert "relative_to_last" in validate_arguments(schema, {"color": "red", "relative_to_last": 1})
+    schema = next(t.spec.input_schema for t in build_tools(AppConfig()) if t.spec.name == "move_relative")
+    assert validate_arguments(schema, {"left_mm": 10}) is None
+    assert "unknown" in validate_arguments(schema, {"left_mm": 10, "relative_to_last": 1})
 
 
 def test_exceptions_map_to_fault_reasons():

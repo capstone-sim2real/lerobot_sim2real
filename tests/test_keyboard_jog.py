@@ -237,3 +237,15 @@ def test_intermediate_braking_path_is_checked_before_motion(monkeypatch):
     result=stream.run(sk,sk.s.cancel)
     assert not result.ok and result.reason=='out_of_workspace'
     assert not robot.sent_actions
+
+
+def test_primitive_keyboard_rejects_low_lateral_motion():
+    from session.primitives import PrimitiveSkills
+    sk, robot = setup()
+    sk = PrimitiveSkills(sk.s)
+    sk.cfg.agent.primitives.lateral_clearance_mm = 200.
+    stream = KeyboardJog(sk.cfg.agent.relative)
+    stream.update(0, [1, 0, 0])
+    result = stream.run(sk, sk.s.cancel)
+    assert not result.ok and result.reason == 'precondition'
+    assert not robot.sent_actions

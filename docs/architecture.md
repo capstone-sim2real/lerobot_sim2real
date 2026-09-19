@@ -165,6 +165,14 @@ so101-agent  :8099 ── 시리얼 버스 단독 소유 (버스 락)
 브라우저 ── 채팅(SSE) + Web Speech STT + <img src=":8090/video/shoulder.mjpg">
 ```
 
+에이전트 도구는 관찰·동작 primitive 및 에피소드 시작/저장/폐기/현황/마무리로
+통일한다. 데이터 수집은 이 도구들의 조합이며 Task 3 FSM을 도구로 실행하지 않는다.
+`session/collection.py`가 기존 `RecordingRobotIO`와 `EpisodeRecorder`를 연결하고,
+동일 RobotWorker가 LLM 대기 중 hold tick을 기록한다. 긴 호출로 기록 시간축이
+깨지면 시연을 폐기한다. 한 사용자 턴이 끝나면 미해결 버퍼도 폐기해 IDLE에서
+녹화 명령이 계속 나가지 않게 한다. 저장 조건과 한계는
+[primitive 가이드](guide/SO101_AGENT_PRIMITIVES.md)를 따른다.
+
 ## 현재 캘리브레이션
 
 `src/configs/calib/venue_lab.json`은 2026-09-11에 다시 잡은 9점 fit이다.

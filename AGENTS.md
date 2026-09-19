@@ -346,9 +346,12 @@ uv run --extra dev pytest tests -q
    스스로를 검증하므로, 그 (명령, 실제) 쌍이 곧 보정값이다
    (`session/place_correction.py`, 팔 기준 프레임 — 처짐은 뻗은 정도와 회전각의 함수라
    베이스 x/y로 배운 값은 다른 방위각으로 옮겨가지 않는다).
-5. **재시도 정책은 프롬프트가 아니라 코드에 있다.** `pick_block`은 `CvIkPickState`를
-   그대로 구동하므로 90도 회전 재시도와 home 재접근이 안에 있다. 결과의
-   `retry_advice`가 LLM의 다음 행동을 정한다.
+5. **LLM은 primitive만 조합한다.** 복합 pick/place 및 `run_task1/2/3`는 도구로
+   노출하지 않는다. 기존 미션 FSM의 재시도 정책은 유지한다. 에이전트의 각 호출은
+   제한된 동작 하나이며 파지 검증·접촉·좌표 제한은 코드에서 강제한다.
+   데이터 수집은 `begin_episode` → 같은 동작 primitive들 → 홈·재관찰 →
+   `save_episode` 조합이다. 성공 플래그는 LLM에서 받지 않는다. 실패·STOP·시간축
+   불량은 recorder 버퍼 폐기와 사유 기록으로 처리하며 기존 Task 3 러너는 유지한다.
 6. **STOP은 `session/cancel.py`의 `CancellableRobotIO`에서만 구현한다.** 제어
    경로(control/, fsm/)에 훅을 심지 않는다. `Cancelled`는 RuntimeError/OSError/
    ValueError가 아니어야 한다(`fsm/task1.py`가 삼킨다).
@@ -364,3 +367,9 @@ uv run --extra dev pytest tests -q
 10. **가정값은 가정값이라고 쓴다**(§14.3). `agent.relative.*` 한도, `agent.table_regions.*`,
    `agent.place_clear_radius_mm`는 실측 전 가정값이다. 시연 전 `so101-agent --dry-run`
    으로 확인하고 실측 후 교체한다.
+
+11. **LLM 대기 중 녹화도 로봇 소유 스레드에서 한다.** `RobotWorker`의 idle tick은
+    활성 에피소드에서만 기존 `RecordingRobotIO`로 마지막 명령을 유지·기록한다.
+    IK/관찰 등 긴 호출의 누락 시간은 보간하거나 30 Hz로 가장하지 않는다. 시간 간격과
+    평균 주기 게이트를 넘으면 폐기한다. 홈 도착 뒤 녹화를 멈추고 재관찰은 밖에서 한다.
+    종료·STOP 시 진행 중 버퍼를 폐기하고 dataset/video writer를 마무리한다.

@@ -48,7 +48,15 @@ class RobotWorker:
             return
         self._ready.set()
         while True:
-            item = self._queue.get()
+            idle = getattr(type(self._resource), "idle_tick", None)
+            try:
+                item = self._queue.get(timeout=getattr(self._resource, "idle_poll_s", 0.05) if idle else None)
+            except queue.Empty:
+                try:
+                    idle(self._resource)
+                except Exception:
+                    logger.exception("idle recording tick failed")
+                continue
             if item is _SENTINEL:
                 break
             fn, future = item

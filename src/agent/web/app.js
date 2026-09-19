@@ -5,14 +5,12 @@ const $ = (id) => document.getElementById(id);
 const TOKEN_KEY = "so101_operator_token";
 const CONTROL_UI_VERSION = "cell-grid-v1";
 const TOOL_NAMES = {
-  get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 이름 확인",
-  pick_block: "블록 집기", place_at_slot: "칸에 놓기", place_on_table: "테이블에 놓기",
-  place_here: "여기 내려놓기", move_block_to_slot: "칸으로 옮기기", move_block_to_table: "테이블로 옮기기",
-  shift_block: "블록 조금 옮기기", move_arm: "팔 움직이기", return_to_home: "home 복귀",
-  open_gripper: "그리퍼 열기", run_task1: "미션 1", run_task2: "미션 2", run_task3: "미션 3(수집)",
-  recover_and_home: "복귀(그리퍼 열기+home+그리퍼 닫기)",
-  rotate_gripper: "그리퍼 돌리기", pick_here: "여기서 집기",
-  place_at_cell: "칸 좌표에 놓기", move_block_to_cell: "칸 좌표로 옮기기", move_to_cell: "칸 좌표 위로 이동",
+  get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 확인",
+  move_to_target: "목표 접근", move_relative: "상대 이동", align_gripper: "블록 방향 정렬",
+  close_gripper: "닫기·파지 확인", descend_until_contact: "접촉 하강", open_gripper: "그리퍼 열기",
+  return_to_home: "home 복귀", recover_and_home: "그리퍼 열기·home 복귀",
+  begin_episode: "시연 녹화 시작", save_episode: "시연 저장", discard_episode: "시연 폐기",
+  collection_status: "수집 현황", finish_dataset: "데이터셋 마무리",
 };
 const STATE_TEXT = { idle: "대기", busy: "실행 중", stopping: "정지 중", stopped: "비상정지됨", homing: "home 복귀 중" };
 
@@ -24,10 +22,13 @@ let directPending = false;
 let manualTools = new Set();
 let keyboardConfig = null;
 const manualAllowed = name => manualTools.has(name);
+const availableTool = (...names) => names.find(manualAllowed);
+const jogAllowed = () => Boolean(availableTool('move_relative','move_arm'));
 const MANUAL_BUTTON_TOOLS = {
   'manual-home':'return_to_home', 'roll-ccw':'rotate_gripper', 'roll-cw':'rotate_gripper',
-  'pick-here':'pick_here', 'place-here':'place_here', 'open-gripper':'open_gripper',
-  'go-cell':'move_to_cell', 'move-pixel':'move_to_pixel', 'place-pixel':'place_at_pixel',
+  'pick-here':['close_gripper','pick_here'], 'place-here':'place_here', 'open-gripper':'open_gripper',
+  'observe-now':'observe_scene', 'collection-status':'collection_status',
+  'go-cell':['move_to_target','move_to_cell'], 'move-pixel':'move_to_pixel', 'place-pixel':'place_at_pixel',
 };
 let streamingBubble = null;
 const toolChips = new Map();
@@ -246,6 +247,17 @@ function handleToolResult(event) {
   const result = event.result || {};
   if (!result.ok) {
     showToast(result.detail || result.reason || "동작을 수행할 수 없습니다.", "bad");
+  } else if(event.name==='observe_scene'||event.name==='collection_status') {
+    const output=$('manual-observation-result'),data=result.data||{};
+    if(event.name==='observe_scene') {
+      const colors={red:'빨강',yellow:'노랑',green:'초록',blue:'파랑',wood:'나무'};
+      const objects=data.objects||[];
+      output.textContent=`관찰 완료 · 블록 ${objects.length}개`+(objects.length?' · '+objects.map(o=>colors[o.color]||o.object_id).join(', '):'')+(data.arm_occlusion_possible?' · 로봇팔에 가려진 부분이 있을 수 있습니다.':'');
+    } else {
+      const c=data.collection||{};
+      output.textContent=`${c.recording?'녹화 중':c.episode_open?'시연 진행 중':'대기'} · 현재 ${c.frames??0}프레임 · 저장 ${c.episodes_saved??0}회`+(c.last_error?' · '+c.last_error:'');
+    }
+    output.hidden=false;
   }
 }
 
@@ -291,7 +303,7 @@ function applyControl(snapshot) {
   const idle = snapshot.state === "idle" && isOperator;
   const manualControls = [
     $("input"), $("send"), $("mic"), $("reset"), $("jog-step"), $("manual-home"),
-    $("roll-ccw"), $("roll-cw"), $("roll-step"), $("pick-here"), $("place-here"), $("open-gripper"),
+    $("observe-now"), $("pick-here"), $("collection-status"), $("open-gripper"),
     $("cell-x"), $("cell-y"), $("go-cell"),
     ...document.querySelectorAll(".jog-btn"),
   ];
@@ -301,10 +313,13 @@ function applyControl(snapshot) {
   for (const [id, tool] of Object.entries(MANUAL_BUTTON_TOOLS)) {
     const button=$(id);
     if (!button) continue;
-    button.disabled = !idle || !manualAllowed(tool);
-    button.title = manualAllowed(tool) ? '' : '이 서버에서는 지원하지 않습니다. 보정 전용 절차를 사용하세요.';
+    const supported=Array.isArray(tool)?Boolean(availableTool(...tool)):manualAllowed(tool);
+    button.disabled = !idle || !supported;
+    button.title = supported ? '' : '이 서버에서는 지원하지 않습니다. 보정 전용 절차를 사용하세요.';
   }
-  for (const button of document.querySelectorAll('.jog-btn')) button.disabled=!idle || !manualAllowed('move_arm');
+  for (const button of document.querySelectorAll('.jog-btn')) button.disabled=!idle || !jogAllowed();
+  $('pick-here').textContent=manualAllowed('close_gripper')?'현재 위치에서 닫기·파지 확인':'여기서 집기';
+  $('roll-step').disabled=!idle||!manualAllowed('rotate_gripper');
   $("stopped-banner").hidden = !(snapshot.state === "stopped" || snapshot.state === "homing" || snapshot.state === "stopping");
   $("home-button").disabled = !(snapshot.state === "stopped" && isOperator);
   $("home-button").textContent = snapshot.state === "homing" ? "복귀 중…" : "다시 시도(그리퍼 열기+home)";
@@ -312,7 +327,7 @@ function applyControl(snapshot) {
   enablePixelButtons();
   if (!idle && recognizing && recognition) { try { recognition.abort(); } catch (_) {} }
   $("input").placeholder = idle ? "예: 노란 블록을 적재 구역 좌상단으로 옮겨줘"
-    : snapshot.state === "stopped" ? "비상정지 상태입니다. 자동 복귀가 실패했으니 다시 시도해 주세요." : "로봇이 동작 중입니다…";
+    : snapshot.state === "stopped" ? "비상정지 상태입니다. 팔과 물체를 확인한 뒤 수동 복귀해 주세요." : "로봇이 동작 중입니다…";
 }
 
 // ── lease & events ──────────────────────────────────────────────────
@@ -360,7 +375,7 @@ $("reset").addEventListener("click", () => api("/api/reset"));
 
 async function directRequest(path, body) {
   if (directPending || control.state !== "idle" || !isOperator) return;
-  if (!manualAllowed(path === "/api/jog" ? "move_arm" : body.tool)) return;
+  if (path === "/api/jog" ? !jogAllowed() : !manualAllowed(body.tool)) return;
   directPending = true;
   try {
     const { status, data } = await api(path, body);
@@ -386,8 +401,10 @@ for (const button of document.querySelectorAll(".jog-btn")) {
     directRequest("/api/jog", { forward_mm: f * step, left_mm: l * step, up_mm: u * step });
   });
 }
-$("roll-ccw").addEventListener("click", () => manual("rotate_gripper", { delta_deg: -Number($("roll-step").value) }));
-$("roll-cw").addEventListener("click", () => manual("rotate_gripper", { delta_deg: Number($("roll-step").value) }));
+$("roll-ccw").addEventListener("click", () => manual("rotate_gripper", {delta_deg:-Number($("roll-step").value)}));
+$("roll-cw").addEventListener("click", () => manual("rotate_gripper", {delta_deg:Number($("roll-step").value)}));
+$("place-here").addEventListener("click", () => manual("place_here"));
+$("observe-now").addEventListener("click", () => manual("observe_scene"));
 
 $("go-cell").addEventListener("click", () => {
   const x = Number($("cell-x").value);
@@ -396,12 +413,13 @@ $("go-cell").addEventListener("click", () => {
     showToast("칸 좌표는 정수 x와 y로 입력하세요 (예: 3, 4).", "bad");
     return;
   }
-  manual("move_to_cell", { x, y });
+  if(manualAllowed('move_to_target'))manual("move_to_target", { target_type: "cell", phase: "hover", x, y });
+  else manual("move_to_cell", {x,y});
 });
 
 $("manual-home").addEventListener("click", () => manual("return_to_home"));
-$("pick-here").addEventListener("click", () => manual("pick_here"));
-$("place-here").addEventListener("click", () => manual("place_here"));
+$("pick-here").addEventListener("click", () => manual(availableTool("close_gripper","pick_here")));
+$("collection-status").addEventListener("click", () => manual("collection_status"));
 $("open-gripper").addEventListener("click", () => manual("open_gripper"));
 
 // ── voice (browser built-in Web Speech API) ────────────────────────
@@ -909,7 +927,7 @@ pollHealth();
   }
   async function startStream() {
     if(starting||session||!vector().some(Boolean))return;
-    if(!keyboardConfig||!manualAllowed('move_arm')||control.state!=='idle'||!isOperator||directPending){held.clear();return;}
+    if(!keyboardConfig||!jogAllowed()||control.state!=='idle'||!isOperator||directPending){held.clear();return;}
     starting=true;const generation=epoch;
     try {
       const {status:code,data}=await api('/api/keyboard/start');

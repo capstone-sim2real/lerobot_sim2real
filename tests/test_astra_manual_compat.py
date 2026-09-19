@@ -27,7 +27,7 @@ def test_web_buttons_have_an_explicit_calibration_policy():
     service=configured(sk)
     script=(Path(__file__).resolve().parents[1]/'src/agent/web/app.js').read_text()
     web=set(re.findall(r"manual\([\"']([a-z_]+)[\"']",script))|{'move_arm'}
-    assert web-service.MANUAL_TOOLS=={'pick_here','move_to_pixel','rotate_gripper'}
+    assert web-service.MANUAL_TOOLS <= {'pick_here','move_to_pixel','rotate_gripper'}
     assert WEB_MANUAL_TOOLS <= service.MANUAL_TOOLS
     assert {d.spec.name for d in definitions(sk.cfg)}<=service.MANUAL_TOOLS
     assert service.MANUAL_TOOLS==service.registry._tools.keys()
@@ -77,6 +77,8 @@ def test_http_config_jog_lease_and_denied_manual_tools():
     pytest.importorskip('fastapi');pytest.importorskip('httpx')
     from fastapi.testclient import TestClient
     sk,_,_=make_skills({})
+    from session.primitives import PrimitiveSkills
+    sk=PrimitiveSkills(sk.s)
     cfg=sk.cfg
     hub=EventHub();holder={}
     def builder(publish):

@@ -164,34 +164,7 @@ class AgentService:
 
         def turn() -> None:
             try:
-                current_cv = None
-                if needs_fresh_scene(text):
-                    call = ToolCall(
-                        f"observe_scene_auto_{next(self._ids)}", "observe_scene", {"include_zone": True}
-                    )
-                    self._publish({
-                        "type": "tool_call", "id": call.id, "name": call.name,
-                        "arguments": call.arguments, "automatic": True,
-                    })
-                    result = self.registry.execute(call)
-                    self._publish({
-                        "type": "tool_result", "id": call.id, "name": call.name,
-                        "result": result.content, "automatic": True,
-                    })
-                    current_cv = result.content
-                    from session.results import ROBOT_FAULT_REASONS
-
-                    if result.content.get("reason") in ROBOT_FAULT_REASONS:
-                        self._publish({
-                            "type": "assistant_text",
-                            "text": "최신 장면을 확인하는 중 로봇 동작이 중단되었습니다.",
-                        })
-                        self._publish({"type": "turn_end", "robot_fault": True})
-                        outcome = TurnOutcome(robot_fault=True, error=result.content.get("detail"))
-                    else:
-                        outcome = self.runner.run_turn(text, current_cv=current_cv)
-                else:
-                    outcome = self.runner.run_turn(text)
+                outcome = self.runner.run_turn(text)
             except Exception as exc:  # noqa: BLE001 - a crashed turn is a fault
                 logger.exception("agent turn crashed")
                 self._publish({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
@@ -205,8 +178,8 @@ class AgentService:
     # Everything here is also an ordinary LLM tool (agent.tools.build_tools);
     # this only decides what a physical button on the page is allowed to fire.
     MANUAL_TOOLS = frozenset({
-        "move_arm", "move_to_cell", "move_to_pixel", "place_at_pixel", "rotate_gripper", "pick_here", "place_here",
-        "open_gripper", "return_to_home",
+        "move_relative", "move_to_target", "align_gripper", "close_gripper", "descend_until_contact",
+        "open_gripper", "return_to_home", "observe_scene", "collection_status",
     })
 
     def direct(self, token: str | None, name: str, arguments: dict[str, Any]) -> tuple[int, dict]:
@@ -217,7 +190,7 @@ class AgentService:
         call does -- a manual button is just a one-tool-call "turn" with no
         model in the loop.
         """
-        if name not in self.MANUAL_TOOLS:
+        if name not in self.MANUAL_TOOLS or name not in self.registry.names():
             return 400, {"error": f"'{name}' is not a manual control action"}
         if not self.gate.check(token):
             return 403, {"error": "not the operator"}
@@ -247,12 +220,12 @@ class AgentService:
         return 202, {"accepted": True}
 
     def jog(self, token: str | None, forward_mm: float, left_mm: float, up_mm: float) -> tuple[int, dict]:
-        return self.direct(token, "move_arm",
+        return self.direct(token, "move_relative",
                            {"forward_mm": float(forward_mm), "left_mm": float(left_mm), "up_mm": float(up_mm)})
 
     def keyboard_start(self, token):
         from .keyboard_jog import KeyboardJog
-        if "move_arm" not in self.MANUAL_TOOLS:
+        if not {"move_arm", "move_relative"} & self.MANUAL_TOOLS:
             return 400, {"error": "keyboard jog unavailable"}
         if not self.gate.check(token):
             return 403, {"error": "not the operator"}
@@ -306,11 +279,17 @@ class AgentService:
         return 200, {"accepted": True}
 
     def _after_command(self, robot_fault: bool) -> None:
+        if self.started:
+            def finish(skills):
+                callback = getattr(type(skills), "end_command", None)
+                if callback is not None:
+                    callback(skills)
+                from session.results import SkillResult
+                return SkillResult(True, "end_command", "ok")
+            cleanup = self.registry.run_skill("end_command", finish)
+            robot_fault = robot_fault or cleanup.robot_fault
         fault = robot_fault or self.cancel.is_set()
         self.gate.finish(robot_fault=fault, message="동작이 중단되었습니다. home 복귀가 필요합니다." if fault else None)
-        if self.gate.state is ControlState.STOPPED and self.cfg.agent.stop_auto_home:
-            if self.gate.begin_auto_home():
-                self._spawn(self._home_job, "so101-agent-home")
 
     def stop(self) -> dict[str, Any]:
         stopped = self.gate.request_stop()

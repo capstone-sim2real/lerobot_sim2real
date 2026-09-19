@@ -1142,8 +1142,8 @@ class Skills:
         action, t0, s, cfg = f"run_task{task}", time.monotonic(), self.s, self.cfg
         if task not in (1, 2, 3):
             return self._result(False, action, "invalid_arguments", "미션은 1, 2, 3만 있습니다.", t0=t0)
-        if task == 3 and not cfg.agent.enable_task3_tool:
-            return self._result(False, action, "disabled", "미션 3(데이터 수집)은 설정에서 꺼져 있습니다.",
+        if task == 3:
+            return self._result(False, action, "disabled", "데이터 수집은 에피소드 도구와 동작 primitive를 조합하세요.",
                                 retry_advice="do_not_retry", t0=t0)
         if s.held is not None:
             return self._result(False, action, "already_holding",

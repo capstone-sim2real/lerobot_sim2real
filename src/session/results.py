@@ -30,6 +30,15 @@ ROBOT_FAULT_REASONS = frozenset({"cancelled", "motion_timeout", "bus_lost", "int
 RETRY_ADVICE = frozenset({"retry_ok", "do_not_retry", "ask_operator"})
 
 
+@dataclass(frozen=True)
+class ObservationImage:
+    """JPEG bytes are separate from numeric result JSON and browser events."""
+    jpeg: bytes
+    camera: str
+    frame_seq: int
+    captured_at: float
+
+
 @dataclass
 class SkillResult:
     ok: bool
@@ -40,6 +49,7 @@ class SkillResult:
     data: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] | None = None
     elapsed_s: float = 0.0
+    images: tuple[ObservationImage, ...] = ()
 
     def __post_init__(self) -> None:
         if self.reason not in REASONS:

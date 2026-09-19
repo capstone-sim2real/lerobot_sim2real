@@ -952,10 +952,39 @@ class CalibrationClearanceConfig:
 
 
 @dataclass
+class PrimitiveConfig:
+    """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
+    target_max_age_s: float = 120.0
+    approach_clearance_mm: float = 60.0
+    lateral_clearance_mm: float = 40.0
+    alignment_tolerance_mm: float = 25.0
+    arrival_error_mm: float = 15.0
+    cartesian_step_mm: float = 10.0
+    contact_step_mm: float = 2.0
+    contact_max_descent_mm: float = 80.0
+    contact_timeout_s: float = 15.0
+    contact_backoff_mm: float = 2.0
+    wrist_roll_limit_deg: float = 90.0
+    image_max_width: int = 960
+    image_jpeg_quality: int = 80
+
+
+@dataclass
+class AgentCollectionConfig:
+    """Assumed recording quality gates; validate timing on hardware."""
+    root: str = "datasets/agent"
+    max_tick_gap_s: float = 0.1
+    max_mean_period_error: float = 0.1
+    idle_poll_s: float = 0.005
+
+
+@dataclass
 class AgentConfig:
     """LLM tool-calling agent (so101-agent). Unused by so101-run/so101-collect."""
 
     # anthropic | openai | gemini | fake
+    primitives: PrimitiveConfig = field(default_factory=PrimitiveConfig)
+    collection: AgentCollectionConfig = field(default_factory=AgentCollectionConfig)
     provider: str = "openai"
     # Used only for the configured default provider. An explicit --provider
     # selects exactly that provider so rehearsals and diagnostics stay clear.
@@ -970,13 +999,13 @@ class AgentConfig:
         }
     )
     max_tokens: int = 4096
-    # LLM round trips (each may carry several tool calls) per user message
-    max_tool_turns: int = 12
+    # LLM round trips, one primitive call per response, per user message
+    max_tool_turns: int = 50
     # oldest turns are dropped from the context beyond this many messages
     max_history_messages: int = 60
-    # run_task1/2 can take minutes; a skill that runs longer is reported as a fault
+    # Includes local dataset/video finalization; longer calls are reported as faults
     tool_timeout_s: float = 900.0
-    system_prompt_path: str = "src/configs/agent_system_prompt.md"
+    system_prompt_path: str = "src/configs/agent_primitives_prompt.md"
     host: str = "0.0.0.0"
     port: int = 8099
     # the browser loads the MJPEG straight from so101-camera
@@ -994,13 +1023,7 @@ class AgentConfig:
     place_clear_radius_mm: float = 55.0
     # table placements must lie at least this far outside the zone polygon
     table_zone_margin_mm: float = 30.0
-    enable_task3_tool: bool = False
     transcript_dir: str = "logs/agent"
-    # After STOP (or any robot fault): drop whatever is held, home, close the
-    # jaws. True runs that automatically; false leaves it to the [home]
-    # button. Automatic by default -- this arena's arm/blocks are too small
-    # to hurt anyone and the zone is not within students' reach.
-    stop_auto_home: bool = True
     # operator SSE may be gone this long before the lease is dropped
     lease_grace_s: float = 15.0
     # an IDLE operator with no input for this long loses the lease
@@ -1293,6 +1316,25 @@ def normalise_place_name(name: str) -> str:
 def validate_agent(cfg: AppConfig) -> None:
     """Agent settings. Never touches the filesystem: every CLI loads this."""
     agent = cfg.agent
+    if not agent.collection.root.strip():
+        raise ValueError("agent.collection.root must be set")
+    for name in ("max_tick_gap_s", "max_mean_period_error", "idle_poll_s"):
+        value = getattr(agent.collection, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.collection.{name} must be finite and positive")
+    primitive = agent.primitives
+    for name in ("target_max_age_s", "approach_clearance_mm", "lateral_clearance_mm",
+                 "alignment_tolerance_mm", "arrival_error_mm", "cartesian_step_mm",
+                 "contact_step_mm", "contact_max_descent_mm", "contact_timeout_s",
+                 "contact_backoff_mm", "wrist_roll_limit_deg"):
+        value = getattr(primitive, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.primitives.{name} must be finite and positive")
+    if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
+        raise ValueError("primitive approach clearance must cover lateral clearance")
+    if (type(primitive.image_jpeg_quality) is not int or type(primitive.image_max_width) is not int
+            or not 1 <= primitive.image_jpeg_quality <= 100 or primitive.image_max_width <= 0):
+        raise ValueError("invalid primitive image settings")
     if agent.provider not in AGENT_PROVIDERS:
         raise ValueError(f"agent.provider must be one of {AGENT_PROVIDERS}")
     if not str(agent.models.get(agent.provider, "")).strip():

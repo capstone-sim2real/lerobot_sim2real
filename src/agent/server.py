@@ -146,7 +146,7 @@ class EventHub:
 # ── wiring ───────────────────────────────────────────────────────────
 
 
-def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool):
+def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool, skills_builder=None):
     """Runs on the robot thread: open the session (and IK) there."""
 
     def factory():
@@ -180,7 +180,8 @@ def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool):
         else:
             session = ArmSession.open(cfg, prebuild_ik=True, **kwargs)
         check_jog_window(session.cfg, session.grasp_z_mm)
-        return Skills(session)
+        from session.primitives import PrimitiveSkills
+        return (skills_builder or PrimitiveSkills)(session)
 
     return factory
 

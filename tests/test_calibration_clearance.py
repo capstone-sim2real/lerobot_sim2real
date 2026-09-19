@@ -83,7 +83,7 @@ def test_hover_correction_dry_run_and_load_abort(tmp_path):
     current['elbow_flex']-=2.2
     sent=[]
     robot.read_joints=lambda:dict(current)
-    robot.send_joints=lambda q:sent.append(q)
+    robot.send_joints=lambda q:(sent.append(q) or dict(q))
     assert cal.calibration_correct_hover(dry_run=True).ok
     assert sent==[]
     count=[0]

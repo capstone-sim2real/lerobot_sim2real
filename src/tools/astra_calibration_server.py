@@ -67,14 +67,16 @@ WEB_MANUAL_TOOLS = frozenset({
 def configure_manual_tools(service, cfg):
     from dataclasses import replace
 
-    defs = definitions(cfg)
+    from agent.calibration_manual_tools import build_calibration_manual_tools
+    defs = definitions(cfg) + build_calibration_manual_tools(cfg)
+    primitive_names = frozenset(service.registry._tools)
     service.registry._tools.update({d.spec.name: d for d in defs})
-    allowed = WEB_MANUAL_TOOLS | frozenset(d.spec.name for d in defs)
+    allowed = primitive_names | WEB_MANUAL_TOOLS | frozenset(d.spec.name for d in defs)
     tools = {}
     for name, definition in service.registry._tools.items():
         if name not in allowed:
             continue
-        if name in WEB_MANUAL_TOOLS:
+        if name in WEB_MANUAL_TOOLS or name in primitive_names:
             run = definition.run
             def manual_run(skills, arguments, run=run):
                 # A jog/open/release invalidates the earlier visually checked
@@ -130,14 +132,13 @@ def main():
         raw_publish = publish
         publish = lambda event: raw_publish({**event, "emitted_monotonic_ns": time.monotonic_ns()})
         cancel=CancelToken()
-        factory=make_skills_factory(cfg,cancel,sim=False)
-        def skills_factory():
+        def build_calibration(session):
             from session.calibration_joint_limit import CalibrationJointLimitIO
             from session.cancel import CancellableRobotIO
-            session=factory().s
             assert isinstance(session.robot,CancellableRobotIO)
             session.robot._inner=CalibrationJointLimitIO(session.robot._inner,cfg.agent.calibration_clearance)
             return CalibrationSkills(session,output)
+        skills_factory=make_skills_factory(cfg,cancel,sim=False,skills_builder=build_calibration)
         service=AgentService(cfg,provider=build_provider(cfg.agent,provider="fake"),
                              skills_factory=skills_factory,cancel=cancel,publish=publish,
                              transcript_dir=str(output/"transcripts"))

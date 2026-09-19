@@ -126,6 +126,8 @@ class KeyboardJog:
             # Endpoints alone do not cover a curved Cartesian path from joint interpolation.
             slack = cfg.jog_max_ik_error_mm
             lo, hi = min(a[2], cfg.jog_min_z_mm-slack), max(a[2], cfg.jog_max_z_mm+slack)
+            if hasattr(skills, '_held_check') and (direction[0] or direction[1]):
+                lo = max(lo, session.grasp_z_mm + skills.limits.lateral_clearance_mm)
             for pose in interpolate(start, goal, min(1., session.cfg.motion.max_step_per_tick,
                                                     cfg.keyboard_joint_speed_deg_s*period)):
                 x,y,z = session.ik.forward_position_mm(pose)
@@ -160,6 +162,19 @@ class KeyboardJog:
                 # Look ahead far enough to include braking, not only the next tick.
                 stop_time = cfg.keyboard_speed_mm_s/cfg.keyboard_acceleration_mm_s2 + 2*cfg.keyboard_acceleration_mm_s2/cfg.keyboard_jerk_mm_s3
                 distance = min(cfg.keyboard_speed_mm_s*(cfg.keyboard_segment_s+stop_time)+2*cfg.keyboard_speed_mm_s*period, cfg.max_jog_mm)
+                # Primitive contact/held state must not be bypassed by keyboard playback.
+                if hasattr(skills, '_held_check'):
+                    xyz = session.arm_position_mm()
+                    lateral = bool(direction[0] or direction[1])
+                    clear_z = session.grasp_z_mm + skills.limits.lateral_clearance_mm
+                    if ((session.held is not None and direction[2] < 0)
+                            or (lateral and xyz[2] < clear_z)
+                            or (not skills._held_check() and (lateral or direction[2] < 0))):
+                        result = skills._fail('move_relative', 'Lift/verify grasp before keyboard motion')
+                        if path is not None and not ramp.stopped:travel(braking=True)
+                        break
+                    skills._contact = False
+                    skills._target = None
                 try:
                     result = skills.move_arm(*(v*distance for v in direction), _playback=playback)
                 except JogDirectionChanged:
