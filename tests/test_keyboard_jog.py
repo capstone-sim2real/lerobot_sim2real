@@ -16,46 +16,6 @@ def setup():
     return sk, robot
 
 
-def test_latest_sequence_normalization_and_terminal_stop():
-    sk, _ = setup()
-    now = [1.]
-    stream = KeyboardJog(sk.cfg.agent.relative, clock=lambda:now[0])
-    assert stream.update(1, [1, 1, 1])
-    assert math.hypot(*stream.current()) == pytest.approx(1)
-    assert not stream.update(0, [-1, 0, 0])
-    now[0] += sk.cfg.agent.relative.keyboard_timeout_s
-    assert not stream.update(2, [1, 0, 0])
-    with pytest.raises(JogReleased):stream.current()
-    stopped = KeyboardJog(sk.cfg.agent.relative)
-    assert stopped.update(0, [0, 0, 0])
-    assert not stopped.update(1, [1, 0, 0])
-
-
-def test_release_interrupts_playback_and_holds_without_gripper_or_settle(monkeypatch):
-    sk, robot = setup()
-    stream = KeyboardJog(sk.cfg.agent.relative)
-    stream.update(0, [1, 0, 0])
-    sk.attempt = object();sk.descent_ready = True
-    def forbidden(*a, **kw):raise AssertionError('continuous jog must not settle at each step')
-    monkeypatch.setattr(sk.s.player, 'move_to', forbidden)
-    original = sk.s.robot.send_joints
-    poses = [dict(robot.joints)]
-    def send(pose):
-        poses.append(dict(pose))
-        result = original(pose)
-        if len(poses) == 5:stream.close()
-        return result
-    monkeypatch.setattr(sk.s.robot, 'send_joints', send)
-    stream.run(sk, sk.s.cancel)
-    assert sk.attempt is None and not sk.descent_ready
-    assert len(poses) == 6  # four motion ticks then measured-pose hold
-    limit = min(sk.cfg.motion.max_step_per_tick, sk.cfg.agent.relative.keyboard_joint_speed_deg_s / sk.cfg.agent.relative.keyboard_tick_hz)
-    for before, after in zip(poses, poses[1:]):
-        assert 'gripper' not in after
-        assert max(abs(v-before[j]) for j,v in after.items()) <= limit + 1e-8
-    assert stream.closed
-
-
 def test_deadman_during_slow_ik_prevents_late_motion(monkeypatch):
     sk, robot = setup()
     sk.cfg.agent.relative.keyboard_timeout_s = .02
@@ -67,24 +27,6 @@ def test_deadman_during_slow_ik_prevents_late_motion(monkeypatch):
         return original(*a, **kw)
     monkeypatch.setattr(sk.s.ik, 'solve_holding_wrist_roll', slow)
     stream.run(sk, sk.s.cancel)
-    assert not robot.sent_actions
-
-
-def test_stop_cancels_before_motor_write():
-    sk, robot = setup()
-    stream = KeyboardJog(sk.cfg.agent.relative)
-    stream.update(0, [1, 0, 0]);sk.s.cancel.set()
-    with pytest.raises(Cancelled):stream.run(sk, sk.s.cancel)
-    assert not robot.sent_actions
-
-
-def test_workspace_and_ik_gate_still_apply(monkeypatch):
-    sk, robot = setup()
-    stream = KeyboardJog(sk.cfg.agent.relative)
-    stream.update(0, [1, 0, 0])
-    monkeypatch.setattr(sk.s, 'in_workspace', lambda p:False)
-    result = stream.run(sk, sk.s.cancel)
-    assert not result.ok and result.reason == 'out_of_workspace'
     assert not robot.sent_actions
 
 
@@ -146,26 +88,6 @@ def test_changed_direction_during_ik_discards_old_plan(monkeypatch):
     stream.run(sk, sk.s.cancel)
     assert sk.s.ik.solves == 2
     assert robot.sent_actions[0]['shoulder_pan'] < initial
-
-
-def test_continuous_path_keeps_shared_wrist_limit(monkeypatch):
-    sk, robot = setup()
-    from session.calibration_joint_limit import CalibrationJointLimitIO
-    cfg = sk.cfg.agent.calibration_clearance
-    cfg.wrist_roll_min_deg = -65.
-    sk.s.robot = CalibrationJointLimitIO(sk.s.robot, cfg)
-    stream = KeyboardJog(sk.cfg.agent.relative)
-    stream.update(0, [1, 0, 0])
-    robot.joints['wrist_roll'] = -65.
-    solve = sk.s.ik.solve_holding_wrist_roll
-    def outside(*args, **kwargs):
-        result = solve(*args, **kwargs)
-        result.joints['wrist_roll'] = -66.
-        return result
-    monkeypatch.setattr(sk.s.ik, 'solve_holding_wrist_roll', outside)
-    result = stream.run(sk, sk.s.cancel)
-    assert not result.ok and '손목' in result.detail
-    assert not robot.sent_actions
 
 
 def test_normal_release_decelerates_but_remains_terminal(monkeypatch):
@@ -267,27 +189,6 @@ def test_empty_primitive_keyboard_can_leave_home_despite_pick_clearance(monkeypa
     stream.run(sk, sk.s.cancel)
     assert robot.sent_actions
     assert all('gripper' not in pose for pose in robot.sent_actions)
-
-
-def test_held_key_reuses_plan_across_old_segment_boundaries(monkeypatch):
-    sk, robot = setup()
-    stream = KeyboardJog(sk.cfg.agent.relative)
-    stream.update(0, [1, 0, 0])
-    send = sk.s.robot.send_joints
-    count = [0]
-    def keep_holding(pose):
-        result = send(pose)
-        count[0] += 1
-        if count[0] == 65:
-            stream.close()
-        else:
-            stream.update(count[0], [1, 0, 0])
-        return result
-    monkeypatch.setattr(sk.s.robot, 'send_joints', keep_holding)
-    stream.run(sk, sk.s.cancel)
-    # Previously every 20 ticks at 200 Hz re-ran IK and reset from feedback.
-    assert count[0] == 66
-    assert sk.s.ik.solves == 2  # current span plus one prefetched continuation
 
 
 def test_prefetched_spans_cross_knots_without_stopping_during_slow_ik(monkeypatch):

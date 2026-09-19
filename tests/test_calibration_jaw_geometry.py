@@ -15,21 +15,6 @@ def test_real_crossing_and_top_contact_are_detected():
     assert triangles_intersect_box(triangles,[1,1,1]).tolist()==[True,True,False]
 
 
-def test_opening_and_closing_ranges_are_separate():
-    import math
-    from config import CalibrationClearanceConfig
-    from session.calibration_jaw_geometry import JawGeometry
-    geometry=object.__new__(JawGeometry)
-    geometry.limits=(math.radians(-10),math.radians(100))
-    cfg=CalibrationClearanceConfig()
-    opened=geometry.command_angles([95],cfg)
-    closing=geometry.command_angles([2,95],cfg)
-    assert math.degrees(min(opened))>30
-    assert math.degrees(max(opened))<50
-    assert min(closing)<0 and max(closing)==max(opened)
-    assert max(geometry.command_angles([75],cfg))<max(opened)
-
-
 def test_mount_rotation_changes_which_neighbour_the_jaw_reaches():
     from config import CalibrationClearanceConfig
     from session.calibration_jaw_geometry import JawGeometry

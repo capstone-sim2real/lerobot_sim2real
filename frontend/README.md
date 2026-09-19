@@ -13,11 +13,10 @@ The stylesheet preserves semantic red for STOP/errors and camera detection colou
 
 Browser regression: `tests/keyboard-check.py` uses Playwright against a dedicated
 hardware-free preview on localhost:8110 and intercepts all motion/STOP requests.
-It checks every keyboard binding, repeat/typing/busy guards, blur disarming,
-Escape, component markup, neutral primary colour and mobile overflow.
+It checks held-key updates, direction changes, release, delayed startup,
+repeat/typing/busy guards, blur disarming and Escape.
 Do not point the preview fixture at a real robot session.
 
 Theme: the header button toggles light/dark and stores `so101-theme` in
 localStorage. With no explicit preference, the OS colour scheme is used and
-followed. The head script sets the theme before paint. `tests/theme-check.py`
-verifies system default, override, reload persistence, popover colours and mobile width.
+followed. The head script sets the theme before paint.

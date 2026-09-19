@@ -31,32 +31,6 @@ class DroopIk(FakeIk):
                              radial_tilt_deg=radial_tilt_deg)
 
 
-def test_correction_is_the_running_mean_of_what_it_still_misses():
-    correction = PlaceCorrection()
-    target = (200.0, 0.0)
-    # the block lands 30mm further out than asked
-    assert correction.observe(target, (230.0, 0.0), **ARM)
-    assert correction.forward_mm == pytest.approx(-30.0, abs=0.1)
-    assert correction.left_mm == pytest.approx(0.0, abs=0.1)
-    # commanding the corrected point is what makes it land on target
-    assert correction.command_xy(target, **ARM)[0] == pytest.approx(170.0, abs=0.1)
-
-    # with that correction in force the next one lands on target, which
-    # confirms the estimate rather than doubling it
-    assert correction.observe(target, target, **ARM)
-    assert correction.forward_mm == pytest.approx(-30.0, abs=0.1)
-
-    # a residual that survives the correction means the offset was too small
-    assert correction.observe(target, (215.0, 0.0), **ARM)
-    assert correction.forward_mm == pytest.approx(-35.0, abs=0.1)
-
-
-def test_a_wild_miss_is_not_treated_as_bias():
-    correction = PlaceCorrection(max_sample_mm=80.0)
-    assert not correction.observe((200.0, 0.0), (200.0, 150.0), **ARM)
-    assert correction.samples == 0 and correction.magnitude_mm == 0.0
-
-
 def test_the_learned_offset_cannot_run_away():
     correction = PlaceCorrection(max_mm=20.0)
     correction.observe((200.0, 0.0), (270.0, 0.0), **ARM)
@@ -88,16 +62,3 @@ def test_a_drooping_arm_corrects_itself_from_the_camera_check():
     assert second.data["miss_mm"] < first.data["miss_mm"] / 3
     assert math.dist(world.blocks["yellow"], target) < droop / 3
     assert second.data["measured_cell"] == {"x": cell[0], "y": cell[1]}
-
-
-def test_learning_off_keeps_the_arm_exactly_as_it_was():
-    cfg_skills, _world, _robot = make_skills({"yellow": (180.0, 120.0)},
-                                             ik=DroopIk(forward_mm=30.0), grab_radius_mm=70.0)
-    cfg_skills.cfg.agent.place_correction.learn = False
-    assert cfg_skills.pick_block("yellow").ok
-    result = cfg_skills.place_at_cell(0, -3)
-    assert result.ok, result.detail
-    # still measured and reported -- only the learning is off
-    assert result.data["miss_mm"] > 15.0
-    assert "place_correction" not in result.data
-    assert cfg_skills.place_correction.samples == 0

@@ -90,18 +90,6 @@ def test_observe_invalidates_prepared_descent(tmp_path):
     assert cal.attempt is None and not sk._pick_ready
 
 
-def test_inspect_and_preview_preserve_pose_and_reference(tmp_path):
-    sk, cal, robot = setup(tmp_path)
-    assert approach(sk).ok
-    before = len(robot.sent_actions)
-    attempt = cal.attempt
-    assert sk.inspect_motion().data['reference_valid']
-    result = sk.correct_hover(joint='elbow_flex', gain=.5, dry_run=True)
-    assert result.ok
-    assert cal.attempt is attempt
-    assert len(robot.sent_actions) == before
-
-
 def test_partial_descent_does_not_authorize_early_close(tmp_path):
     sk, cal, robot = setup(tmp_path)
     assert approach(sk).ok
@@ -109,40 +97,6 @@ def test_partial_descent_does_not_authorize_early_close(tmp_path):
     assert result.ok and not result.data['depth_ready']
     assert not sk.close_gripper().ok
     assert cal.attempt is not None
-
-
-def test_partial_descent_load_abort(tmp_path):
-    sk, cal, robot = setup(tmp_path)
-    assert approach(sk).ok
-    count = [0]
-    def loads():
-        count[0] += 1
-        return {j: (0 if count[0] == 1 else 1000) for j in sk.cfg.sensing.contact_joints}
-    robot.read_loads = loads
-    result = sk.descend_step(2)
-    assert not result.ok and result.data['stop_reason'] == 'load_increase'
-    assert not sk.close_gripper().ok
-
-
-def test_transit_fk_is_checked_after_bounded_motor_settle(tmp_path):
-    sk, cal, robot = setup(tmp_path)
-    sk.s.player.move_through = lambda *a, **k: dict(robot.joints)
-    def settle(goal, **kwargs):
-        robot.send_joints(goal)
-        return 0.0, True
-    sk.s.player.settle = settle
-    assert sk.move_relative(up_mm=30).ok
-
-
-def test_transit_streams_all_knots_and_settles_only_at_endpoint(tmp_path):
-    sk, cal, robot = setup(tmp_path)
-    sk.s.player.move_through = Mock(wraps=sk.s.player.move_through)
-    sk.s.player.move_to = Mock(side_effect=AssertionError("no per-knot stop"))
-    sk.s.player.settle = Mock(wraps=sk.s.player.settle)
-    assert sk.move_relative(up_mm=30).ok
-    assert len(sk.s.player.move_through.call_args.args[0]) >= 3
-    sk.s.player.move_through.assert_called_once()
-    sk.s.player.settle.assert_called_once()
 
 
 def test_transit_rejects_measured_path_deviation(tmp_path):

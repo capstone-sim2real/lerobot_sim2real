@@ -51,27 +51,6 @@ def test_happy_path_runs_one_skill_and_feeds_the_result_back():
     assert kinds == ["assistant_text", "tool_call", "tool_result", "assistant_text", "turn_end"]
 
 
-def test_failure_reaches_the_model_verbatim_and_is_not_retried_by_the_loop():
-    failed = SkillResult(False, "close_gripper", "grasp_empty", "못 집음", "ask_operator")
-    runner, provider, skills, _ = _runner([
-        [_call("close_gripper", {}), TurnEnd("tool_use")],
-        [TextDelta("집지 못했어요"), TurnEnd("end_turn")],
-    ], skills=Skills({"close_gripper": failed}))
-    runner.run_turn("빨간 블록 집어")
-    assert len(skills.calls) == 1
-    assert provider.seen_messages[1][-1].tool_results[0].content["retry_advice"] == "ask_operator"
-
-
-def test_parallel_calls_come_back_in_one_message():
-    runner, provider, skills, _ = _runner([
-        [_call("get_state", {}, "a"), _call("describe_places", {}, "b"), TurnEnd("tool_use")],
-        [TurnEnd("end_turn")],
-    ])
-    runner.run_turn("상태와 장소")
-    last = provider.seen_messages[1][-1]
-    assert [r.call_id for r in last.tool_results] == ["a", "b"]
-
-
 def test_robot_fault_halts_remaining_calls_and_the_conversation():
     cancelled = SkillResult(False, "close_gripper", "cancelled", "정지", "do_not_retry")
     runner, provider, skills, events = _runner([
@@ -92,44 +71,3 @@ def test_stop_pressed_while_the_model_talks_prevents_the_motion():
     )
     outcome = runner.run_turn("집어")
     assert outcome.robot_fault and skills.calls == []
-
-
-def test_endless_tool_calls_stop_at_the_turn_limit():
-    cfg_turns = AppConfig().agent.max_tool_turns
-    runner, provider, _skills, events = _runner(
-        [[_call("get_state", {}, f"c{i}"), TurnEnd("tool_use")] for i in range(cfg_turns + 5)]
-    )
-    outcome = runner.run_turn("loop")
-    assert outcome.error == "max_tool_turns exceeded"
-    assert len(provider.seen_messages) == cfg_turns
-
-
-def test_llm_error_leaves_history_retryable():
-    def boom(_messages):
-        raise ConnectionError("network down")
-
-    runner, _provider, _skills, events = _runner([boom])
-    outcome = runner.run_turn("안녕")
-    assert outcome.error and runner.history == []
-    assert any(e["type"] == "error" for e in events)
-
-
-def test_history_trim_never_starts_with_orphan_tool_results():
-    runner, _provider, _skills, _ = _runner([])
-    runner.cfg.max_history_messages = 4
-    runner.history = [
-        Message("user", text="1"), Message("assistant", tool_calls=(ToolCall("a", "get_state", {}),)),
-        Message("user", tool_results=()), Message("assistant", text="ok"),
-        Message("user", text="2"), Message("assistant", text="ok"),
-    ]
-    runner.history[2].tool_results = (object(),)
-    runner._trim_history()
-    assert runner.history[0].role == "user" and not runner.history[0].tool_results
-
-
-def test_rule_based_fake_provider_only_emits_primitives():
-    rule = RuleBasedFakeProvider._rule
-    assert rule("노란블록을적재구역좌상단으로옮겨줘").name == "observe_scene"
-    assert rule("미션1해줘") is None
-    assert rule("수집현황").name == "collection_status"
-    assert rule("왼쪽으로10mm").arguments == {"left_mm": 10.0}

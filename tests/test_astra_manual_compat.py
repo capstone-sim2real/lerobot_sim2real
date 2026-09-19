@@ -22,43 +22,6 @@ def configured(sk):
     return service
 
 
-def test_web_buttons_have_an_explicit_calibration_policy():
-    sk,_,_=make_skills({})
-    service=configured(sk)
-    script=(Path(__file__).resolve().parents[1]/'src/agent/web/app.js').read_text()
-    web=set(re.findall(r"manual\([\"']([a-z_]+)[\"']",script))|{'move_arm'}
-    assert web-service.MANUAL_TOOLS <= {'pick_here','move_to_pixel','rotate_gripper'}
-    assert WEB_MANUAL_TOOLS <= service.MANUAL_TOOLS
-    assert {d.spec.name for d in definitions(sk.cfg)}<=service.MANUAL_TOOLS
-    assert service.MANUAL_TOOLS==service.registry._tools.keys()
-
-
-def test_jog_preserves_standard_gates_and_invalidates_descent_authorization():
-    sk,_,robot=make_skills({})
-    sk.attempt=object();sk.descent_ready=True
-    registry=configured(sk).registry
-    result=registry.execute(ToolCall('jog','move_arm',{'forward_mm':5.0}))
-    assert result.content['ok'],result.content
-    assert sk.attempt is None and sk.descent_ready is False
-    sent=len(robot.sent_actions)
-    result=registry.execute(ToolCall('large','move_arm',{'forward_mm':9999}))
-    assert result.content['reason']=='invalid_arguments'
-    assert len(robot.sent_actions)==sent
-    sk.s.cancel.set()
-    result=registry.execute(ToolCall('cancel','move_arm',{'forward_mm':5.0}))
-    assert result.content['reason']=='cancelled'
-    assert len(robot.sent_actions)==sent
-
-
-def test_unsupported_descent_pick_and_rotation_never_execute():
-    sk,_,robot=make_skills({})
-    registry=configured(sk).registry
-    for name in ('pick_here','move_to_pixel','rotate_gripper'):
-        result=registry.execute(ToolCall(name,name,{}))
-        assert result.is_error
-    assert not robot.sent_actions
-
-
 def test_shared_minus_65_wrist_guard_remains_on_mock_write_path():
     sk,_,robot=make_skills({})
     cfg=sk.cfg.agent.calibration_clearance

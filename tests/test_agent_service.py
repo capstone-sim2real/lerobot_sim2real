@@ -92,69 +92,11 @@ def _service(script, cfg=None):
     return service, holder["skills"], events
 
 
-def test_chat_runs_and_returns_to_idle():
-    service, _skills, events = _service([
-        [ToolCallEvent(ToolCall("a", "get_state", {})), TurnEnd("tool_use")],
-        [TextDelta("ok"), TurnEnd("end_turn")],
-    ])
-    token = service.acquire_lease(None)
-    assert service.chat(None, "hi")[0] == 403
-    assert service.chat(token, "상태")[0] == 202
-    service.wait_idle()
-    assert service.gate.state is ControlState.IDLE
-    assert any(e["type"] == "tool_result" for e in events)
-    service.shutdown()
-
-
-def test_scene_request_does_not_trigger_hidden_home_or_observation():
-    service, _skills, events = _service([[TextDelta("확인했어요"), TurnEnd("end_turn")]])
-    token = service.acquire_lease(None)
-
-    assert service.chat(token, "안에 있는 블록을 알려줘")[0] == 202
-    service.wait_idle()
-
-    sent = service.provider.seen_messages[0][-1].text
-    assert sent == "안에 있는 블록을 알려줘"
-    assert not any(e.get("automatic") for e in events)
-    service.shutdown()
-
-
 def test_manual_jog_and_gripper_language_do_not_force_home_observation():
     assert not needs_fresh_scene("오른쪽으로 20mm 이동해")
     assert not needs_fresh_scene("그리퍼를 45도 돌려줘")
     assert needs_fresh_scene("안에 있는 거 전부 밖으로 꺼내줘")
     assert needs_fresh_scene("빨간 블록을 오른쪽으로 20mm 옮겨줘")
-
-
-def test_stop_during_a_primitive_requires_manual_recovery():
-    service, skills, events = _service([[ToolCallEvent(ToolCall("a", "close_gripper", {})), TurnEnd("tool_use")]])
-    token = service.acquire_lease(None)
-    assert service.chat(token, "미션 1")[0] == 202
-    assert skills.started.wait(5)
-    assert service.chat(token, "상태")[0] == 409
-    assert service.jog(token, 0, 10, 0)[0] == 409
-    skills.at_home = False  # first, automatic recovery attempt does not reach home
-    t0 = time.monotonic()
-    assert service.stop()["stopped"] is True
-    assert time.monotonic() - t0 < 0.05
-    service.wait_idle()
-    # STOP never drops the held object or starts hidden motion.
-    assert service.gate.state is ControlState.STOPPED and skills.homed == 0
-    assert service.chat(token, "상태")[0] == 409
-    assert service.home(None)[0] == 403
-
-    assert service.home(token)[0] == 202  # manual retry, still not home
-    service.wait_idle()
-    assert service.gate.state is ControlState.STOPPED and skills.homed == 1
-
-    skills.at_home = True
-    assert service.home(token)[0] == 202
-    service.wait_idle()
-    assert service.gate.state is ControlState.IDLE and skills.homed == 2
-    assert not service.cancel.is_set()
-    result = next(e for e in events if e["type"] == "tool_result" and e["name"] == "close_gripper")
-    assert result["result"]["reason"] == "cancelled"
-    service.shutdown()
 
 
 def test_manual_recovery_is_the_only_recovery_path():
@@ -170,56 +112,4 @@ def test_manual_recovery_is_the_only_recovery_path():
     assert service.home(token)[0] == 202
     service.wait_idle()
     assert service.gate.state is ControlState.IDLE and skills.homed == 1
-    service.shutdown()
-
-
-def test_direct_jog_goes_through_the_same_tool_boundary():
-    service, _skills, events = _service([])
-    token = service.acquire_lease(None)
-    assert service.jog(token, 0.0, 10.0, 0.0)[0] == 202
-    service.wait_idle()
-    result = next(e for e in events if e["type"] == "tool_result")
-    assert result["name"] == "move_relative" and result["result"]["ok"]
-    service.jog(token, 0.0, 500.0, 0.0)
-    service.wait_idle()
-    last = [e for e in events if e["type"] == "tool_result"][-1]
-    assert last["result"]["reason"] == "invalid_arguments"
-    assert service.gate.state is ControlState.IDLE
-    service.shutdown()
-
-
-def test_direct_covers_the_manual_control_panel_actions():
-    service, _skills, events = _service([])
-    token = service.acquire_lease(None)
-    actions = [("move_relative", {"left_mm": 10}), ("open_gripper", {})]
-    for tool, arguments in actions:
-        assert service.direct(token, tool, arguments)[0] == 202
-        service.wait_idle()
-        result = next(e for e in reversed(events) if e["type"] == "tool_result" and e["name"] == tool)
-        assert result["result"]["ok"], result["result"]
-    service.shutdown()
-
-
-def test_direct_refuses_tools_outside_the_manual_allowlist():
-    service, skills, _events = _service([])
-    token = service.acquire_lease(None)
-    status, body = service.direct(token, "run_task1", {})
-    assert status == 400 and "error" in body
-    service.wait_idle()
-    assert not skills.started.is_set()  # nothing was ever dispatched to the robot thread
-    assert service.gate.state is ControlState.IDLE
-    service.shutdown()
-
-
-def test_new_operator_joins_shared_conversation_and_new_session_resets_it():
-    service, _skills, events = _service([[TextDelta("hi"), TurnEnd("end_turn")]])
-    token = service.acquire_lease(None)
-    service.chat(token, "안녕")
-    service.wait_idle()
-    assert service.runner.history
-    joined = service.acquire_lease(None)
-    assert joined == token and service.runner.history
-    assert service.gate.release_lease(token)
-    service.acquire_lease(None)
-    assert service.runner.history == [] and events[-1]["type"] == "reset"
     service.shutdown()

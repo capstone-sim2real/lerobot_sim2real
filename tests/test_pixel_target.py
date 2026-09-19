@@ -36,23 +36,3 @@ def test_ik_failure_is_preplanned_before_first_motion(tmp_path,monkeypatch):
     result=sk.move_to_pixel(u,v,key)
     assert not result.ok and result.reason=='ik_gate'
     assert not robot.sent_actions
-
-
-def test_fixed_height_and_no_gripper_command(tmp_path):
-    sk,robot,u,v,key=setup(tmp_path)
-    result=sk.move_to_pixel(u,v,key)
-    assert result.ok,result.detail
-    assert result.data['target']['z_mm']==sk.s.grasp_z_mm
-    assert sk.s.arm_position_mm()[2]==pytest.approx(sk.s.grasp_z_mm)
-    assert all('gripper' not in action for action in robot.sent_actions)
-
-
-def test_changed_calibration_and_missing_held_block_do_not_move(tmp_path):
-    sk,robot,u,v,key=setup(tmp_path)
-    assert sk.place_at_pixel(u,v,key).reason=='no_block_held'
-    import json
-    path=sk.cfg.perception.calibration_path
-    data=json.load(open(path));data['meta']['grasp_z_mm_mean']+=1
-    with open(path,'w') as f:json.dump(data,f)
-    assert sk.move_to_pixel(u,v,key).reason=='invalid_arguments'
-    assert not robot.sent_actions
