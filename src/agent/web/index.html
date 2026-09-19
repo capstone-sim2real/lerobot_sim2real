@@ -1,32 +1,40 @@
-<!doctype html>
-<html lang="ko">
-<head>
+<!DOCTYPE html><html lang="ko"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SO-101 로봇팔 에이전트</title>
-
+<script>
+(() => {
+  let mode;
+  try {mode=localStorage.getItem('so101-theme');} catch (_) {}
+  const dark=mode==='dark'||(mode!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark',dark);
+  document.documentElement.dataset.theme=dark?'dark':'light';
+  document.documentElement.style.colorScheme=dark?'dark':'light';
+})();
+</script>
 <link rel="stylesheet" href="/app.css?v=__APP_CSS_VERSION__">
-</head>
+<link rel="stylesheet" href="/shadcn.css?v=__SHADCN_CSS_VERSION__"></head>
 <body>
 <header class="topbar">
   <div class="brand">SO-101 로봇팔 에이전트</div>
   <div class="status">
-    <span id="state-badge" class="badge badge-idle">연결 중…</span>
-    <span id="camera-badge" class="badge badge-muted">카메라 ?</span>
-    <span id="model-badge" class="badge badge-muted"></span>
+    <span id="state-badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;>svg]:pointer-events-none [&amp;>svg]:size-3 bg-secondary text-secondary-foreground [a&amp;]:hover:bg-secondary/90 badge badge-idle" data-slot="badge" data-variant="secondary">연결 중…</span>
+    <span id="camera-badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;>svg]:pointer-events-none [&amp;>svg]:size-3 bg-secondary text-secondary-foreground [a&amp;]:hover:bg-secondary/90 badge badge-muted" data-slot="badge" data-variant="secondary">카메라 ?</span>
+    <span id="model-badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;>svg]:pointer-events-none [&amp;>svg]:size-3 bg-secondary text-secondary-foreground [a&amp;]:hover:bg-secondary/90 badge badge-muted" data-slot="badge" data-variant="secondary"></span>
   </div>
-<button id="stop" class="stop" title="비상정지 (Esc)">STOP <small>Esc</small></button></header>
+<button type="button" id="theme-toggle" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" aria-label="다크 모드 전환" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">다크 모드</button>
+<button id="stop" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 h-9 px-4 py-2 has-[>svg]:px-3 stop" title="비상정지 (Esc)" data-slot="button" data-variant="destructive" data-size="default">STOP <small>Esc</small></button></header>
 
-<div id="stopped-banner" class="banner" hidden>
+<div id="stopped-banner" class="banner" hidden="">
   <div>
     <strong>비상정지됨</strong>
     <span id="stopped-message">그리퍼를 열고 home 복귀를 시도하는 중입니다…</span>
   </div>
-  <button id="home-button" class="btn btn-primary">다시 시도(그리퍼 열기+home)</button>
+  <button id="home-button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 has-[>svg]:px-3 btn btn-primary" data-slot="button" data-variant="default" data-size="default">다시 시도(그리퍼 열기+home)</button>
 </div>
 
 <main class="layout">
-  <section class="panel camera-panel">
+  <section class="flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm panel camera-panel" data-slot="card">
     <div class="camera-heading">
       <label for="camera-select">카메라</label>
       <select id="camera-select" aria-label="카메라 선택"><option value="shoulder">헤드캠</option><option value="wrist">손목캠</option></select>
@@ -36,7 +44,7 @@
       <canvas id="perception-overlay" aria-label="블록 검출 오버레이"></canvas>
       <svg id="overlay" preserveAspectRatio="none"></svg>
       <svg id="pixel-target-overlay" preserveAspectRatio="none" aria-label="선택한 픽셀 위치"></svg>
-      <div id="camera-missing" class="camera-missing" hidden>카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
+      <div id="camera-missing" class="camera-missing" hidden="">카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
     </div>
     <div class="camera-tools" id="camera-tools">
       <span>헤드캠 픽셀 선택</span>
@@ -44,15 +52,15 @@
     </div>
     <section class="perception-controls" aria-label="카메라 표시 설정">
       <div class="layer-buttons" role="group" aria-label="표시 항목">
-        <button type="button" class="layer-button" data-camera-layer="master" aria-pressed="false">전체 표시</button>
-        <button type="button" class="layer-button" data-camera-layer="places" aria-pressed="false">작업 범위</button>
-        <button type="button" class="layer-button" data-camera-layer="boxes" aria-pressed="false">블록 윤곽</button>
-        <button type="button" class="layer-button" data-camera-layer="centers" aria-pressed="false">중심점</button>
-        <button type="button" class="layer-button" data-camera-layer="axes" aria-pressed="false">파지 방향</button>
-        <button type="button" class="layer-button" data-camera-layer="candidates" aria-pressed="false">보정·재시도</button>
-        <button type="button" class="layer-button" data-camera-layer="rejects" aria-pressed="false">제외 검출</button>
-        <button type="button" class="layer-button" data-camera-layer="fk" aria-pressed="false">FK 기준점</button>
-        <button type="button" class="layer-button" data-camera-layer="details" aria-pressed="false">상세 정보</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="master" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">전체 표시</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="places" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">작업 범위</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="boxes" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">블록 윤곽</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="centers" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">중심점</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="axes" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">파지 방향</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="candidates" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">보정·재시도</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="rejects" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">제외 검출</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="fk" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">FK 기준점</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 layer-button" data-camera-layer="details" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">상세 정보</button>
       </div>
       <label class="color-filter">검출 색상
         <select id="detection-color">
@@ -62,20 +70,20 @@
         </select>
       </label>
       <a id="camera-tools-link" class="camera-tools-link" target="_blank" rel="noopener noreferrer">카메라 관리·캘리브레이션 ↗</a>
-      <p id="candidate-hint" class="hint" hidden>보정·재시도 후보는 카메라 분석 기준입니다. 현재 실행 중인 명령의 목표와 다를 수 있습니다.</p>
-      <p id="fk-status" class="hint" hidden></p>
-      <div id="detection-details" hidden><div id="detection-list" aria-live="off"></div></div>
+      <p id="candidate-hint" class="hint" hidden="">보정·재시도 후보는 카메라 분석 기준입니다. 현재 실행 중인 명령의 목표와 다를 수 있습니다.</p>
+      <p id="fk-status" class="hint" hidden=""></p>
+      <div id="detection-details" hidden=""><div id="detection-list" aria-live="off"></div></div>
     </section>
   </section>
 
-  <aside class="panel command-panel">
+  <aside class="flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm panel command-panel" data-slot="card">
     <div class="workspace-tabs" role="tablist" aria-label="명령 방식">
-      <button role="tab" aria-selected="true" aria-controls="direct-controls" id="direct-tab" data-command-tab="direct-controls">직접 조작</button>
-      <button role="tab" aria-selected="false" aria-controls="command-chat" id="chat-tab" data-command-tab="command-chat">LLM 대화</button>
+      <button role="tab" aria-selected="true" aria-controls="direct-controls" id="direct-tab" data-command-tab="direct-controls" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">직접 조작</button>
+      <button role="tab" aria-selected="false" aria-controls="command-chat" id="chat-tab" data-command-tab="command-chat" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">LLM 대화</button>
     </div>
     <div id="direct-controls" role="tabpanel" aria-labelledby="direct-tab">
       <div class="keyboard-control">
-        <div class="keyboard-heading"><strong>키보드 조작</strong><button type="button" class="btn" id="keyboard-toggle" aria-pressed="false">키보드 켜기</button></div>
+        <div class="keyboard-heading"><strong>키보드 조작</strong><button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="keyboard-toggle" aria-pressed="false" data-slot="button" data-variant="outline" data-size="default">키보드 켜기</button></div>
         <p id="keyboard-status" role="status">꺼짐 · 버튼을 눌러 활성화</p>
         <details><summary>단축키 보기</summary><div class="keyboard-legend">
           <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 앞·왼쪽·뒤·오른쪽</span>
@@ -89,94 +97,95 @@
         <strong>선택 위치</strong>
         <p id="pixel-target-status">헤드캠 영상에서 목표점을 클릭하세요. 높이는 블록 1개 윗면으로 고정됩니다.</p>
         <div class="gripper-row">
-          <button type="button" class="btn" id="move-pixel" disabled>선택 위치로 이동</button>
-          <button type="button" class="btn" id="place-pixel" disabled>선택 위치에 놓기</button>
+          <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="move-pixel" disabled="" data-slot="button" data-variant="outline" data-size="default">선택 위치로 이동</button>
+          <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="place-pixel" disabled="" data-slot="button" data-variant="outline" data-size="default">선택 위치에 놓기</button>
         </div>
-        <button type="button" class="link" id="pixel-to-chat" disabled>선택 위치를 LLM에 전달</button>
+        <button type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 h-9 px-4 py-2 has-[>svg]:px-3 link" id="pixel-to-chat" disabled="" data-slot="button" data-variant="ghost" data-size="default">선택 위치를 LLM에 전달</button>
       </div>    <div class="jog">
       <div class="jog-title">팔 직접 움직이기</div>
       <div class="jog-grid">
         <span></span>
-        <button class="btn jog-btn" data-jog="forward">앞 ▲<small>멀리</small></button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="forward" data-slot="button" data-variant="outline" data-size="default">앞 ▲<small>멀리</small></button>
         <span></span>
-        <button class="btn jog-btn" data-jog="left">◀ 왼쪽</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="left" data-slot="button" data-variant="outline" data-size="default">◀ 왼쪽</button>
         <select id="jog-step" aria-label="이동 거리">
           <option value="5">5mm</option>
-          <option value="10" selected>10mm</option>
+          <option value="10" selected="">10mm</option>
           <option value="20">20mm</option>
         </select>
-        <button class="btn jog-btn" data-jog="right">오른쪽 ▶</button>
-        <button class="btn jog-btn" data-jog="up">높이 ▲</button>
-        <button class="btn jog-btn" data-jog="back">뒤 ▼<small>가까이</small></button>
-        <button class="btn jog-btn" data-jog="down">높이 ▼</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="right" data-slot="button" data-variant="outline" data-size="default">오른쪽 ▶</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="up" data-slot="button" data-variant="outline" data-size="default">높이 ▲</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="back" data-slot="button" data-variant="outline" data-size="default">뒤 ▼<small>가까이</small></button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn jog-btn" data-jog="down" data-slot="button" data-variant="outline" data-size="default">높이 ▼</button>
       </div>
-      <div class="cell-row" hidden>
+      <div class="cell-row" hidden="">
         <label for="cell-x">칸</label>
-        <input id="cell-x" type="number" step="1" inputmode="numeric" aria-label="칸 x (화면 오른쪽 +)" placeholder="x">
-        <input id="cell-y" type="number" step="1" inputmode="numeric" aria-label="칸 y (로봇에서 먼 쪽 +)" placeholder="y">
-        <button id="go-cell" class="btn">이 칸 위로 이동</button>
+        <input id="cell-x" type="number" step="1" inputmode="numeric" aria-label="칸 x (화면 오른쪽 +)" placeholder="x" data-slot="input" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40">
+        <input id="cell-y" type="number" step="1" inputmode="numeric" aria-label="칸 y (로봇에서 먼 쪽 +)" placeholder="y" data-slot="input" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40">
+        <button id="go-cell" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" data-slot="button" data-variant="outline" data-size="default">이 칸 위로 이동</button>
       </div>
-      <button id="manual-home" class="btn manual-home-btn">home으로 복귀</button>
+      <button id="manual-home" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn manual-home-btn" data-slot="button" data-variant="outline" data-size="default">home으로 복귀</button>
     </div>
     <div class="gripper">
       <div class="jog-title">그리퍼</div>
       <div class="gripper-row">
-        <button class="btn" id="roll-ccw">↺ 돌리기</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="roll-ccw" data-slot="button" data-variant="outline" data-size="default">↺ 돌리기</button>
         <select id="roll-step" aria-label="회전 각도">
           <option value="15">15°</option>
-          <option value="45" selected>45°</option>
+          <option value="45" selected="">45°</option>
           <option value="90">90°</option>
         </select>
-        <button class="btn" id="roll-cw">돌리기 ↻</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="roll-cw" data-slot="button" data-variant="outline" data-size="default">돌리기 ↻</button>
       </div>
       <div class="gripper-row">
-        <button class="btn btn-primary" id="pick-here">여기서 집기</button>
-        <button class="btn" id="place-here">여기 내려놓기</button>
-        <button class="btn" id="open-gripper">그리퍼 열기</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 has-[>svg]:px-3 btn btn-primary" id="pick-here" data-slot="button" data-variant="default" data-size="default">여기서 집기</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="place-here" data-slot="button" data-variant="outline" data-size="default">여기 내려놓기</button>
+        <button class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" id="open-gripper" data-slot="button" data-variant="outline" data-size="default">그리퍼 열기</button>
       </div>
     </div>
-</div>  <section class="chat-panel" id="command-chat" hidden>
+</div>  <section class="chat-panel" id="command-chat" hidden="">
     <div id="chat" class="chat" aria-live="polite"></div>
     <form id="composer" class="composer">
-      <button type="button" id="mic" class="btn btn-mic" title="음성 입력" aria-label="음성 입력" hidden>🎤</button>
-      <input id="input" autocomplete="off" placeholder="예: 노란 블록을 적재 구역 좌상단으로 옮겨줘">
-      <button type="submit" id="send" class="btn btn-primary">보내기</button>
+      <button type="button" id="mic" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn btn-mic" title="음성 입력" aria-label="음성 입력" hidden="" data-slot="button" data-variant="outline" data-size="default">🎤</button>
+      <input id="input" autocomplete="off" placeholder="예: 노란 블록을 적재 구역 좌상단으로 옮겨줘" data-slot="input" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40">
+      <button type="submit" id="send" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2 has-[>svg]:px-3 btn btn-primary" data-slot="button" data-variant="default" data-size="default">보내기</button>
     </form>
     <div class="composer-options">
-      <div class="voice-option" hidden>
-        <label><input type="checkbox" id="voice-autosend" checked> 음성 인식 끝나면 자동 전송</label>
+      <div class="voice-option" hidden="">
+        <label><input type="checkbox" id="voice-autosend" checked=""> 음성 인식 끝나면 자동 전송</label>
         <span id="voice-status" role="status" aria-live="polite">🎤 준비</span>
       </div>
-      <button type="button" id="reset" class="link">대화 초기화</button>
+      <button type="button" id="reset" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 h-9 px-4 py-2 has-[>svg]:px-3 link" data-slot="button" data-variant="ghost" data-size="default">대화 초기화</button>
     </div>
   </section></aside>
-  <section class="panel diagnostics-panel">
+  <section class="flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm panel diagnostics-panel" data-slot="card">
     <div id="fk-summary" class="fk-summary">FK 측정 대기</div>
     <div class="workspace-tabs diagnostic-tabs" role="tablist" aria-label="진단 정보">
-<button role="tab" aria-selected="true" data-diagnostic-tab="joints">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history">실행 기록</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open>
+<button role="tab" aria-selected="true" data-diagnostic-tab="joints" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history" data-slot="button" data-variant="outline" data-size="default" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3">실행 기록</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open="">
       <summary>로봇 상태 · 모터 / FK / 보정</summary>
       <p id="telemetry-status" role="status">측정 대기</p>
       <div id="telemetry-body"></div>
     </details>
 
-    <div id="diagnostic-detections" hidden></div>
-    <div id="diagnostic-history" hidden><p class="hint">실행 기록이 없습니다.</p></div>
+    <div id="diagnostic-detections" hidden=""></div>
+    <div id="diagnostic-history" hidden=""><p class="hint">실행 기록이 없습니다.</p></div>
   </section>
 </main>
 
 
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<div id="lock" class="lock" hidden>
+<div id="lock" class="lock" hidden="">
   <div class="lock-card">
     <h2>제어 서버에 다시 연결하는 중입니다</h2>
     <p>연결이 복구되면 모든 원격 사용자가 같은 제어 화면을 공유합니다. 비상정지 버튼은 계속 사용할 수 있습니다.</p>
-    <button id="lock-retry" class="btn">다시 시도</button>
+    <button id="lock-retry" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*='size-'])]:size-4 border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-9 px-4 py-2 has-[>svg]:px-3 btn" data-slot="button" data-variant="outline" data-size="default">다시 시도</button>
   </div>
 </div>
 
 <script src="/overlay-renderer.js?v=__RENDERER_VERSION__"></script>
 <script src="/camera-overlay.js?v=__OVERLAY_JS_VERSION__"></script>
 <script src="/app.js?v=__APP_JS_VERSION__"></script>
-</body>
-</html>
+
+
+</body></html>

@@ -319,3 +319,8 @@ TCP Z는 다른 값이다. 임의로 Z=20mm를 명령하지 않는다. 보정 ID
 이동 거리·회전 각도는 화면의 설정값을 사용한다. 입력창/선택상자에 포커스를
 두거나 LLM 탭, 다른 창으로 이동하면 키보드 조작이 해제된다. 실행 중·권한 없음·
 직전 명령 요청 대기 중에는 새 직접 조작 명령을 보내지 않는다.
+
+UI는 shadcn/ui Button·Card·Badge·Input의 정적 React 렌더 결과와 Tailwind CSS를
+사용한다. `frontend/index.template.html`과 `frontend/theme.css`를 수정한 뒤
+`cd frontend && npm ci && npm run build`로 HTML/CSS를 생성한다. 빌드된 자산은
+저장소에 포함되므로 로봇 서버 실행에는 Node나 외부 CDN이 필요 없다.

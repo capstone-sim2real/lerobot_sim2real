@@ -813,3 +813,28 @@ pollHealth();
   document.getElementById('chat-tab').addEventListener('click',()=>setArmed(false));
   setArmed(false);
 })();
+
+
+// Theme preference is local to the browser and never changes robot state.
+(() => {
+  const key='so101-theme',root=document.documentElement;
+  const button=document.getElementById('theme-toggle');
+  const media=matchMedia('(prefers-color-scheme: dark)');
+  function saved() {try{return localStorage.getItem(key);}catch(_){return null;}}
+  function apply(mode) {
+    const dark=mode==='dark'||(mode!=='light'&&media.matches);
+    root.classList.toggle('dark',dark);root.dataset.theme=dark?'dark':'light';
+    root.style.colorScheme=dark?'dark':'light';
+    button.textContent=dark?'라이트 모드':'다크 모드';
+    button.setAttribute('aria-label',dark?'라이트 모드로 전환':'다크 모드로 전환');
+    button.setAttribute('aria-pressed',String(dark));
+  }
+  button.addEventListener('click',()=>{
+    const mode=root.dataset.theme==='dark'?'light':'dark';
+    try {localStorage.setItem(key,mode);}catch(_){}
+    apply(mode);
+  });
+  media.addEventListener('change',()=>{if(!['light','dark'].includes(saved()))apply(null);});
+  window.addEventListener('storage',event=>{if(event.key===key||event.key===null)apply(saved());});
+  apply(saved());
+})();
