@@ -8,6 +8,8 @@ PICK/VERIFY/TRANSPORT 흐름에 적층 PLACE 전략만 교체하는 목표 구�
 과거 ACT/SmolVLA 실험 문서는 CV+IK로 피벗한 근거를 보존하는 기록입니다. 현재
 실행법은 이 README와 [현재 아키텍처](docs/architecture.md),
 [CV+IK 가이드](docs/guide/SO101_CV_IK_파지운반.md)를 기준으로 합니다.
+자연어 조작이 필요할 때는 같은 CV+IK·안전 게이트를 재사용하는 별도
+`so101-agent` 웹 인터페이스를 사용합니다.
 
 LeRobot은 `third_party/lerobot` submodule로 고정하며, 프로젝트 루트의 단일 `uv` 환경에서 함께 실행합니다.
 
@@ -74,6 +76,9 @@ so101-camera
 기본값은 `0.0.0.0:8090`이며 비전 오버레이도 함께 활성화됩니다. 오버레이를
 완전히 끄려면 `so101-camera --no-overlay`를 사용합니다. 화면의 오버레이는
 원본 MJPEG 위에서 브라우저가 합성하므로 영상 스트림을 느리게 만들지 않습니다.
+`so101-run`, `so101-collect`, `so101-agent`는 카메라 health check에 응답이 없으면
+카메라 서버를 자동으로 시작하므로 보통 `so101-camera`를 따로 실행할 필요가 없습니다.
+이미 실행 중인 서버가 있으면 그대로 재사용하며 카메라 장치는 한 프로세스만 소유합니다.
 
 에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 직전 비교 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
 
@@ -83,8 +88,7 @@ so101-camera \
   --save-on-change --change-threshold 8 --max-save-interval-s 10
 ```
 
-블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행
-(카메라 서버를 먼저 띄워둔 채로):
+블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행:
 
 ```bash
 so101-run --task 1 --flow pick_lift_lower --color green
@@ -95,9 +99,22 @@ so101-run --task 1 --flow pick_lift_lower --color green
 ```bash
 so101-zone-calibrate                         # preview only
 so101-zone-calibrate --write                 # zone_polygon_mm 저장
+uv run python -m tools.calibrate_board_grid  # 체스판 격자 preview
+uv run python -m tools.calibrate_board_grid --write  # board_grid 저장
 so101-run --task 1 --dry-run                 # 모터 연결 없이 슬롯/IK 확인
 so101-run --task 1                           # 외부 블록이 5초간 없을 때까지 수집
 ```
+
+`board_grid`는 에이전트가 부채꼴 안의 체스판 칸을 정수 좌표 `(x, y)`로 지칭할 때
+씁니다. 축은 학생이 보는 화면 기준입니다: `x+`는 화면 오른쪽, `y+`는 로봇에서
+멀어지는 쪽이며 `(0, 0)`은 부채꼴 아래-가운데 기준 칸이라 음수 좌표가 정상입니다.
+측정값이 없으면 로봇 축에 정렬한 25 mm 가상 격자로 동작하지만
+`so101-agent --dry-run`이 경고하므로, 카메라를 다시 장착했거나 보드를 옮긴 뒤에는
+위 명령으로 다시 측정합니다. 적합 RMS가 한 칸의 10%를 넘으면 도구가 저장을 거부합니다.
+
+오버레이 전환은 **에이전트 화면**(`so101-agent`)에 있습니다. 영상 아래 `부채꼴 | 격자`
+단추로 한 번에 한 층만 띄우며 기본값은 `부채꼴`(이름 붙은 15개 점)입니다. 카메라
+서버 페이지는 종전대로 주황 부채꼴 경계와 검출 결과만 그립니다.
 
 Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인 부분임. PLACE 횟수나
 색상 개수로 종료하지 않고, 홈 자세에서 fresh frame 기준 외부 검출이 5초 동안
@@ -116,7 +133,6 @@ Task 1의 수집 루프를 그대로 돌리면서 성공한 사이클 하나를 
 
 ```bash
 uv pip install --python .venv/bin/python "datasets>=4.7.0,<5.0.0" "av>=15.0.0,<16.0.0"
-so101-camera                                 # 손목캠도 쓰면 --wrist-device /dev/videoN
 so101-collect --dry-run                      # 카메라·슬롯·features 확인, 팔은 정지
 so101-collect                                # Ctrl-C 로 종료
 # 동일한 Task 3 진입점 별칭
@@ -129,6 +145,45 @@ so101-run --task 3
 계속 수집합니다. Ctrl-C는 미완 에피소드만 버리고 나머지는 보존합니다.
 
 자세한 내용은 [Task 3 데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md).
+
+### LLM 에이전트 — 자연어로 조작 (`so101-agent`)
+
+기존 Task 1/2/3 명령은 그대로 두고, 자연어 요청을 LLM 툴 콜링으로 실행하는 웹
+채팅 서버를 따로 띄웁니다. `so101-run`/`so101-collect`와 **동시에 실행하지 않습니다**
+(로봇 버스 락으로 막힘).
+
+```bash
+# 최초 1회: 의존성 (uv sync 금지 — JetPack torch 휠 보호)
+uv pip install --python .venv/bin/python "fastapi>=0.110" "uvicorn>=0.29" \
+  "openai>=1.60" "google-genai>=1.0"
+uv pip install --python .venv/bin/python -e . --no-deps                       # so101-agent 스크립트 등록
+
+cp .env.example .env && vi .env            # OPENAI_API_KEY와 GEMINI_API_KEY 입력
+
+so101-agent --dry-run                      # 칸·부채꼴 영역·체스판 격자 IK, 조그 높이, API 키, 카메라 확인 (팔 정지)
+so101-agent --sim --provider fake          # 하드웨어·API 키 없이 UI와 툴 흐름 리허설
+
+so101-agent                                # 카메라 자동 시작, 기본 OpenAI / Gemini 폴백
+so101-agent --provider gemini              # 명시하면 Gemini만 사용(폴백 없음)
+```
+
+예: "노란 블록을 적재 구역 좌상단으로 옮겨줘", "초록 블록 다시 밖으로 꺼내줘",
+"5mm만 더 멀리 집어줘", "왼쪽으로 가줘" → "여기 내려놔", "그 블록 20mm만 더 왼쪽으로",
+"파란 블록을 (3, 4)로 옮겨줘", "미션 1 해줘". 화면에서 칸을 누르면 입력창에
+`격자 (3, 4)`가 들어가고, 수동 패널에 x·y를 직접 넣으면 LLM 없이 그 칸 위로 갑니다.
+여러 브라우저가 같은 세션에 참여할 수 있고, 로봇 명령은 한 번에 하나만
+실행됩니다. 명령 하나가 끝날 때까지 입력 잠금, STOP을 누르면
+그리퍼를 열고(들고 있던 블록은 놓고) home 복귀 후 그리퍼를 닫는 것까지 자동으로
+진행되며 그게 확인돼야 다시 입력할 수 있습니다.
+
+놓기 정확도는 캘리브레이션이 아니라 릴리즈 동작이 정합니다. `release_at`은 관절이
+명령에서 3° 안에 들면 그리퍼를 여는데 이 장비 실측으로 3°는 283 mm 리치에서 약
+29 mm이고, 블록을 든 상태의 처짐이 더해집니다. 그래서 배치할 때마다 이미 하던 확인
+관찰로 (명령, 실제) 차이를 재서 다음 명령을 보정합니다(`agent.place_correction`).
+결과에 `miss_mm`과 실제로 놓인 칸이 함께 나오고, 세션에서 수렴한 값을 설정에 적어
+두면 다음 세션은 첫 배치부터 그 값으로 시작합니다.
+
+자세한 내용은 [LLM 에이전트 가이드](docs/guide/SO101_LLM_에이전트.md).
 
 ## Repository Layout
 
@@ -148,6 +203,8 @@ so101-run --task 3
 │   ├── fsm/                   Task 흐름과 상태 구현
 │   ├── policy/                보존된 optional ACT PICK 클라이언트
 │   ├── runners/               so101-run 조립·실행
+│   ├── session/               한 번 연결된 팔 세션, 취소·버스 락, 에이전트 스킬
+│   ├── agent/                 so101-agent: LLM 툴·어댑터·대화 루프·웹 UI
 │   └── tools/                 캘리브레이션·진단·세션 CLI
 ├── third_party/               SO-101 자산·LeRobot submodule
 └── docker/                    보존된 ACT policy-server 제출 경로
@@ -163,6 +220,7 @@ so101-run --task 3
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
 - [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
+- [SO-101 LLM 툴 콜링 에이전트 운영 가이드](docs/guide/SO101_LLM_에이전트.md)
 - [Task 3 ACT 데이터셋 자동 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)
 - [캘리브레이션 자료 위치](docs/calibration/README.md)
 - [정량 평가 기록](docs/eval/README.md)

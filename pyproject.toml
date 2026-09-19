@@ -28,10 +28,28 @@ collect = [
     "datasets>=4.7.0,<5.0.0",
     "av>=15.0.0,<16.0.0",
 ]
+# LLM tool-calling agent (so101-agent). Same rule as `collect`: install with
+# `uv pip install` (see README), never `uv sync --extra`, so the JetPack torch
+# wheel is left alone. `agent` itself needs no LLM SDK; install the SDK extras
+# for both agent.provider and agent.fallback_provider (configs/default.yaml).
+agent = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+agent-anthropic = [
+    "anthropic>=0.40",
+]
+agent-openai = [
+    "openai>=1.60",
+]
+agent-gemini = [
+    "google-genai>=1.0",
+]
 
 [project.scripts]
 so101-run = "runners.run_task:main"
 so101-collect = "runners.run_task3:main"
+so101-agent = "agent.server:main"
 so101-camera = "camera.server:main"
 so101-detect = "tools.view_detect:main"
 so101-calibrate = "tools.calibrate_homography:main"

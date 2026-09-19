@@ -86,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     ]
     candidate = PlaneCalibration(
         H=calib.H.copy(), image_size=calib.image_size, square_mm=calib.square_mm,
-        base_xy_mm=calib.base_xy_mm, zone_polygon_mm=polygon_mm, meta=dict(calib.meta),
+        base_xy_mm=calib.base_xy_mm, zone_polygon_mm=polygon_mm,
+        board_grid=calib.board_grid, meta=dict(calib.meta),
     )
     slots = zone_slot_centres(candidate, cfg.task1.slot_uv)
     preview = Path(args.preview)

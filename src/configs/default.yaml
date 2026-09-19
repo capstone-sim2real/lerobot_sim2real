@@ -388,3 +388,165 @@ session_tools:
   startup_ramp_s: 0.0
   expected_motor_model: 777
   telemetry_tail_bytes: 16384
+
+# LLM 툴 콜링 에이전트(so101-agent) 전용. so101-run / so101-collect 는 읽지 않는다.
+agent:
+  # anthropic | openai | gemini | fake(오프라인 스크립트 재생)
+  provider: openai
+  # 기본 OpenAI 요청이 응답을 시작하기 전에 실패하면 Gemini로 같은 턴을 재시도한다.
+  # --provider를 명시하면 폴백 없이 지정한 provider만 사용한다.
+  fallback_provider: gemini
+  # 제공자별 모델 id. 시연 전 각 벤더의 현재 모델 목록으로 확인할 것.
+  models:
+    anthropic: claude-opus-5
+    openai: gpt-5.6-luna
+    gemini: gemini-3.8-flash
+    fake: fake-1
+  max_tokens: 4096
+  # 사용자 메시지 1개당 LLM 왕복 한도(왕복마다 툴 여러 개 가능)
+  max_tool_turns: 12
+  max_history_messages: 60
+  # run_task1/2는 수 분 걸린다. 이보다 오래 걸리는 스킬은 고장으로 보고한다.
+  tool_timeout_s: 900.0
+  system_prompt_path: src/configs/agent_system_prompt.md
+  host: 0.0.0.0
+  port: 8099
+  # 브라우저가 so101-camera의 MJPEG를 직접 연다
+  camera_base_url: http://127.0.0.1:8090
+  camera_name: shoulder
+  # 팔이 움직인 뒤, 그 이후에 찍힌 프레임을 최대 이만큼 기다린다
+  camera_fresh_timeout_s: 3.0
+  lock_path: var/so101/robot.lock
+  zone_scan_max_per_color: 1
+  # zone 안 블록이 슬롯 중심에서 이 거리 이내면 그 셀을 점유한 것으로 본다
+  slot_snap_radius_mm: 45.0
+  # 가정값: 내려놓을 지점과 다른 블록 중심 사이 최소 거리
+  place_clear_radius_mm: 55.0
+  # 테이블(부채꼴) 배치는 zone 폴리곤에서 최소 이만큼 떨어져야 한다
+  table_zone_margin_mm: 30.0
+  # 운영자와 데이터셋이 필요한 수집 모드라 시연에서는 끈다
+  enable_task3_tool: false
+  transcript_dir: logs/agent
+  # 비상정지(또는 로봇 고장) 후: 들고 있던 블록을 놓고, home 복귀하고, 그리퍼를 닫는다.
+  # true면 자동으로, false면 [home 복귀] 버튼을 눌러야 한다. 팔·블록이 작아 위험이
+  # 없고 경기장 안쪽에 학생 손이 닿지 않아 기본값을 자동으로 둔다.
+  stop_auto_home: true
+  lease_grace_s: 15.0
+  lease_idle_timeout_s: 300.0
+  sse_heartbeat_s: 15.0
+  # 카메라 화면 기준: 상단 = 로봇에서 먼 줄(slot 0-2), 좌 = +y.
+  # venue_lab.json meta.zone_polygon_px 로 검증함. 카메라 재장착 후 dry-run으로 재확인.
+  zone_slots:
+    frame: camera_view
+    labels: [top-left, top-center, top-right, bottom-left, bottom-right]
+    korean_labels: [좌상단, 상단중앙, 우상단, 좌하단, 우하단]
+    aliases:
+      좌상단: 0
+      왼쪽위: 0
+      좌측상단: 0
+      상단왼쪽: 0
+      왼쪽상단: 0
+      상단중앙: 1
+      가운데위: 1
+      중앙상단: 1
+      상단가운데: 1
+      위쪽가운데: 1
+      우상단: 2
+      오른쪽위: 2
+      우측상단: 2
+      상단오른쪽: 2
+      오른쪽상단: 2
+      좌하단: 3
+      왼쪽아래: 3
+      좌측하단: 3
+      하단왼쪽: 3
+      왼쪽하단: 3
+      우하단: 4
+      오른쪽아래: 4
+      우측하단: 4
+      하단오른쪽: 4
+      오른쪽하단: 4
+      먼쪽왼쪽: 0
+      먼쪽가운데: 1
+      먼쪽오른쪽: 2
+      가까운쪽왼쪽: 3
+      가까운쪽오른쪽: 4
+      topcentre: 1
+      farleft: 0
+      farcenter: 1
+      farcentre: 1
+      farright: 2
+      nearleft: 3
+      nearright: 4
+  # 상대 이동 한도(1회 호출 기준)
+  relative:
+    # arm: 앞 = base에서 멀어지는 반경 방향, 왼쪽 = 접선 방향 / base: 앞 = +x, 왼쪽 = +y
+    frame: arm
+    default_step_mm: 20.0
+    small_step_mm: 10.0
+    # 가정값: 검출 중심 기준 누적 파지 오프셋 한도
+    max_pick_offset_mm: 25.0
+    # 조그 1회 벡터 한도. 넘으면 줄이지 않고 거부한다.
+    max_jog_mm: 50.0
+    # 가정값: 조그 목표 z 범위(mm)
+    jog_min_z_mm: 40.0
+    jog_max_z_mm: 160.0
+    # 가정값: 조그 IK 오차가 이보다 크면 엉뚱한 곳으로 가지 않도록 거부한다
+    jog_max_ik_error_mm: 5.0
+    max_shift_mm: 120.0
+    # 그리퍼 롤(wrist_roll) 수동 회전 1회 한도. 거부만 하고 줄이지 않는다 — 실제
+    # 안전은 lerobot의 max_relative_target 클램프와 틱당 스텝 제한이 담당한다.
+    max_gripper_roll_deg: 90.0
+  # 부채꼴(검출 영역) 위 이름 붙은 자유 배치 지점. 전부 가정값 — dry-run으로 확정.
+  table_regions:
+    # 방위각(deg). 카메라 화면 기준 +가 왼쪽
+    columns_deg:
+      leftmost: 75.0
+      left: 40.0
+      center: 0.0
+      right: -40.0
+      rightmost: -75.0
+    # [min_radius_mm, 부채꼴 외곽 - edge_margin_mm] 구간 비율. near = 화면 아래
+    rows_fraction:
+      near: 0.15
+      middle: 0.5
+      far: 0.9
+    column_korean:
+      leftmost: 가장 왼쪽
+      left: 왼쪽
+      center: 가운데
+      right: 오른쪽
+      rightmost: 가장 오른쪽
+    row_korean:
+      near: 아래(가까운 쪽)
+      middle: 중간
+      far: 위(먼 쪽)
+    min_radius_mm: 150.0
+    edge_margin_mm: 20.0
+    search_step_mm: 15.0
+    search_max_mm: 60.0
+  # 놓은 블록이 실제로 어디 내려앉는지로 명령 지점을 보정한다.
+  # 캘리브레이션 상수가 아니라 카메라 확인에서 학습하는 값이다(로봇 팔 기준 프레임).
+  place_correction:
+    enabled: true
+    learn: true
+    # 이미 잰 값이 있으면 여기에 심는다. 0이면 세션 중 학습으로 채운다.
+    forward_mm: 0.0
+    left_mm: 0.0
+    max_mm: 60.0
+    max_sample_mm: 80.0
+  # 부채꼴 안의 체스판 칸에 정수 좌표를 붙인다 (화면 기준 x=오른쪽, y=먼 쪽).
+  # 격자 자체는 tools/calibrate_board_grid.py가 재서 캘리브레이션 파일에 넣는다.
+  board_grid:
+    enabled: true
+    # 측정된 격자가 없을 때만 쓰는 폴백 칸 크기
+    cell_mm: 25.0
+    # (0,0)으로 부를 칸. null이면 table_regions의 center/near 지점에 가장 가까운 칸
+    origin_mm: null
+    # 화면이 처음 보여줄 층: regions(이름 붙은 15개 점) | grid(체스판 칸)
+    default_layer: regions
+    # 베이스 근처 제외 영역. 2026-09-19 place IK 게이트 실측: 정면 좁은 통로만
+    # 실패하고(|y|<=25mm, x<=72mm) 옆으로 비키면 반경 55mm부터 통과한다.
+    min_radius_mm: 45.0
+    base_keepout_depth_mm: 85.0
+    base_keepout_half_width_mm: 40.0

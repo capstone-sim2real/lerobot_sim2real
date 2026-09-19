@@ -221,6 +221,17 @@ class TopDownIK:
         idx = np.argsort(d2)[:n]
         return table[idx]
 
+    def forward_position_mm(self, joints: dict[str, float]) -> tuple[float, float, float]:
+        """Gripper target-frame position for measured arm joints (degrees).
+
+        The same conversion ``tools/live_fk_overlay.py`` draws with; the
+        gripper joint is ignored.
+        """
+        k = self._load_kinematics()
+        q = np.array([float(joints[name]) for name in ARM_JOINTS], dtype=np.float64)
+        x, y, z = (k.forward_kinematics(q)[:3, 3] * 1000.0).tolist()
+        return float(x), float(y), float(z)
+
     def neutral_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float) -> float:
         """The yaw that leaves ``wrist_roll`` near 0 at this position.
 
@@ -235,6 +246,53 @@ class TopDownIK:
         """
         probe = self.solve(x_mm, y_mm, z_mm, yaw_deg=0.0)
         return -probe.joints["wrist_roll"]
+
+    def yaw_for_wrist_roll_deg(self, x_mm: float, y_mm: float, z_mm: float, wrist_roll: float) -> float:
+        """The yaw whose solve at this position lands *near* ``wrist_roll``.
+
+        Uses the same ~1:1 yaw/wrist_roll relation as ``neutral_yaw_deg``,
+        which is only a linear estimate from one probe solve -- empirically
+        off by ~1.5-2 degrees per call (more at some poses). A caller that
+        repeats this every jog step compounds that into a visible spin with
+        no rotate command issued (this is what ``solve_holding_wrist_roll``
+        below is for). Kept for callers that just need a one-shot yaw
+        estimate (e.g. as a starting point for a search).
+        """
+        return wrist_roll + self.neutral_yaw_deg(x_mm, y_mm, z_mm)
+
+    def solve_holding_wrist_roll(
+        self,
+        x_mm: float,
+        y_mm: float,
+        z_mm: float,
+        wrist_roll_deg: float,
+        *,
+        radial_tilt_deg: float = 0.0,
+        max_iters: int = 4,
+        tol_deg: float = 0.2,
+    ) -> IkResult:
+        """IK solve at this position that reproduces ``wrist_roll_deg``.
+
+        ``yaw_for_wrist_roll_deg``'s single-probe linear estimate is not
+        exact -- measured drift of ~1.5-2 degrees per solve, and every jog
+        skill re-reads the (already drifted) *current* wrist_roll and
+        re-applies the same estimate, so the error compounds call after
+        call: 5 chained 10mm jog steps drifted the jaws ~8 degrees with no
+        rotate command ever issued. A few residual-correction solves (each
+        one nudging the yaw guess by the leftover wrist_roll error) close
+        that to within ``tol_deg`` -- overwriting the joint value directly
+        instead is not an option, the gripper is off the roll axis, so that
+        moves the tool tip tens of mm off target.
+        """
+        yaw = wrist_roll_deg + self.neutral_yaw_deg(x_mm, y_mm, z_mm)
+        result = self.solve(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
+        for _ in range(max_iters):
+            error = wrist_roll_deg - result.joints["wrist_roll"]
+            if abs(error) < tol_deg:
+                break
+            yaw += error
+            result = self.solve(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
+        return result
 
     def grasp_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float) -> float:
         """Jaw yaw for a square block: of the equivalent face alignments,

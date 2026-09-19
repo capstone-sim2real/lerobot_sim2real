@@ -3,7 +3,7 @@
     # preflight -- no motor bus, no dataset written
     so101-collect --dry-run
 
-    # collect (camera server must already be running)
+    # collect (so101-camera is started automatically if not already running)
     so101-collect
     so101-collect --set task3.repo_id=local/so101_task3_green
 
@@ -19,7 +19,9 @@ the failure. When no block remains outside the zone the run stops and asks
 for a new arrangement; Ctrl-C ends it, keeping every episode already saved.
 
 Preconditions (fail fast otherwise):
-  - so101-camera running and serving the configured MJPEG streams
+  - so101-camera serving the configured MJPEG streams (started automatically
+    if not already running; set camera.auto_start=false to require it be
+    started by hand instead)
   - venue calibration JSON with zone_polygon_mm (so101-zone-calibrate --write)
   - home pose recorded (src/configs/poses.yaml)
 """
@@ -35,6 +37,7 @@ import threading
 import time
 from pathlib import Path
 
+from camera.autostart import ManagedCamera, base_url_of, ensure_camera_server
 from camera.client import fetch_snapshot
 from camera.frame_source import build_frame_sources
 from config import AppConfig, load_config
@@ -55,7 +58,8 @@ from fsm.flows import build_task3_states
 from fsm.machine import StateMachine, TransitionLogger
 from fsm.states import RunContext
 from perception import PlaneCalibration, detect_blocks
-from runners.run_task import make_pick_state, make_task1_perceive
+from session.factories import make_pick_state, make_task1_perceive
+from session.report import print_detections, print_slot_table
 
 logger = logging.getLogger("collect")
 
@@ -67,8 +71,13 @@ def resolve_repo_id(cfg: AppConfig, *, resume: bool) -> str:
     return f"{cfg.task3.repo_id}_{time.strftime('%Y%m%d_%H%M%S')}"
 
 
-def start_frame_sources(cfg: AppConfig):
+def start_frame_sources(cfg: AppConfig) -> tuple[dict, ManagedCamera | None]:
     """Open every configured MJPEG stream and prove each one delivers."""
+    camera_proc = None
+    if cfg.camera.auto_start and cfg.task3.cameras:
+        base_url = base_url_of(next(iter(cfg.task3.cameras.values())))
+        camera_proc = ensure_camera_server(base_url, extra_args=cfg.camera.extra_args)
+
     sources = build_frame_sources(
         cfg.task3.cameras,
         width=cfg.task3.image_width,
@@ -80,15 +89,17 @@ def start_frame_sources(cfg: AppConfig):
         if not source.wait_for_first_frame(timeout_s=15.0):
             for other in sources.values():
                 other.stop()
+            if camera_proc is not None:
+                camera_proc.stop()
             raise RuntimeError(
                 f"No frame from camera {name!r} at {source.url}. Is so101-camera running "
                 f"and serving that stream?"
             )
         logger.info("camera %s: %s", name, source.status())
-    return sources
+    return sources, camera_proc
 
 
-def install_stop_handler(stop_event: threading.Event) -> None:
+def install_stop_handler(stop_event: threading.Event) -> bool:
     """Ctrl-C sets a flag; the next tick or operator prompt stops the run.
 
     Unwinding from a signal handler could land anywhere -- mid bus write,
@@ -96,7 +107,13 @@ def install_stop_handler(stop_event: threading.Event) -> None:
     runner a single, known place to discard the in-flight episode from. The
     handler also disarms itself, so a second Ctrl-C during shutdown cannot
     interrupt the parquet/video finalize and leave a corrupt dataset.
+
+    Returns False without installing anything off the main thread, where
+    ``signal.signal`` raises; the caller (the LLM agent) then owns the stop
+    path through ``stop_event`` itself.
     """
+    if threading.current_thread() is not threading.main_thread():
+        return False
 
     def handler(signum, frame):  # noqa: ARG001 - signal handler signature
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -107,6 +124,7 @@ def install_stop_handler(stop_event: threading.Event) -> None:
         )
 
     signal.signal(signal.SIGINT, handler)
+    return True
 
 
 def interruptible_prompt(
@@ -164,7 +182,7 @@ def run(cfg: AppConfig, run_id: str, *, resume: bool = False) -> dict:
     repo_id = resolve_repo_id(cfg, resume=resume)
     root = resolve_dataset_root(cfg.task3, repo_id)
 
-    sources = start_frame_sources(cfg)
+    sources, camera_proc = start_frame_sources(cfg)
     dataset = create_dataset(cfg.task3, repo_id, root, resume=resume)
     dataset_root = Path(dataset.root)
     recorder = EpisodeRecorder(LeRobotEpisodeSink(dataset), sources, cfg.task3)
@@ -258,6 +276,8 @@ def run(cfg: AppConfig, run_id: str, *, resume: bool = False) -> dict:
         inner_robot.disconnect()
         for source in sources.values():
             source.stop()
+        if camera_proc is not None:
+            camera_proc.stop()
 
     if recorder.saved_total == 0 and not resume:
         remove_empty_dataset(dataset_root)
@@ -306,7 +326,7 @@ def dry_run(cfg: AppConfig, *, resume: bool) -> int:
     print(f"dataset root: {root if root is not None else '$HF_LEROBOT_HOME/' + repo_id}")
 
     print("\ncameras:")
-    sources = start_frame_sources(cfg)
+    sources, camera_proc = start_frame_sources(cfg)
     try:
         for name, source in sources.items():
             before = source.latest()
@@ -328,24 +348,20 @@ def dry_run(cfg: AppConfig, *, resume: bool) -> int:
     except ImportError as exc:
         print(f"\ndataset features: unavailable without lerobot ({exc})")
 
-    print("\nplacement slots (far row first):")
-    for slot in planner.slots:
-        print(
-            f"  {slot.index}: x={slot.xy_mm[0]:7.1f} y={slot.xy_mm[1]:7.1f} "
-            f"drop_z={slot.drop_z_mm:.1f} hover_z={slot.hover_z_mm:.1f} "
-            f"errors=({slot.drop.position_error_mm:.2f}, {slot.hover.position_error_mm:.2f})mm"
-        )
+    print()
+    print_slot_table(planner.slots, show_tilt=False)
 
-    frame = fetch_snapshot(cfg.perception.snapshot_url)
+    try:
+        frame = fetch_snapshot(cfg.perception.snapshot_url)
+    finally:
+        if camera_proc is not None:
+            camera_proc.stop()
     detections = detect_blocks(frame, calib, cfg.perception, is_rgb=False)
-    print("\nactive outside-zone detections:")
-    if detections:
-        for detection in detections:
-            x, y = detection.center_mm
-            task_text = cfg.task3.task_templates.get(detection.color, "<MISSING>")
-            print(f"  {detection.color:6s} x={x:7.1f} y={y:7.1f}  task={task_text!r}")
-    else:
-        print("  none")
+    print_detections(
+        detections,
+        title="\nactive outside-zone detections:",
+        extra=lambda d: f" task={cfg.task3.task_templates.get(d.color, '<MISSING>')!r}",
+    )
     return 0
 
 

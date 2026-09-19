@@ -76,3 +76,19 @@ def test_grasp_yaw_matches_the_block_and_prefers_the_workspace_tangent(ik: TopDo
             result = ik.solve(x, y, 20.0, yaw_deg=yaw)
             assert result.position_error_mm < 5.0, (x, y, block_angle)
             assert abs(result.joints["wrist_roll"]) < 60.0, (x, y, block_angle, neutral)
+
+
+def test_solve_holding_wrist_roll_does_not_drift_across_repeated_jogs(ik: TopDownIK):
+    """``yaw_for_wrist_roll_deg``'s single-probe estimate is only ~1.5-2 deg
+    accurate per call; a jog skill that re-reads the (already drifted)
+    current wrist_roll every step compounds that -- 5 chained 10mm jogs
+    spun the jaws ~8 degrees with no rotate command ever issued. The
+    corrected solve must hold wrist_roll steady across a chain like that.
+    """
+    x, y, z = 220.0, 60.0, 60.0
+    wrist_roll = ik.solve(x, y, z, yaw_deg=None).joints["wrist_roll"]
+    for _ in range(5):
+        x += 10.0
+        result = ik.solve_holding_wrist_roll(x, y, z, wrist_roll)
+        assert abs(result.joints["wrist_roll"] - wrist_roll) < 0.5, result.joints["wrist_roll"]
+        wrist_roll = result.joints["wrist_roll"]

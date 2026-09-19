@@ -30,6 +30,13 @@ def test_default_yaml_matches_dataclass_defaults():
     ) == dataclasses.asdict(AppConfig())
 
 
+def test_default_agent_uses_openai_luna_with_gemini_fallback():
+    agent = AppConfig().agent
+    assert agent.provider == "openai"
+    assert agent.models["openai"] == "gpt-5.6-luna"
+    assert agent.fallback_provider == "gemini"
+
+
 def test_every_gated_colour_must_have_a_prototype(tmp_path):
     """Gates may overlap — they must, since no fixed box separates wood from
     yellow in every arrangement. What must not exist is a colour that can be

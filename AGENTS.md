@@ -127,19 +127,43 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   관절값 컬럼을 포함한다.
 - **카메라 마운트가 바뀌면 캘리브레이션은 무효다.** 반드시 재실행한다.
 
-**현재 적용 결과 (2026-09-08, `venue_lab.json`) — 사용자가 gate 미달을 인지하고
-승인한 9점 fit이다.**
+**현재 적용 결과 (2026-09-13 재캘리브레이션, `venue_lab.json`의 `meta`) — 9점
+`fk_direct_pairs` fit이다.** 수치를 옮겨 적기 전에 항상 그 파일의 `meta`를 본다.
 
 - 순수 체스판 코너(카메라 광학만, FK 없음)로 맞춘 homography는 잔차 RMS
   0.4mm — 카메라·계산식은 문제없다는 뜻.
-- 활성 fit은 **RMS 8.18mm, 최악 LOO 26.64mm, grasp-z 표준편차 6.82mm**다.
-  물리 그리퍼 기준점과 URDF `gripper_frame_link`의 대응은 아직 검증되지 않았다.
-  과거 2026-08-31의 15점 fit과 원인 가설은
-  `docs/report/CV_IK_전환_정리.md`에 당시 기록으로 보존한다.
-- **결론: 이 오차 규모(RMS~10mm, 최악 ~30mm)를 전제로 설계한다.** 재캘리브레이션에
+- 활성 fit은 **RMS 5.15mm, 최악 LOO 13.53mm, grasp-z 평균 4.06mm·표준편차
+  0.73mm**다. 정상 gate(RMS 5mm, LOO 8mm)를 통과한 것은 아니다 — RMS는 경계에
+  걸치고 LOO는 아직 초과다. 물리 그리퍼 기준점과 URDF `gripper_frame_link`의
+  대응은 여전히 검증되지 않았다.
+- `zone_polygon_mm`은 2026-09-19에 빨간 테이프 내부 윤곽 edge-fit으로 다시
+  등록했다(`zone_source: red_tape_inner_contour_edge_fit_refined`).
+- 과거 기록: 2026-09-08의 RMS 8.18mm·LOO 26.64mm·grasp-z 표준편차 6.82mm fit은
+  `venue_lab.pre-recalibration-20260911.json`에 남아 있다. 2026-08-31의 15점 fit과
+  원인 가설은 `docs/report/CV_IK_전환_정리.md`에 당시 기록으로 보존한다. 이
+  숫자들을 현재 값으로 인용하지 않는다.
+- **결론: 이 오차 규모(RMS ~5mm, 최악 ~14mm)를 전제로 설계한다.** 재캘리브레이션에
   시간을 더 쓰지 않는다. §7의 IK/파지 설계가 이 오차를 흡수해야 한다
   (그리퍼를 넉넉히 열기, FSM의 기존 재시도 로직으로 실패 흡수 — 매번 완벽할
   필요는 없다).
+
+**체스판 격자(`board_grid`)는 표시·주소 지정 전용이다.** `tools/calibrate_board_grid.py`가
+체스판 코너에서 격자의 원점·방향·피치를 재서 캘리브레이션 파일에 넣고,
+`session/grid.py`가 정수 칸 좌표 (x, y)를 로봇 베이스 mm로 바꾼다. 위의 "임의
+체스판 원점 프레임을 쓰지 않는다"는 규칙은 그대로다 — 칸은 **주소**이고, 모션
+계획에 들어가기 전에 한 번 mm로 해석된다. 좌표축은 로봇이 아니라 학생이 보는
+화면 기준이다(x+ = 화면 오른쪽, y+ = 로봇에서 멀어지는 쪽). 격자는 H 위에 얹혀
+있으므로 **카메라가 움직이면 H와 함께 무효**다. 적합 RMS가 한 칸의 10%를 넘으면
+도구가 저장을 거부한다.
+
+**칸의 안쪽 경계는 가정하지 말고 잰다.** `agent.table_regions.min_radius_mm`(150mm)은
+자유 배치용 가정값이라 격자에 그대로 쓰면 로봇 좌우의 멀쩡한 자리가 통째로 빈다.
+2026-09-19 place IK 게이트로 전 칸을 돌려 보니 실패는 베이스 정면의 좁은 통로
+(|y| ≤ 25mm, x ≤ 72mm)뿐이었고, 50mm만 옆으로 비키면 반경 55mm부터 통과했다 —
+§7의 그리퍼 27mm 측방 오프셋이 만드는 모양이라 단일 반경으로는 표현되지 않는다.
+그래서 `agent.board_grid`는 반경 대신 그 통로를 제외한다. 칸당 IK는 약 215ms라
+세션 시작 때 전수 검사하지 않는다. 대신 `--dry-run`이 테두리 칸을 검사하고,
+남은 실패 칸은 실행 시 `ik_gate`로 거부된다.
 
 ## §7 역기구학 (IK)
 
@@ -177,8 +201,8 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
 자연스럽게 나오는 자세가 바로 이 중립 자세다.
 
 **주의: 위 "0.00mm 수렴"은 URDF 모델 안에서의 시뮬레이션 결과다.** 실제
-팔에서는 §6에서 실측한 대로 위치마다 RMS~10mm, 최악 ~30mm의 FK 오차가
-있다. 따라서 IK 하나만으로 정확히 파지 지점에 도달한다고 가정하지 않는다.
+팔에서는 §6에서 실측한 규모(현재 적용본 기준 RMS ~5mm, 최악 ~14mm)의 FK 오차가
+있다 — 정확한 값은 §6이 아니라 `venue_lab.json`의 `meta`가 기준이다. 따라서 IK 하나만으로 정확히 파지 지점에 도달한다고 가정하지 않는다.
 현재 production PICK은 최초 fresh frame에서 만든 중심·재시도 후보를 실행하고,
 VERIFY 실패 뒤 HOME→SELECT에서 새 프레임으로 다시 검출한다. 파지 직전 근접
 재검출은 아직 구현되지 않았으므로 구현된 것처럼 문서화하지 않는다.
@@ -297,3 +321,46 @@ uv run --extra dev pytest tests -q
    데이터셋 전체를 잃기 때문이다. 전체 런은 `VideoEncodingManager`로 감싼다.
 9. **가정값은 가정값이라고 쓴다**(§14.3). `min_episode_frames`(60),
    `max_episode_frames`(3000)은 실측 전 가정값이다. 첫 라운드 후 교체한다.
+
+## §16 LLM 툴 콜링 에이전트 (`so101-agent`)
+
+운영 가이드는 [docs/guide/SO101_LLM_에이전트.md](docs/guide/SO101_LLM_에이전트.md).
+
+1. **기존 미션 경로는 불변이다.** `so101-run`/`so101-collect`는 에이전트 코드를
+   import하지 않는다. 에이전트는 `session/`·`agent/` 추가 코드와, 동작이 같은
+   추출(`control/task1_transport.py`의 `solve_place_point`/`fly_carry`/`release_at`,
+   `session/factories.py`)만 공유한다.
+2. **로봇 버스 소유자는 하나.** 카메라 서버가 `/dev/video*`, 세 러너 중 하나가
+   시리얼 버스를 갖는다. `ArmSession.open()`은 `agent.lock_path` 락을 잡는다.
+3. **LLM은 원시 관절 명령과 자유로운 절대 좌표를 받지 않는다.** 칸/영역 이름,
+   한도가 걸린 상대 mm 벡터, 그리고 체스판 **칸 좌표**(정수 x, y)만 받는다.
+   칸 좌표는 예외가 아니라 이산 주소다: 부채꼴 게이트와 IK 게이트를 다른 목표와
+   똑같이 통과해야 하고, mm는 여전히 LLM에서 오지 않는다. 화면에서 가리킨 곳을
+   이름 없이 말해야 해서 열어둔 유일한 절대 주소이며, 새 툴도 이 선을 지킨다.
+4. **배치 정확도는 캘리브레이션이 아니라 릴리즈 동작이 정한다.** `release_at`은
+   `motion.arrival_tol`(3°)에서 그리퍼를 열고, 이 장비 실측으로 3°는 283mm 리치에서
+   약 29mm다(`MotionConfig.grasp_hover_arrival_tol` 주석). 블록을 든 상태의 정상상태
+   처짐이 더해지며, `TrajectoryPlayer.move_to`가 적어 둔 대로 더 기다린다고 닫히지 않는다.
+   §6의 캘리브레이션 잔차(RMS ~5mm)를 이 오차의 원인으로 지목하지 않는다.
+   보정은 상수로 박지 말고 **측정으로 닫는다**: 모든 배치는 이미 home 복귀 후 재관찰로
+   스스로를 검증하므로, 그 (명령, 실제) 쌍이 곧 보정값이다
+   (`session/place_correction.py`, 팔 기준 프레임 — 처짐은 뻗은 정도와 회전각의 함수라
+   베이스 x/y로 배운 값은 다른 방위각으로 옮겨가지 않는다).
+5. **재시도 정책은 프롬프트가 아니라 코드에 있다.** `pick_block`은 `CvIkPickState`를
+   그대로 구동하므로 90도 회전 재시도와 home 재접근이 안에 있다. 결과의
+   `retry_advice`가 LLM의 다음 행동을 정한다.
+6. **STOP은 `session/cancel.py`의 `CancellableRobotIO`에서만 구현한다.** 제어
+   경로(control/, fsm/)에 훅을 심지 않는다. `Cancelled`는 RuntimeError/OSError/
+   ValueError가 아니어야 한다(`fsm/task1.py`가 삼킨다).
+7. **잠금은 서버가 결정한다(`agent/control.py`).** IDLE에서만 명령 수락, STOP·로봇
+   고장 후에는 실측으로 home 도착이 확인돼야 IDLE로 돌아간다. STOP에는 권한이
+   필요 없다.
+8. **로봇은 한 스레드에서만 구동한다(`agent/worker.py`).** `TopDownIK`의 `os.chdir`
+   때문에 IK도 그 스레드에서 한 번만 만든다. 웹 이벤트 루프는 로봇을 만지지 않는다.
+9. **LLM SDK와 웹 프레임워크는 지연 import.** `agent.runner`/`agent.tools`/
+   `agent.control`/`session.skills`는 SDK·FastAPI·placo·lerobot 없이 import돼야 하며
+   `tests/test_agent_tools.py`가 이를 검사한다. 의존성은 optional extra이고
+   `uv sync`가 아닌 `uv pip install`로 설치한다(JetPack torch 휠 보호).
+10. **가정값은 가정값이라고 쓴다**(§14.3). `agent.relative.*` 한도, `agent.table_regions.*`,
+   `agent.place_clear_radius_mm`는 실측 전 가정값이다. 시연 전 `so101-agent --dry-run`
+   으로 확인하고 실측 후 교체한다.

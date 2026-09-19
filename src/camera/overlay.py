@@ -19,7 +19,7 @@ import numpy as np
 from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_config
 from control.grasp import biased_grasp_xy, grasp_candidate_points
 from control.ik import tangent_square_grasp_yaw_deg
-from perception.detector import workspace_radius_at_angle
+from perception.detector import workspace_sector_points_mm
 from perception import (
     BlockDetection,
     PlaneCalibration,
@@ -49,26 +49,11 @@ def workspace_boundary_metadata(
     """
     if not cfg.enabled:
         return None
-    if perception.workspace_radius_mm <= 0:
-        raise ValueError("perception.workspace_radius_mm must be positive to draw the arc")
-    if cfg.sample_step_deg <= 0:
-        raise ValueError("workspace sample_step_deg must be positive")
 
     lo, hi = perception.workspace_angle_min_deg, perception.workspace_angle_max_deg
-    count = max(2, int(math.ceil((hi - lo) / cfg.sample_step_deg)) + 1)
-    angles_deg = np.linspace(lo, hi, count)
-    angles_rad = np.radians(angles_deg)
-    radii = np.asarray(
-        [workspace_radius_at_angle(perception, angle) for angle in angles_deg],
-        dtype=np.float64,
-    )
     base_x, base_y = calibration.base_xy_mm or (0.0, 0.0)
-    points_mm = np.column_stack(
-        [
-            base_x + radii * np.cos(angles_rad),
-            base_y + radii * np.sin(angles_rad),
-        ]
-    )
+    points_mm = workspace_sector_points_mm(perception, (base_x, base_y), cfg.sample_step_deg)
+    radii = np.hypot(points_mm[:, 0] - base_x, points_mm[:, 1] - base_y)
     points_px = calibration.board_to_pixel(points_mm)
     base_px = calibration.board_to_pixel(np.asarray([[base_x, base_y]], dtype=np.float64))
     return {

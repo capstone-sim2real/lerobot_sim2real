@@ -19,7 +19,6 @@ Gate (AGENTS.md §6): RMS < 5mm, LOO max < 8mm.
 from __future__ import annotations
 
 import argparse
-import csv
 import time
 from pathlib import Path
 
@@ -27,14 +26,25 @@ import cv2
 import numpy as np
 
 from perception.homography import PlaneCalibration, calibrate_from_pairs
+from tools.calibration_records import completed_points, read_csv
 
 
-def load_points(csv_path: Path) -> list[dict]:
-    rows = list(csv.DictReader(csv_path.open(newline="", encoding="utf-8")))
-    incomplete = [r["name"] for r in rows if not r["u_px"] or not r["x_m"]]
-    if incomplete:
-        raise ValueError(f"points.csv rows missing pixel or FK data: {incomplete}")
-    return rows
+def load_points(csv_path: Path, expect_points: int) -> list[dict]:
+    """Load the latest complete attempt for each of P1..P{expect_points}.
+
+    Refuses to return a partial set: if any point in that range wasn't
+    freshly (re)captured to completion, the caller should keep using the
+    existing calibration rather than fit+save on an incomplete session.
+    """
+    _, rows = read_csv(csv_path)
+    complete = completed_points(rows, expect_points)
+    missing = [i for i in range(1, expect_points + 1) if i not in complete]
+    if missing:
+        raise ValueError(
+            f"points.csv is missing complete data for point(s) {missing} "
+            f"(need all of P1..P{expect_points}); keeping the existing calibration"
+        )
+    return [complete[i] for i in sorted(complete)]
 
 
 def to_pairs(rows: list[dict]) -> list[tuple[tuple[float, float], tuple[float, float]]]:
@@ -70,11 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--image-size", default="1280x720", help="WxH the calibration frames were captured at")
     ap.add_argument("--rms-max-mm", type=float, default=5.0)
     ap.add_argument("--loo-max-mm", type=float, default=8.0)
+    ap.add_argument("--expect-points", type=int, default=9, help="require P1..P<N> all freshly complete")
     args = ap.parse_args(argv)
 
-    rows = load_points(args.points)
-    if len(rows) < 6:
-        raise ValueError(f"Need several well-spread points for a trustworthy LOO check, got {len(rows)}")
+    try:
+        rows = load_points(args.points, args.expect_points)
+    except ValueError as exc:
+        print(f"FAIL: {exc}")
+        print(f"existing calibration at {args.out} left untouched")
+        return 1
     pairs = to_pairs(rows)
 
     H = calibrate_from_pairs(pairs)

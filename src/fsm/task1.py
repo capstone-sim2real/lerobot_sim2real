@@ -11,7 +11,12 @@ from typing import Callable
 from config import AppConfig
 from control.grasp import GraspAttempt
 from control.motion import MotionController
-from control.task1_transport import Task1TransportPlan, Task1TransportPlanner
+from control.task1_transport import (
+    Task1TransportPlan,
+    Task1TransportPlanner,
+    fly_carry,
+    release_at,
+)
 from control.trajectory import TrajectoryPlayer
 from fsm.states import RunContext, State, StateName
 from perception.detector import BlockDetection
@@ -248,9 +253,7 @@ class Task1TransportState(State):
         ctx.extras[self.index_extra_key] = slot_index
         plan = self._planner.plan(held, slot_index)
         ctx.extras[self.plan_extra_key] = plan
-        for _name, waypoint in plan.carry:
-            self._player.move_to(waypoint.joints, tol=self._cfg.motion.transit_arrival_tol)
-        self._player.move_to(plan.slot.hover.joints, tol=self._cfg.motion.transit_arrival_tol)
+        fly_carry(self._player, self._cfg, plan)
         ctx.last_note = f"assigned_slot={slot_index}"
         return StateName.PLACE
 
@@ -269,15 +272,7 @@ class Task1PlaceState(State):
         plan = ctx.extras.get("task1_transport_plan")
         if not isinstance(plan, Task1TransportPlan):
             raise RuntimeError("Task-1 PLACE has no transport plan")
-        self._player.move_to(
-            plan.slot.drop.joints,
-            max_step=self._cfg.motion.descent_step_per_tick,
-            tol=self._cfg.motion.arrival_tol,
-        )
-        if self._cfg.motion.place_settle_s > 0:
-            time.sleep(self._cfg.motion.place_settle_s)
-        self._motion.open_gripper()
-        self._player.move_to(plan.slot.hover.joints, tol=self._cfg.motion.transit_arrival_tol)
+        release_at(self._player, self._motion, self._cfg, plan.slot)
         ctx.extras["task1_place_actions"] = int(ctx.extras.get("task1_place_actions", 0)) + 1
         ctx.last_note = f"released_slot={plan.slot.index}"
         return StateName.SELECT

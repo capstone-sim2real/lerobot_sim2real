@@ -71,6 +71,9 @@ class MotionController:
     def open_gripper(self) -> None:
         self._player.set_gripper(self._sensing_cfg.gripper_open_pos)
 
+    def close_gripper(self) -> None:
+        self._player.set_gripper(self._sensing_cfg.gripper_close_pos)
+
     def transport_to_zone(self) -> None:
         """Retreat pose -> above the zone, along the recorded waypoints."""
         self._player.follow([self._poses.get(name) for name in self._cfg.transport_waypoints])
