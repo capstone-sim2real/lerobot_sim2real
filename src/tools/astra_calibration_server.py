@@ -124,7 +124,7 @@ def main():
         print(json.dumps({"simulation_only":True,"baseline":base,"result":result.to_envelope()}))
         return
     cfg=load_config(str(root/"src/configs/default.yaml"),overrides=[
-        "camera.auto_start=false","agent.stop_auto_home=false",
+        "camera.auto_start=false",
         "agent.lock_path=/home/ehdrms/lerobot_sim2real/local_operations/robot.lock"] + args.overrides)
     logging.basicConfig(level=logging.INFO)
     hub=EventHub()
