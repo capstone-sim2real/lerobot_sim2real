@@ -204,7 +204,7 @@ class AgentService:
     # Everything here is also an ordinary LLM tool (agent.tools.build_tools);
     # this only decides what a physical button on the page is allowed to fire.
     MANUAL_TOOLS = frozenset({
-        "move_arm", "move_to_cell", "rotate_gripper", "pick_here", "place_here",
+        "move_arm", "move_to_cell", "move_to_pixel", "place_at_pixel", "rotate_gripper", "pick_here", "place_here",
         "open_gripper", "return_to_home",
     })
 

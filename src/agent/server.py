@@ -299,6 +299,19 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             "model": svc().provider.model,
         }
 
+    @app.get("/api/pixel-target")
+    async def pixel_target(u: int, v: int, width: int, height: int):
+        from perception.homography import PlaneCalibration
+        from session.pixel_target import calibration_id, resolve_pixel
+        try:
+            calib = PlaneCalibration.load(cfg.perception.calibration_path)
+            if (width, height) != tuple(calib.image_size):
+                raise ValueError("영상 해상도와 보정 해상도가 다릅니다.")
+            target = resolve_pixel(cfg, calib, u, v, calibration_id(calib))
+            return {"target": target, "note": "블록 1개 윗면 기준 · 실행 시 IK 재검사"}
+        except (ValueError, OSError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
     @app.get("/api/telemetry")
     async def telemetry():
         return svc().telemetry()
