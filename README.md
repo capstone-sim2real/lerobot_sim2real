@@ -130,6 +130,37 @@ so101-run --task 3
 
 자세한 내용은 [Task 3 데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md).
 
+### LLM 에이전트 — 자연어로 조작 (`so101-agent`)
+
+기존 Task 1/2/3 명령은 그대로 두고, 자연어 요청을 LLM 툴 콜링으로 실행하는 웹
+채팅 서버를 따로 띄웁니다. `so101-run`/`so101-collect`와 **동시에 실행하지 않습니다**
+(로봇 버스 락으로 막힘).
+
+```bash
+# 최초 1회: 의존성 (uv sync 금지 — JetPack torch 휠 보호)
+uv pip install --python .venv/bin/python "fastapi>=0.110" "uvicorn>=0.29" \
+  "openai>=1.60" "google-genai>=1.0"
+uv pip install --python .venv/bin/python -e . --no-deps                       # so101-agent 스크립트 등록
+
+cp .env.example .env && vi .env            # OPENAI_API_KEY와 GEMINI_API_KEY 입력
+
+so101-agent --dry-run                      # 칸·부채꼴 영역 IK, 조그 높이, API 키, 카메라 확인 (팔 정지)
+so101-agent --sim --provider fake          # 하드웨어·API 키 없이 UI와 툴 흐름 리허설
+
+so101-camera                               # 실기: 카메라 서버 먼저
+so101-agent                                # 기본 OpenAI gpt-5.6-luna, 실패 시 Gemini 폴백
+so101-agent --provider gemini              # 명시하면 Gemini만 사용(폴백 없음)
+```
+
+예: "노란 블록을 적재 구역 좌상단으로 옮겨줘", "초록 블록 다시 밖으로 꺼내줘",
+"5mm만 더 멀리 집어줘", "왼쪽으로 가줘" → "여기 내려놔", "그 블록 20mm만 더 왼쪽으로",
+"미션 1 해줘". 여러 브라우저가 같은 세션에 참여할 수 있고, 로봇 명령은 한 번에 하나만
+실행됩니다. 명령 하나가 끝날 때까지 입력 잠금, STOP을 누르면
+그리퍼를 열고(들고 있던 블록은 놓고) home 복귀 후 그리퍼를 닫는 것까지 자동으로
+진행되며 그게 확인돼야 다시 입력할 수 있습니다.
+
+자세한 내용은 [LLM 에이전트 가이드](docs/guide/SO101_LLM_에이전트.md).
+
 ## Repository Layout
 
 ```text
@@ -148,6 +179,8 @@ so101-run --task 3
 │   ├── fsm/                   Task 흐름과 상태 구현
 │   ├── policy/                보존된 optional ACT PICK 클라이언트
 │   ├── runners/               so101-run 조립·실행
+│   ├── session/               한 번 연결된 팔 세션, 취소·버스 락, 에이전트 스킬
+│   ├── agent/                 so101-agent: LLM 툴·어댑터·대화 루프·웹 UI
 │   └── tools/                 캘리브레이션·진단·세션 CLI
 ├── third_party/               SO-101 자산·LeRobot submodule
 └── docker/                    보존된 ACT policy-server 제출 경로

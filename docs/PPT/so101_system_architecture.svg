@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1180" viewBox="0 0 2200 1180">
+  <defs>
+    <linearGradient id="cameraBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F3FCFC"/><stop offset="1" stop-color="#DDF5F3"/>
+    </linearGradient>
+    <linearGradient id="runnerBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F5FAFF"/><stop offset="1" stop-color="#E2F0FC"/>
+    </linearGradient>
+    <linearGradient id="agentBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F9F7FF"/><stop offset="1" stop-color="#ECE7FF"/>
+    </linearGradient>
+    <linearGradient id="gemini" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3975E9"/><stop offset="0.5" stop-color="#8757F2"/><stop offset="1" stop-color="#E45DA9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#183B56" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrowTeal" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#218E94"/></marker>
+    <marker id="arrowBlue" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#367BAE"/></marker>
+    <marker id="arrowOrange" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#DC782E"/></marker>
+    <marker id="arrowGray" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#6D8394"/></marker>
+    <marker id="arrowGreen" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#4D9A68"/></marker>
+    <marker id="arrowPurple" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L16,8 L0,16 Z" fill="#7458D2"/></marker>
+    <style>
+      text { font-family: 'Noto Sans CJK KR', 'Noto Sans KR', sans-serif; fill: #193B59; }
+      .boundaryLabel { font-size: 18px; font-weight: 800; letter-spacing: 1.4px; fill: #496A83; }
+      .command { font-size: 29px; font-weight: 800; letter-spacing: -0.4px; }
+      .role { font-size: 17px; font-weight: 600; fill: #628097; }
+      .heading { font-size: 23px; font-weight: 800; }
+      .body { font-size: 16px; font-weight: 500; fill: #5F788E; }
+      .taskName { font-size: 17px; font-weight: 800; fill: #255D87; }
+      .label { font-size: 14px; font-weight: 700; fill: #5E778C; }
+      .white { fill: #FFFFFF; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1180" fill="#FFFFFF"/>
+
+  <!-- Jetson local runtime -->
+  <rect x="260" y="120" width="1670" height="850" rx="30" fill="#FAFCFE" stroke="#9FC3DA" stroke-width="2.5"/>
+  <rect x="300" y="145" width="346" height="44" rx="22" fill="#EAF3F9"/>
+  <rect x="322" y="157" width="20" height="20" rx="4" fill="#63ADD0"/>
+  <text x="358" y="175" class="boundaryLabel">JETSON ORIN NANO · LOCAL</text>
+
+  <!-- Operator and remote access -->
+  <rect x="34" y="92" width="182" height="178" rx="24" fill="#FFFFFF" stroke="#B2C9D9" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="125" cy="130" r="18" fill="#2A526E"/>
+  <path d="M87 185c4-27 18-42 38-42s34 15 38 42" fill="#2A526E"/>
+  <rect x="72" y="178" width="106" height="50" rx="7" fill="#DCEAF3" stroke="#2A526E" stroke-width="3"/>
+  <rect x="63" y="226" width="124" height="8" rx="4" fill="#2A526E"/>
+  <text x="125" y="254" class="heading" text-anchor="middle">Operator</text>
+
+  <rect x="34" y="299" width="182" height="78" rx="20" fill="#EEF6FB" stroke="#A9C9DD" stroke-width="2"/>
+  <g fill="#367BAE">
+    <circle cx="66" cy="324" r="4"/><circle cx="80" cy="324" r="4"/><circle cx="94" cy="324" r="4"/>
+    <circle cx="66" cy="338" r="4"/><circle cx="80" cy="338" r="4"/><circle cx="94" cy="338" r="4"/>
+    <circle cx="66" cy="352" r="4"/><circle cx="80" cy="352" r="4"/><circle cx="94" cy="352" r="4"/>
+  </g>
+  <text x="112" y="332" class="taskName">LAN</text><text x="112" y="354" class="taskName">Tailscale</text>
+  <path d="M125 270V299" fill="none" stroke="#367BAE" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <rect x="300" y="208" width="350" height="42" rx="21" fill="#EEF6FB" stroke="#B1CDDF" stroke-width="1.5"/>
+  <text x="475" y="235" class="label" text-anchor="middle">Remote access · :8090 · :8099 · SSH</text>
+  <path d="M216 338H274Q286 338 286 326V241Q286 229 300 229" fill="none" stroke="#367BAE" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#arrowBlue)"/>
+
+  <!-- Top camera hardware -->
+  <rect x="34" y="545" width="182" height="172" rx="24" fill="#FFFFFF" stroke="#79C2C1" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="66" y="580" width="74" height="50" rx="10" fill="#218E94"/>
+  <circle cx="103" cy="605" r="15" fill="#FFFFFF"/><circle cx="103" cy="605" r="8" fill="#218E94"/>
+  <path d="M140 589l26-14v60l-26-14z" fill="#218E94"/>
+  <text x="125" y="674" class="heading" text-anchor="middle">Top Camera</text>
+  <text x="125" y="699" class="body" text-anchor="middle">USB camera</text>
+
+  <!-- so101-camera -->
+  <rect x="320" y="270" width="330" height="258" rx="24" fill="url(#cameraBg)" stroke="#70BFBE" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="350" y="302" width="58" height="58" rx="15" fill="#218E94"/>
+  <rect x="362" y="318" width="29" height="21" rx="4" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <circle cx="376" cy="328" r="6" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <path d="M391 320l8-5v27l-8-5z" fill="#FFFFFF"/>
+  <text x="429" y="329" class="command">so101-camera</text>
+  <text x="429" y="355" class="role">Camera service · :8090</text>
+  <line x1="350" y1="386" x2="620" y2="386" stroke="#ACD9D7" stroke-width="1.5"/>
+  <text x="350" y="424" class="heading">Camera I/O</text>
+  <text x="350" y="456" class="body">MJPEG live stream</text>
+  <text x="350" y="484" class="body">HTTP snapshot · SSE overlay</text>
+
+  <!-- perception -->
+  <rect x="735" y="270" width="330" height="258" rx="24" fill="#F6FAFD" stroke="#9BBFD7" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="765" y="302" width="58" height="58" rx="15" fill="#397EA9"/>
+  <path d="M778 331c9-14 24-14 33 0-9 14-24 14-33 0z" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <circle cx="794" cy="331" r="6" fill="#FFFFFF"/>
+  <text x="844" y="329" class="heading">Perception</text>
+  <text x="844" y="355" class="role">Classical CV</text>
+  <line x1="765" y1="386" x2="1035" y2="386" stroke="#C0D6E4" stroke-width="1.5"/>
+  <text x="765" y="424" class="body">색상 + 형상 기반 블록 검출</text>
+  <text x="765" y="456" class="body">Homography → 로봇 기준 좌표</text>
+  <text x="765" y="488" class="body">작업 영역 · target zone 필터</text>
+
+  <!-- so101-run -->
+  <rect x="1140" y="210" width="450" height="342" rx="24" fill="url(#runnerBg)" stroke="#78ADD3" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="1170" y="240" width="58" height="58" rx="15" fill="#367BAE"/>
+  <path d="M1184 256h27M1184 268h20M1184 280h25" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M1210 266l8 7-8 7" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1249" y="267" class="command">so101-run</text>
+  <text x="1249" y="293" class="role">Task runner · CLI / SSH</text>
+  <rect x="1170" y="323" width="390" height="60" rx="14" fill="#FFFFFF" stroke="#B2D0E5"/>
+  <rect x="1186" y="338" width="70" height="30" rx="15" fill="#367BAE"/>
+  <text x="1221" y="359" class="white" font-size="13" font-weight="800" text-anchor="middle">TASK 1</text>
+  <text x="1273" y="359" class="taskName">지정 영역 운반</text>
+  <rect x="1170" y="397" width="390" height="60" rx="14" fill="#FFFFFF" stroke="#B2D0E5"/>
+  <rect x="1186" y="412" width="70" height="30" rx="15" fill="#367BAE"/>
+  <text x="1221" y="433" class="white" font-size="13" font-weight="800" text-anchor="middle">TASK 2</text>
+  <text x="1273" y="433" class="taskName">한 좌표에 블록 적층</text>
+  <rect x="1170" y="471" width="390" height="60" rx="14" fill="#FFFFFF" stroke="#B2D0E5"/>
+  <rect x="1186" y="486" width="70" height="30" rx="15" fill="#367BAE"/>
+  <text x="1221" y="507" class="white" font-size="13" font-weight="800" text-anchor="middle">TASK 3</text>
+  <text x="1273" y="507" class="taskName">ACT 데이터셋 자동 수집</text>
+
+  <!-- so101-agent -->
+  <rect x="1140" y="655" width="450" height="235" rx="24" fill="url(#agentBg)" stroke="#A496E0" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="1170" y="686" width="58" height="58" rx="15" fill="#7257CC"/>
+  <path d="M1184 726v-12a15 15 0 0130 0v12" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <rect x="1180" y="722" width="38" height="13" rx="6" fill="#FFFFFF"/>
+  <circle cx="1191" cy="728" r="2.8" fill="#7257CC"/><circle cx="1207" cy="728" r="2.8" fill="#7257CC"/>
+  <text x="1249" y="713" class="command">so101-agent</text>
+  <text x="1249" y="739" class="role">Web agent · :8099</text>
+  <line x1="1170" y1="766" x2="1560" y2="766" stroke="#CDC3F0" stroke-width="1.5"/>
+  <path d="M1194 786 C1196 798 1205 807 1217 809 C1205 811 1196 820 1194 832 C1192 820 1183 811 1171 809 C1183 807 1192 798 1194 786Z" fill="url(#gemini)"/>
+  <text x="1230" y="814" class="heading">Gemini tool calling</text>
+  <text x="1170" y="852" class="body">텍스트·음성 명령 → 안전한 로봇 스킬</text>
+
+  <!-- shared robot control -->
+  <rect x="1640" y="370" width="250" height="350" rx="24" fill="#FFF9F3" stroke="#DEA16D" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="1670" y="401" width="58" height="58" rx="15" fill="#DC782E"/>
+  <path d="M1685 443v-22l14-10 14 10v22M1699 411v32M1685 428h28" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1670" y="494" class="heading">Robot Control</text>
+  <text x="1670" y="522" class="role">shared control layer</text>
+  <line x1="1670" y1="548" x2="1860" y2="548" stroke="#EAC6A6" stroke-width="1.5"/>
+  <text x="1670" y="584" class="body">FSM</text>
+  <text x="1670" y="616" class="body">IK · trajectory</text>
+  <text x="1670" y="648" class="body">grasp · contact sensing</text>
+  <text x="1670" y="680" class="body">joint limits · STOP</text>
+
+  <!-- Local data -->
+  <rect x="1640" y="790" width="250" height="142" rx="22" fill="#F3FAF5" stroke="#8EBF9D" stroke-width="2"/>
+  <path d="M1672 822h26l10 10v32h-36z" fill="#FFFFFF" stroke="#4D9A68" stroke-width="2"/>
+  <path d="M1698 822v11h10" fill="none" stroke="#4D9A68" stroke-width="2"/>
+  <text x="1724" y="838" class="heading">Local Data</text>
+  <text x="1670" y="886" class="body">config · calibration · logs</text>
+  <text x="1670" y="914" class="body">LeRobotDataset</text>
+
+  <!-- Main arrows -->
+  <path d="M216 631H320" fill="none" stroke="#218E94" stroke-width="4" marker-end="url(#arrowTeal)"/>
+  <rect x="224" y="592" width="94" height="28" rx="14" fill="#FFFFFF"/><text x="271" y="611" class="label" text-anchor="middle">USB video</text>
+  <path d="M650 399H735" fill="none" stroke="#218E94" stroke-width="4" marker-end="url(#arrowTeal)"/>
+  <rect x="651" y="360" width="84" height="28" rx="14" fill="#FFFFFF"/><text x="693" y="379" class="label" text-anchor="middle">snapshot</text>
+  <path d="M1065 352H1100Q1115 352 1115 337Q1115 322 1140 322" fill="none" stroke="#367BAE" stroke-width="4" marker-end="url(#arrowBlue)"/>
+  <rect x="1067" y="306" width="80" height="28" rx="14" fill="#FFFFFF"/><text x="1107" y="325" class="label" text-anchor="middle">blocks</text>
+  <path d="M1065 456H1095Q1110 456 1110 471V802Q1110 817 1140 817" fill="none" stroke="#367BAE" stroke-width="4" marker-end="url(#arrowBlue)"/>
+  <rect x="1060" y="605" width="98" height="28" rx="14" fill="#FFFFFF"/><text x="1109" y="624" class="label" text-anchor="middle">scene data</text>
+  <path d="M1590 373H1610Q1625 373 1625 388V482Q1625 497 1640 497" fill="none" stroke="#DC782E" stroke-width="4" marker-end="url(#arrowOrange)"/>
+  <rect x="1571" y="426" width="107" height="28" rx="14" fill="#FFFFFF"/><text x="1624" y="445" class="label" text-anchor="middle">task actions</text>
+  <path d="M1590 773H1610Q1625 773 1625 758V638Q1625 623 1640 623" fill="none" stroke="#DC782E" stroke-width="4" marker-end="url(#arrowOrange)"/>
+  <rect x="1569" y="696" width="111" height="28" rx="14" fill="#FFFFFF"/><text x="1624" y="715" class="label" text-anchor="middle">tool actions</text>
+  <path d="M1538 531V756Q1538 771 1553 771H1625Q1640 771 1640 790" fill="none" stroke="#4D9A68" stroke-width="3.5" marker-end="url(#arrowGreen)"/>
+  <rect x="1477" y="590" width="122" height="28" rx="14" fill="#FFFFFF"/><text x="1538" y="609" class="label" text-anchor="middle">Task 3 episodes</text>
+
+  <!-- Robot arm -->
+  <rect x="1990" y="425" width="176" height="248" rx="24" fill="#FFFFFF" stroke="#E1A06A" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="2024" y="610" width="108" height="18" rx="9" fill="#294E69"/>
+  <rect x="2068" y="576" width="22" height="39" rx="6" fill="#DC782E"/>
+  <circle cx="2079" cy="570" r="17" fill="#F09A4D" stroke="#C86620" stroke-width="3"/>
+  <path d="M2070 557l-42-54" stroke="#DC782E" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="2027" cy="502" r="16" fill="#F09A4D" stroke="#C86620" stroke-width="3"/>
+  <path d="M2018 492l48-38" stroke="#DC782E" stroke-width="17" stroke-linecap="round"/>
+  <circle cx="2068" cy="453" r="14" fill="#F09A4D" stroke="#C86620" stroke-width="3"/>
+  <path d="M2080 453h34" stroke="#294E69" stroke-width="11" stroke-linecap="round"/>
+  <path d="M2114 444v19M2127 444v19" stroke="#294E69" stroke-width="7" stroke-linecap="round"/>
+  <text x="2078" y="653" class="heading" text-anchor="middle">SO-101 Arm</text>
+  <path d="M1890 515H1990" fill="none" stroke="#DC782E" stroke-width="4" marker-end="url(#arrowOrange)"/>
+  <rect x="1894" y="476" width="92" height="28" rx="14" fill="#FFFFFF"/><text x="1940" y="495" class="label" text-anchor="middle">commands</text>
+  <path d="M1990 583H1960Q1945 583 1945 598V686Q1945 701 1890 701" fill="none" stroke="#6D8394" stroke-width="3" marker-end="url(#arrowGray)"/>
+  <rect x="1900" y="639" width="90" height="28" rx="14" fill="#FFFFFF"/><text x="1945" y="658" class="label" text-anchor="middle">state · load</text>
+
+  <!-- Gemini API -->
+  <rect x="1138" y="1017" width="454" height="118" rx="24" fill="#FFFFFF" stroke="#B5A7E8" stroke-width="2" filter="url(#shadow)"/>
+  <path d="M1195 1039 C1198 1058 1212 1072 1231 1075 C1212 1078 1198 1092 1195 1111 C1192 1092 1178 1078 1159 1075 C1178 1072 1192 1058 1195 1039Z" fill="url(#gemini)"/>
+  <text x="1250" y="1074" font-size="29" font-weight="800" fill="#4C477E">Gemini API</text>
+  <text x="1250" y="1105" class="role">LLM inference · HTTPS</text>
+  <path d="M1365 890V1017" fill="none" stroke="#7458D2" stroke-width="3.5" stroke-dasharray="9 7" marker-end="url(#arrowPurple)"/>
+  <rect x="1379" y="941" width="124" height="28" rx="14" fill="#FFFFFF"/><text x="1441" y="960" class="label" text-anchor="middle">tool calling API</text>
+</svg>

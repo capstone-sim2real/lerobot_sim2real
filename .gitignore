@@ -52,3 +52,6 @@ models/
 # LLM agent transcripts, runtime lock, and API keys
 logs/agent/
 .env
+
+# Timestamped calibration backups are local recovery artifacts.
+src/configs/calib/*.pre-*.json

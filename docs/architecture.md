@@ -130,6 +130,16 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE
 | `policy/` | optional ACT PICK 클라이언트와 gRPC transport 보존 경로 |
 | `runners/run_task.py` | Task/flow/pick-mode 조립과 실행 CLI |
 | `tools/` | 캘리브레이션, 모터 진단, 수동 조작, 세션 CLI |
+| `session/` | `ArmSession`(연결·IK·플래너 1회 생성, STOP 취소, 버스 락), 러너 공용 팩토리, 에이전트 스킬 |
+| `perception/scene.py` | 에이전트 전용 zone 안/밖 장면과 칸 점유 (검출기 기본 동작은 불변) |
+| `session/grid.py` | 체스판 칸 좌표 ↔ 로봇 베이스 mm (표시·주소 지정 전용, AGENTS.md §6) |
+| `agent/` | `so101-agent`: 툴 스키마, Claude/GPT/Gemini 어댑터, 대화 루프, 제어 게이트, FastAPI + 웹 UI |
+
+`so101-camera`와 `so101-agent` 화면은 같은 MJPEG 위에 같은 부채꼴을 그린다. 호 좌표는
+양쪽 모두 `perception/detector.py`의 `workspace_sector_points_mm`이 만들고, 검출기 게이트와
+같은 반경 프로파일을 쓰므로 화면에 보이는 경계가 곧 검출 경계다. 에이전트 화면은 그 위에
+적재 구역 칸·이름 붙은 15개 자리·체스판 칸 격자를 SVG로 얹고, 누르면 입력창에 이름이나
+좌표가 들어간다.
 
 ## 실행 규칙
 
@@ -140,6 +150,19 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE
 4. IK gate를 넘는 grasp/slot waypoint는 실행하지 않는다.
 5. 모든 조정값은 `config.py`와 `configs/default.yaml`에 두고 `--set`으로 덮는다.
 6. 관제 overlay는 표시 전용이며 SELECT나 IK의 입력으로 되돌아가지 않는다.
+7. 로봇 시리얼 버스 소유자는 `so101-run`/`so101-collect`/`so101-agent` 중 하나뿐이다.
+   `so101-agent`는 `agent.lock_path` 락을 잡고 시작한다.
+
+### LLM 에이전트 토폴로지
+
+```text
+so101-camera :8090 ── /dev/video* 단독 소유 (변경 없음)
+so101-agent  :8099 ── 시리얼 버스 단독 소유 (버스 락)
+  웹 이벤트 루프   : HTTP/SSE만 처리, 로봇 미접촉. /api/stop 은 즉시 반환
+  so101-robot 스레드: ArmSession 생성·사용·종료, 모든 스킬 실행 (단일 스레드)
+  요청 스레드       : LLM 대화 루프 / 조그 / home 복귀, robot 스레드에 작업을 넘기고 대기
+브라우저 ── 채팅(SSE) + Web Speech STT + <img src=":8090/video/shoulder.mjpg">
+```
 
 ## 현재 캘리브레이션
 
