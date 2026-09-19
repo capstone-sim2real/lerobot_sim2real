@@ -50,7 +50,15 @@ def test_lease_is_shared_stop_is_open_and_commands_need_the_shared_token():
         assert "window.SpeechRecognition || window.webkitSpeechRecognition" in script_response.text
         assert '$("mic").hidden = true' not in script_response.text
         assert "if (!window.isSecureContext)" not in script_response.text
-        assert re.search(r'id="mic"[^>]*hidden', index.text)
+        from html.parser import HTMLParser
+        class Attributes(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if attributes.get("id") == "mic":
+                    self.mic = attributes
+        parsed = Attributes()
+        parsed.feed(index.text)
+        assert "hidden" in parsed.mic
         assert re.search(r'class="voice-option"[^>]*hidden', index.text)
         assert 'id="voice-status"' in index.text
         assert "음성 인식 끝나면 자동 전송" in index.text

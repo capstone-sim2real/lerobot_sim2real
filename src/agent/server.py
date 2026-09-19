@@ -252,6 +252,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         # reaches the robot API. Give each asset a content-changing URL and
         # forbid caching so an asset-only edit appears on the next reload.
         html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__SHADCN_CSS_VERSION__", str((WEB_DIR / "shadcn.css").stat().st_mtime_ns))
         html = html.replace("__APP_JS_VERSION__", str((WEB_DIR / "app.js").stat().st_mtime_ns))
         html = html.replace("__APP_CSS_VERSION__", str((WEB_DIR / "app.css").stat().st_mtime_ns))
         html = html.replace("__OVERLAY_JS_VERSION__", str((WEB_DIR / "camera-overlay.js").stat().st_mtime_ns))
@@ -265,6 +266,10 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             media_type="application/javascript",
             headers={"Cache-Control": "no-store, max-age=0"},
         )
+
+    @app.get("/shadcn.css")
+    async def shadcn_css():
+        return FileResponse(WEB_DIR / "shadcn.css", media_type="text/css", headers={"Cache-Control":"no-store"})
 
     @app.get("/app.css")
     async def app_css():
