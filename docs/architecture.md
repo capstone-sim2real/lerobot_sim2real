@@ -133,6 +133,7 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE
 | `session/` | `ArmSession`(연결·IK·플래너 1회 생성, STOP 취소, 버스 락), 러너 공용 팩토리, 에이전트 스킬 |
 | `perception/scene.py` | 에이전트 전용 zone 안/밖 장면과 칸 점유 (검출기 기본 동작은 불변) |
 | `session/grid.py` | 체스판 칸 좌표 ↔ 로봇 베이스 mm (표시·주소 지정 전용, AGENTS.md §6) |
+| `session/place_correction.py` | 놓은 뒤 카메라로 잰 차이로 다음 배치 명령을 보정 (AGENTS.md §16.4) |
 | `agent/` | `so101-agent`: 툴 스키마, Claude/GPT/Gemini 어댑터, 대화 루프, 제어 게이트, FastAPI + 웹 UI |
 
 `so101-camera`와 `so101-agent` 화면은 같은 MJPEG 위에 같은 부채꼴을 그린다. 호 좌표는
