@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SO-101 로봇팔 에이전트</title>
+
 <link rel="stylesheet" href="/app.css?v=__APP_CSS_VERSION__">
 </head>
 <body>
@@ -34,19 +35,17 @@
       <img id="camera" alt="카메라 영상">
       <canvas id="perception-overlay" aria-label="블록 검출 오버레이"></canvas>
       <svg id="overlay" preserveAspectRatio="none"></svg>
+      <svg id="pixel-target-overlay" preserveAspectRatio="none" aria-label="선택한 픽셀 위치"></svg>
       <div id="camera-missing" class="camera-missing" hidden>카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
     </div>
     <div class="camera-tools" id="camera-tools">
-      <div class="layer-toggle" role="radiogroup" aria-label="오버레이 선택">
-        <label><input type="radio" name="places-layer" value="regions" checked><span>부채꼴</span></label>
-        <label><input type="radio" name="places-layer" value="grid"><span>격자</span></label>
-      </div>
+      <span>헤드캠 픽셀 선택</span>
       <span id="grid-hover" class="grid-hover"></span>
     </div>
     <section class="perception-controls" aria-label="카메라 표시 설정">
       <div class="layer-buttons" role="group" aria-label="표시 항목">
         <button type="button" class="layer-button" data-camera-layer="master" aria-pressed="false">전체 표시</button>
-        <button type="button" class="layer-button" data-camera-layer="places" aria-pressed="false">구역·격자</button>
+        <button type="button" class="layer-button" data-camera-layer="places" aria-pressed="false">작업 범위</button>
         <button type="button" class="layer-button" data-camera-layer="boxes" aria-pressed="false">블록 윤곽</button>
         <button type="button" class="layer-button" data-camera-layer="centers" aria-pressed="false">중심점</button>
         <button type="button" class="layer-button" data-camera-layer="axes" aria-pressed="false">파지 방향</button>
@@ -74,7 +73,27 @@
       <button role="tab" aria-selected="true" aria-controls="direct-controls" id="direct-tab" data-command-tab="direct-controls">직접 조작</button>
       <button role="tab" aria-selected="false" aria-controls="command-chat" id="chat-tab" data-command-tab="command-chat">LLM 대화</button>
     </div>
-    <div id="direct-controls" role="tabpanel" aria-labelledby="direct-tab">    <div class="jog">
+    <div id="direct-controls" role="tabpanel" aria-labelledby="direct-tab">
+      <div class="keyboard-control">
+        <div class="keyboard-heading"><strong>키보드 조작</strong><button type="button" class="btn" id="keyboard-toggle" aria-pressed="false">키보드 켜기</button></div>
+        <p id="keyboard-status" role="status">꺼짐 · 버튼을 눌러 활성화</p>
+        <details><summary>단축키 보기</summary><div class="keyboard-legend">
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 앞·왼쪽·뒤·오른쪽</span>
+          <span><kbd>J</kbd> 위 <kbd>K</kbd> 아래 · 이동 거리 설정 적용</span>
+          <span><kbd>Q</kbd><kbd>E</kbd> 손목 회전 · 회전 각도 설정 적용</span>
+          <span><kbd>G</kbd> 집기 <kbd>P</kbd> 놓기 <kbd>O</kbd> 열기 <kbd>H</kbd> 홈</span>
+          <span><kbd>Esc</kbd> 정지 · 입력 중에도 사용 가능</span>
+        </div></details>
+      </div>
+      <div class="pixel-selection">
+        <strong>선택 위치</strong>
+        <p id="pixel-target-status">헤드캠 영상에서 목표점을 클릭하세요. 높이는 블록 1개 윗면으로 고정됩니다.</p>
+        <div class="gripper-row">
+          <button type="button" class="btn" id="move-pixel" disabled>선택 위치로 이동</button>
+          <button type="button" class="btn" id="place-pixel" disabled>선택 위치에 놓기</button>
+        </div>
+        <button type="button" class="link" id="pixel-to-chat" disabled>선택 위치를 LLM에 전달</button>
+      </div>    <div class="jog">
       <div class="jog-title">팔 직접 움직이기</div>
       <div class="jog-grid">
         <span></span>
@@ -91,13 +110,13 @@
         <button class="btn jog-btn" data-jog="back">뒤 ▼<small>가까이</small></button>
         <button class="btn jog-btn" data-jog="down">높이 ▼</button>
       </div>
-      <div class="cell-row">
+      <div class="cell-row" hidden>
         <label for="cell-x">칸</label>
         <input id="cell-x" type="number" step="1" inputmode="numeric" aria-label="칸 x (화면 오른쪽 +)" placeholder="x">
         <input id="cell-y" type="number" step="1" inputmode="numeric" aria-label="칸 y (로봇에서 먼 쪽 +)" placeholder="y">
         <button id="go-cell" class="btn">이 칸 위로 이동</button>
       </div>
-      <button id="manual-home" class="btn manual-home-btn">🏠 home으로 복귀</button>
+      <button id="manual-home" class="btn manual-home-btn">home으로 복귀</button>
     </div>
     <div class="gripper">
       <div class="jog-title">그리퍼</div>
@@ -111,7 +130,7 @@
         <button class="btn" id="roll-cw">돌리기 ↻</button>
       </div>
       <div class="gripper-row">
-        <button class="btn btn-primary" id="pick-here">🦾 여기서 집기</button>
+        <button class="btn btn-primary" id="pick-here">여기서 집기</button>
         <button class="btn" id="place-here">여기 내려놓기</button>
         <button class="btn" id="open-gripper">그리퍼 열기</button>
       </div>
