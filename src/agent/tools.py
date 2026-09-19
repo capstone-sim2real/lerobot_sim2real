@@ -5,7 +5,7 @@ bounded millimetre vectors whose limits are written into the schema from
 config, and every enum (colour, zone cell, table region) is generated from
 config, so adding a colour or renaming a cell needs no code change.
 
-The one absolute address is a *chessboard cell* (``x``/``y`` integers,
+Legacy absolute addresses include a *chessboard cell* (``x``/``y`` integers,
 AGENTS.md §16.3): it is discrete, it resolves through the same workspace
 sector and IK gates every other target passes, and it exists because an
 operator pointing at the camera page needs to say "there" without a name
@@ -119,7 +119,16 @@ def build_tools(cfg: AppConfig) -> list[ToolDef]:
     def slot_arg(args: dict[str, Any]) -> int:
         return slot_index[args["slot"]]
 
+    pixel_args = _obj({
+        "u": {"type":"integer", "minimum":0, "description":"Original head-camera pixel column selected by the operator."},
+        "v": {"type":"integer", "minimum":0, "description":"Original head-camera pixel row selected by the operator."},
+        "calibration_id": {"type":"string", "description":"Calibration ID supplied with the operator's pixel selection; never invent one."},
+    }, ["u","v","calibration_id"])
     tools = [
+        ToolDef(ToolSpec("move_to_pixel", "Move the EMPTY gripper to an operator-selected head-camera pixel on the fixed one-block top plane. Lifts before traversing; does not close jaws. Use only explicit pixel selection, never guess pixels.", pixel_args),
+                lambda sk,a: sk.move_to_pixel(a['u'],a['v'],a['calibration_id'])),
+        ToolDef(ToolSpec("place_at_pixel", "Place a held block at an operator-selected head-camera pixel. Fixed single-block plane, no stacking. Use only explicit pixel selection.",pixel_args),
+                lambda sk,a: sk.place_at_pixel(a['u'],a['v'],a['calibration_id'])),
         ToolDef(
             ToolSpec(
                 "get_state",

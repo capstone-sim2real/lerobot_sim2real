@@ -941,6 +941,64 @@ class Skills:
                             from_mm={"x": x, "y": y, "z": z}, target={"x": tx, "y": ty, "z": tz},
                             reached={"x": rx, "y": ry, "z": rz}, entered_jog_height=entered or None)
 
+    def _pixel_point(self, action, t0, u, v, calibration_id):
+        from session.pixel_target import resolve_pixel, calibration_id as fingerprint
+        from perception.homography import PlaneCalibration
+        try:
+            live = PlaneCalibration.load(self.cfg.perception.calibration_path)
+            if fingerprint(live) != fingerprint(self.s.calib):
+                raise ValueError("보정 파일이 변경되었습니다. 제어 서버를 다시 시작하세요.")
+            target = resolve_pixel(self.cfg, self.s.calib, u, v, calibration_id)
+            return target, None
+        except (ValueError, OSError) as exc:
+            return None, self._result(False, action, "invalid_arguments", str(exc), t0=t0,
+                                      retry_advice="do_not_retry")
+
+    def move_to_pixel(self, u: int, v: int, calibration_id: str) -> SkillResult:
+        """Lift, traverse, then descend to the calibrated one-block top plane."""
+        action, t0, s, cfg = "move_to_pixel", time.monotonic(), self.s, self.cfg
+        target, failure = self._pixel_point(action, t0, u, v, calibration_id)
+        if failure is not None:
+            return failure
+        if s.held is not None:
+            return self._result(False, action, "already_holding",
+                "블록을 들고 있습니다. 선택 위치에 놓기를 사용하세요.", t0=t0)
+        joints = s.robot.read_joints()
+        x,y,z = s.ik.forward_position_mm(joints)
+        tx,ty,tz = target['x_mm'],target['y_mm'],target['z_mm']
+        height = max(z, cfg.agent.relative.jog_min_z_mm)
+        if height > cfg.agent.relative.jog_max_z_mm:
+            return self._result(False, action, "height_limit", "현재 높이가 작업 범위를 벗어났습니다.", t0=t0)
+        plans=[]
+        # Plan all three poses before any command is sent. No global jog limits change.
+        for px,py,pz in ((x,y,height),(tx,ty,height),(tx,ty,tz)):
+            result=s.ik.solve_holding_wrist_roll(px,py,pz,joints['wrist_roll'],
+                radial_tilt_deg=place_tilt_deg((px,py),s.base_xy,cfg))
+            if over_ik_gate(result,cfg) or result.position_error_mm > cfg.agent.relative.jog_max_ik_error_mm:
+                return self._result(False,action,"ik_gate","이 위치의 접근 경로가 IK 검사를 통과하지 못했습니다.",t0=t0)
+            plans.append(result)
+        for plan in plans:
+            s.player.move_to(plan.joints,max_step=1.0,tol=cfg.motion.transit_arrival_tol)
+        return self._result(True,action,"moved","선택한 픽셀의 블록 윗면 높이로 이동했습니다.",
+                            t0=t0,target=target,reached=list(s.arm_position_mm()))
+
+    def place_at_pixel(self, u: int, v: int, calibration_id: str) -> SkillResult:
+        action,t0,s = "place_at_pixel",time.monotonic(),self.s
+        target,failure=self._pixel_point(action,t0,u,v,calibration_id)
+        if failure is not None:
+            return failure
+        if s.held is None:
+            return self._no_block(action,t0)
+        point=(target['x_mm'],target['y_mm'])
+        reason,plan=self.placement_verdict(point,allow_zone=True,ignore_color=s.held.color)
+        if reason is not None:
+            return self._verdict_failure(action,reason,t0,target=target)
+        color=s.held.color
+        s.carry_and_release(plan)
+        verification=self._verify_block(color)
+        return self._result(True,action,"released","선택한 픽셀에 블록을 놓았습니다.",
+                            t0=t0,target=target,**verification)
+
     def move_to_cell(self, x: int, y: int) -> SkillResult:
         """Fly the gripper over one chessboard cell, at the current height.
 

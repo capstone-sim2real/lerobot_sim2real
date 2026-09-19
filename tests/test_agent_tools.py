@@ -22,7 +22,7 @@ def _never(_job):
 def test_tool_list_and_enums_follow_config():
     cfg = AppConfig()
     names = [t.spec.name for t in build_tools(cfg)]
-    assert len(names) == 20 and "run_task3" not in names
+    assert len(names) == 22 and "run_task3" not in names
     cfg.agent.enable_task3_tool = True
     assert "run_task3" in [t.spec.name for t in build_tools(cfg)]
 
@@ -58,7 +58,7 @@ def test_bad_arguments_never_reach_the_robot():
 
 
 def test_validate_arguments_messages():
-    schema = build_tools(AppConfig())[3].spec.input_schema  # pick_block
+    schema = next(t.spec.input_schema for t in build_tools(AppConfig()) if t.spec.name == "pick_block")
     assert validate_arguments(schema, {"color": "red"}) is None
     assert "relative_to_last" in validate_arguments(schema, {"color": "red", "relative_to_last": 1})
 
