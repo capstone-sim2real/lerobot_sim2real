@@ -236,9 +236,9 @@ def test_stop_mid_skill_becomes_a_cancelled_fault_envelope():
 
     robot.send_joints = send.__get__(robot)
     registry = ToolRegistry(skills.cfg, lambda job: job(skills))
-    result = registry.execute(ToolCall("c1", "pick_block", {"color": "yellow"}))
-    assert result.content["reason"] == "cancelled" and result.is_error
-    assert "state" in result.content
+    result = registry.run_skill("pick_block", lambda sk: sk.pick_block("yellow"))
+    assert result.reason == "cancelled" and not result.ok
+    assert "state" in result.to_envelope()
 
     with pytest.raises(Cancelled):
         skills.s.robot.send_joints({"gripper": 50.0})

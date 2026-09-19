@@ -5,6 +5,7 @@ Reads OPENAI_API_KEY from the environment.
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any, Iterator, Sequence
 
@@ -36,6 +37,15 @@ class OpenAIProvider:
                             "content": json.dumps(result.content, ensure_ascii=False),
                         }
                     )
+                images = [im for result in message.tool_results for im in result.images]
+                if images:
+                    content = []
+                    for im in images:
+                        content.extend([
+                            {"type": "text", "text": f"Observation camera={im.camera} frame_seq={im.frame_seq} captured_at={im.captured_at}"},
+                            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(im.jpeg).decode("ascii")}},
+                        ])
+                    out.append({"role": "user", "content": content})
                 if message.text:
                     out.append({"role": "user", "content": message.text})
                 continue

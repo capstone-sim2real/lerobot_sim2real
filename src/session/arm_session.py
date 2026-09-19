@@ -131,6 +131,7 @@ class ArmSession:
         self.last_pick: LastPick | None = None
         self.last_block_color: str | None = None
         self.last_scene: Scene | None = None
+        self.last_snapshot: CameraSnapshot | None = None
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -297,6 +298,7 @@ class ArmSession:
         """
         self.cancel.raise_if_set()
         if self._scene_fn is not None:
+            self.last_snapshot = None
             scene = self._scene_fn()
             self.last_scene = scene
             return scene
@@ -318,6 +320,7 @@ class ArmSession:
                     stale=True,
                 )
             time.sleep(self.cfg.task1.scan_interval_s)
+        self.last_snapshot = snapshot
         scene = detect_scene(
             snapshot.frame,
             self.calib,

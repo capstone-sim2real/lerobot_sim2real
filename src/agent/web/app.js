@@ -5,14 +5,12 @@ const $ = (id) => document.getElementById(id);
 const TOKEN_KEY = "so101_operator_token";
 const CONTROL_UI_VERSION = "cell-grid-v1";
 const TOOL_NAMES = {
-  get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 이름 확인",
-  pick_block: "블록 집기", place_at_slot: "칸에 놓기", place_on_table: "테이블에 놓기",
-  place_here: "여기 내려놓기", move_block_to_slot: "칸으로 옮기기", move_block_to_table: "테이블로 옮기기",
-  shift_block: "블록 조금 옮기기", move_arm: "팔 움직이기", return_to_home: "home 복귀",
-  open_gripper: "그리퍼 열기", run_task1: "미션 1", run_task2: "미션 2", run_task3: "미션 3(수집)",
-  recover_and_home: "복귀(그리퍼 열기+home+그리퍼 닫기)",
-  rotate_gripper: "그리퍼 돌리기", pick_here: "여기서 집기",
-  place_at_cell: "칸 좌표에 놓기", move_block_to_cell: "칸 좌표로 옮기기", move_to_cell: "칸 좌표 위로 이동",
+  get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 확인",
+  move_to_target: "목표 접근", move_relative: "상대 이동", align_gripper: "블록 방향 정렬",
+  close_gripper: "닫기·파지 확인", descend_until_contact: "접촉 하강", open_gripper: "그리퍼 열기",
+  return_to_home: "home 복귀", recover_and_home: "그리퍼 열기·home 복귀",
+  begin_episode: "시연 녹화 시작", save_episode: "시연 저장", discard_episode: "시연 폐기",
+  collection_status: "수집 현황", finish_dataset: "데이터셋 마무리",
 };
 const STATE_TEXT = { idle: "대기", busy: "실행 중", stopping: "정지 중", stopped: "비상정지됨", homing: "home 복귀 중" };
 
@@ -280,7 +278,7 @@ function applyControl(snapshot) {
   const idle = snapshot.state === "idle" && isOperator;
   const manualControls = [
     $("input"), $("send"), $("mic"), $("reset"), $("jog-step"), $("manual-home"),
-    $("roll-ccw"), $("roll-cw"), $("roll-step"), $("pick-here"), $("place-here"), $("open-gripper"),
+    $("observe-now"), $("pick-here"), $("collection-status"), $("open-gripper"),
     $("cell-x"), $("cell-y"), $("go-cell"),
     ...document.querySelectorAll(".jog-btn"),
   ];
@@ -293,7 +291,7 @@ function applyControl(snapshot) {
   if (snapshot.message) $("stopped-message").textContent = snapshot.message;
   if (!idle && recognizing && recognition) { try { recognition.abort(); } catch (_) {} }
   $("input").placeholder = idle ? "예: 노란 블록을 적재 구역 좌상단으로 옮겨줘"
-    : snapshot.state === "stopped" ? "비상정지 상태입니다. 자동 복귀가 실패했으니 다시 시도해 주세요." : "로봇이 동작 중입니다…";
+    : snapshot.state === "stopped" ? "비상정지 상태입니다. 팔과 물체를 확인한 뒤 수동 복귀해 주세요." : "로봇이 동작 중입니다…";
 }
 
 // ── lease & events ──────────────────────────────────────────────────
@@ -362,8 +360,7 @@ for (const button of document.querySelectorAll(".jog-btn")) {
     directRequest("/api/jog", { forward_mm: f * step, left_mm: l * step, up_mm: u * step });
   });
 }
-$("roll-ccw").addEventListener("click", () => manual("rotate_gripper", { delta_deg: -Number($("roll-step").value) }));
-$("roll-cw").addEventListener("click", () => manual("rotate_gripper", { delta_deg: Number($("roll-step").value) }));
+$("observe-now").addEventListener("click", () => manual("observe_scene"));
 
 $("go-cell").addEventListener("click", () => {
   const x = Number($("cell-x").value);
@@ -372,12 +369,12 @@ $("go-cell").addEventListener("click", () => {
     showToast("칸 좌표는 정수 x와 y로 입력하세요 (예: 3, 4).", "bad");
     return;
   }
-  manual("move_to_cell", { x, y });
+  manual("move_to_target", { target_type: "cell", phase: "hover", x, y });
 });
 
 $("manual-home").addEventListener("click", () => manual("return_to_home"));
-$("pick-here").addEventListener("click", () => manual("pick_here"));
-$("place-here").addEventListener("click", () => manual("place_here"));
+$("pick-here").addEventListener("click", () => manual("close_gripper"));
+$("collection-status").addEventListener("click", () => manual("collection_status"));
 $("open-gripper").addEventListener("click", () => manual("open_gripper"));
 
 // ── voice (browser built-in Web Speech API) ────────────────────────

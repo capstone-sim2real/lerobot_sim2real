@@ -13,10 +13,11 @@ Rules the loop keeps:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -149,6 +150,12 @@ class AgentRunner:
                 self.emit({"type": "turn_end", "robot_fault": False})
                 return outcome
 
+            if len(calls) > 1:
+                rejected = tuple(self._not_executed(c, "invalid_arguments", "Primitive mode requires exactly one tool call per response; none executed") for c in calls)
+                self.history.append(Message("user", tool_results=rejected))
+                self._log({"type": "batch_rejected", "tool_calls": [c.name for c in calls]})
+                continue
+
             results: list[ToolResult] = []
             halted_reason: str | None = None
             for call in calls:
@@ -166,6 +173,17 @@ class AgentRunner:
                 self.emit({"type": "tool_result", "id": call.id, "name": call.name, "result": result.content})
                 self._log({"type": "tool_result", "name": call.name, "arguments": call.arguments,
                            "result": result.content})
+                if result.images:
+                    # Retain only the newest image batch in API history. Text evidence stays.
+                    for previous in self.history:
+                        previous.tool_results = tuple(replace(r, images=()) for r in previous.tool_results)
+                    if self._transcript is not None:
+                        image_dir = self._transcript.parent / "observations"
+                        image_dir.mkdir(exist_ok=True)
+                        for im in result.images:
+                            path = image_dir / (hashlib.sha256(im.jpeg).hexdigest() + ".jpg")
+                            path.write_bytes(im.jpeg)
+                            self._log({"type": "observation_image", "path": str(path), "frame_seq": im.frame_seq, "captured_at": im.captured_at})
                 results.append(result)
                 if result.content.get("reason") in ROBOT_FAULT_REASONS:
                     halted_reason = result.content["reason"]

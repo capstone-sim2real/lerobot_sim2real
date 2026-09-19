@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol, Sequence, Union
 
+from session.results import ObservationImage
+
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -26,6 +28,7 @@ class ToolResult:
     name: str
     content: dict[str, Any]
     is_error: bool = False
+    images: tuple[ObservationImage, ...] = ()
 
 
 @dataclass(frozen=True)

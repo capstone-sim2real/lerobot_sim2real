@@ -55,6 +55,10 @@ class GeminiProvider:
                     types.Part.from_function_response(name=result.name, response=result.content)
                     for result in message.tool_results
                 ]
+                for result in message.tool_results:
+                    for im in result.images:
+                        parts.append(types.Part.from_text(text=f"Observation camera={im.camera} frame_seq={im.frame_seq} captured_at={im.captured_at}"))
+                        parts.append(types.Part.from_bytes(data=im.jpeg, mime_type="image/jpeg"))
                 if message.text:
                     parts.append(types.Part.from_text(text=message.text))
                 contents.append(types.Content(role="user", parts=parts))

@@ -55,3 +55,6 @@ logs/agent/
 
 # Timestamped calibration backups are local recovery artifacts.
 src/configs/calib/*.pre-*.json
+
+# Local composed demonstration datasets
+/datasets/agent/

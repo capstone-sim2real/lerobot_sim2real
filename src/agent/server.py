@@ -179,7 +179,8 @@ def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool):
         else:
             session = ArmSession.open(cfg, prebuild_ik=True, **kwargs)
         check_jog_window(session.cfg, session.grasp_z_mm)
-        return Skills(session)
+        from session.primitives import PrimitiveSkills
+        return PrimitiveSkills(session)
 
     return factory
 

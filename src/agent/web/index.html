@@ -65,19 +65,13 @@
       <button id="manual-home" class="btn manual-home-btn">🏠 home으로 복귀</button>
     </div>
     <div class="gripper">
-      <div class="jog-title">그리퍼 <small>(회전 · 집기 · 놓기, LLM 없이 바로 실행)</small></div>
+      <div class="jog-title">그리퍼 <small>(현재 위치에서 닫기·열기)</small></div>
       <div class="gripper-row">
-        <button class="btn" id="roll-ccw">↺ 돌리기</button>
-        <select id="roll-step" aria-label="회전 각도">
-          <option value="15">15°</option>
-          <option value="45" selected>45°</option>
-          <option value="90">90°</option>
-        </select>
-        <button class="btn" id="roll-cw">돌리기 ↻</button>
+        <button class="btn" id="observe-now">장면 관찰</button>
+        <button class="btn" id="collection-status">수집 현황</button>
       </div>
       <div class="gripper-row">
-        <button class="btn btn-primary" id="pick-here">🦾 여기서 집기</button>
-        <button class="btn" id="place-here">여기 내려놓기</button>
+        <button class="btn btn-primary" id="pick-here">닫기·파지 확인</button>
         <button class="btn" id="open-gripper">그리퍼 열기</button>
       </div>
     </div>
