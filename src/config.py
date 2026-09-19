@@ -13,6 +13,8 @@ Usage:
 from __future__ import annotations
 
 import dataclasses
+import math
+import unicodedata
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, get_type_hints
@@ -711,6 +713,13 @@ class CameraConfig:
     """Camera web UI settings; capture transport stays configured by its CLI."""
 
     overlay: CameraOverlayConfig = field(default_factory=CameraOverlayConfig)
+    # so101-run / so101-collect / so101-agent start camera.server themselves
+    # (as the sole /dev/video* owner) when nothing already answers its
+    # health check, so an operator no longer has to launch so101-camera by
+    # hand first. Set False to require it be started manually, as before.
+    auto_start: bool = True
+    # Extra camera.server CLI args, e.g. ["--wrist-device", "/dev/video2"].
+    extra_args: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -745,6 +754,214 @@ class SessionToolsConfig:
 
 
 @dataclass
+class ZoneSlotNamesConfig:
+    """Human names for the ``task1.slot_uv`` cells, used by the LLM agent.
+
+    ``frame`` states whose top/left these are. The operator looks at the
+    camera page, where the far row (v -> 0) renders at the TOP of the image
+    and +y mm is image-LEFT -- verified against ``meta.zone_polygon_px`` of
+    the venue calibration (far corner x~312mm at py~326, +y corner at px~461).
+    Re-check with ``so101-agent --dry-run`` after re-mounting the camera.
+    """
+
+    frame: str = "camera_view"
+    labels: list[str] = field(
+        default_factory=lambda: [
+            "top-left", "top-center", "top-right", "bottom-left", "bottom-right",
+        ]
+    )
+    korean_labels: list[str] = field(
+        default_factory=lambda: ["좌상단", "상단중앙", "우상단", "좌하단", "우하단"]
+    )
+    # Normalised (NFKC, casefold, no spaces/hyphens) name -> slot index.
+    aliases: dict[str, int] = field(
+        default_factory=lambda: {
+            "좌상단": 0, "왼쪽위": 0, "좌측상단": 0, "상단왼쪽": 0, "왼쪽상단": 0,
+            "상단중앙": 1, "가운데위": 1, "중앙상단": 1, "상단가운데": 1, "위쪽가운데": 1,
+            "우상단": 2, "오른쪽위": 2, "우측상단": 2, "상단오른쪽": 2, "오른쪽상단": 2,
+            "좌하단": 3, "왼쪽아래": 3, "좌측하단": 3, "하단왼쪽": 3, "왼쪽하단": 3,
+            "우하단": 4, "오른쪽아래": 4, "우측하단": 4, "하단오른쪽": 4, "오른쪽하단": 4,
+            "먼쪽왼쪽": 0, "먼쪽가운데": 1, "먼쪽오른쪽": 2,
+            "가까운쪽왼쪽": 3, "가까운쪽오른쪽": 4,
+            "topcentre": 1, "farleft": 0, "farcenter": 1, "farcentre": 1, "farright": 2,
+            "nearleft": 3, "nearright": 4,
+        }
+    )
+
+
+@dataclass
+class RelativeMotionConfig:
+    """Limits for relative requests ("5mm further", "go left"). Per call."""
+
+    # "arm": forward = radial from the base, left = tangential
+    # (control.ik.gripper_frame_offset). "base": forward = +x, left = +y.
+    frame: str = "arm"
+    # "go left" with no distance, and "a little"
+    default_step_mm: float = 20.0
+    small_step_mm: float = 10.0
+    # Assumed, not measured: cumulative grasp-point offset from the detected centre.
+    max_pick_offset_mm: float = 25.0
+    # One jog vector may not exceed this; larger requests are refused, not clamped.
+    max_jog_mm: float = 50.0
+    # Assumed, not measured: gripper-frame z window a jog may target.
+    jog_min_z_mm: float = 40.0
+    jog_max_z_mm: float = 160.0
+    # Assumed: a jog whose IK solve misses by more is refused rather than
+    # landing somewhere else (the pick/place gate allows ik.max_position_error_mm).
+    jog_max_ik_error_mm: float = 5.0
+    # One shift_block vector limit.
+    max_shift_mm: float = 120.0
+    # One manual gripper-roll (wrist_roll) request. Refused, not clamped, like
+    # every other jog here; lerobot's own max_relative_target clamp and
+    # send_joints's per-tick step still bound the actual motion regardless.
+    max_gripper_roll_deg: float = 90.0
+
+
+@dataclass
+class TableRegionsConfig:
+    """Named free-placement points on the detector's workspace sector.
+
+    A column is an azimuth (camera view: positive = left), a row is a
+    fraction of [min_radius_mm, sector edge - edge_margin_mm] (camera view:
+    near = bottom). Every value here is an assumption until
+    ``so101-agent --dry-run`` shows each point passing the IK gate.
+    """
+
+    columns_deg: dict[str, float] = field(
+        default_factory=lambda: {
+            "leftmost": 75.0, "left": 40.0, "center": 0.0, "right": -40.0, "rightmost": -75.0,
+        }
+    )
+    rows_fraction: dict[str, float] = field(
+        default_factory=lambda: {"near": 0.15, "middle": 0.5, "far": 0.9}
+    )
+    column_korean: dict[str, str] = field(
+        default_factory=lambda: {
+            "leftmost": "가장 왼쪽", "left": "왼쪽", "center": "가운데",
+            "right": "오른쪽", "rightmost": "가장 오른쪽",
+        }
+    )
+    row_korean: dict[str, str] = field(
+        default_factory=lambda: {"near": "아래(가까운 쪽)", "middle": "중간", "far": "위(먼 쪽)"}
+    )
+    min_radius_mm: float = 150.0
+    edge_margin_mm: float = 20.0
+    # When a named point is blocked, search rings around it at this spacing.
+    search_step_mm: float = 15.0
+    search_max_mm: float = 60.0
+
+
+@dataclass
+class PlaceCorrectionConfig:
+    """Closed-loop command offset for placements (``session/place_correction``).
+
+    Not a calibration constant. ``forward_mm``/``left_mm`` seed the offset
+    (arm frame) when a venue has already measured one; left at zero the
+    agent learns it from its own post-placement camera checks, which it
+    performs anyway. ``max_mm`` bounds how far the learned value may go, so
+    one bad measurement cannot walk placements off the table.
+    """
+
+    enabled: bool = True
+    learn: bool = True
+    forward_mm: float = 0.0
+    left_mm: float = 0.0
+    max_mm: float = 60.0
+    max_sample_mm: float = 80.0
+
+
+@dataclass
+class BoardGridConfig:
+    """Chessboard-cell addressing over the same sector (``session/grid.py``).
+
+    The lattice itself is measured by ``tools/calibrate_board_grid.py`` and
+    stored in the calibration file; only how it is *presented* lives here.
+    ``origin_mm`` names the square called (0, 0) -- left unset, the operator
+    page anchors it on the ``center``/``near`` table region, i.e. the bottom
+    centre of the reachable band.
+    """
+
+    enabled: bool = True
+    # Only used when the calibration carries no measured lattice.
+    cell_mm: float = 25.0
+    origin_mm: list[float] | None = None
+    # Which overlay the camera page starts on: the 15 named points
+    # ("regions") or the board cells ("grid"). Only one is shown at a time.
+    default_layer: str = "regions"
+    # Inner limits. Unlike the named points, cells go right up to the robot:
+    # measured 2026-09-19 with the place IK gate, every cell that failed sat
+    # in a narrow corridor straight in front of the base (|y| <= 25mm,
+    # x <= 72mm) -- the gripper's 27mm lateral offset from the pan axis
+    # (AGENTS.md §7) is what makes a top-down pose impossible there, while
+    # 50mm off-axis solves from 55mm out. So the keep-out is that corridor
+    # plus a small circle on the base itself, not one large radius.
+    min_radius_mm: float = 45.0
+    base_keepout_depth_mm: float = 85.0
+    base_keepout_half_width_mm: float = 40.0
+
+
+@dataclass
+class AgentConfig:
+    """LLM tool-calling agent (so101-agent). Unused by so101-run/so101-collect."""
+
+    # anthropic | openai | gemini | fake
+    provider: str = "openai"
+    # Used only for the configured default provider. An explicit --provider
+    # selects exactly that provider so rehearsals and diagnostics stay clear.
+    fallback_provider: str | None = "gemini"
+    # Model id per provider. Verify against each vendor's current model list.
+    models: dict[str, str] = field(
+        default_factory=lambda: {
+            "anthropic": "claude-opus-5",
+            "openai": "gpt-5.6-luna",
+            "gemini": "gemini-3.8-flash",
+            "fake": "fake-1",
+        }
+    )
+    max_tokens: int = 4096
+    # LLM round trips (each may carry several tool calls) per user message
+    max_tool_turns: int = 12
+    # oldest turns are dropped from the context beyond this many messages
+    max_history_messages: int = 60
+    # run_task1/2 can take minutes; a skill that runs longer is reported as a fault
+    tool_timeout_s: float = 900.0
+    system_prompt_path: str = "src/configs/agent_system_prompt.md"
+    host: str = "0.0.0.0"
+    port: int = 8099
+    # the browser loads the MJPEG straight from so101-camera
+    camera_base_url: str = "http://127.0.0.1:8090"
+    camera_name: str = "shoulder"
+    # after the arm moves, wait up to this long for a frame captured later
+    camera_fresh_timeout_s: float = 3.0
+    lock_path: str = "var/so101/robot.lock"
+    # zone scan runs on a copy of perception with this max_per_color
+    zone_scan_max_per_color: int = 1
+    # an in-zone block within this distance of a slot centre occupies it
+    slot_snap_radius_mm: float = 45.0
+    # Assumed: minimum centre distance between a placement and any other block
+    place_clear_radius_mm: float = 55.0
+    # table placements must lie at least this far outside the zone polygon
+    table_zone_margin_mm: float = 30.0
+    enable_task3_tool: bool = False
+    transcript_dir: str = "logs/agent"
+    # After STOP (or any robot fault): drop whatever is held, home, close the
+    # jaws. True runs that automatically; false leaves it to the [home]
+    # button. Automatic by default -- this arena's arm/blocks are too small
+    # to hurt anyone and the zone is not within students' reach.
+    stop_auto_home: bool = True
+    # operator SSE may be gone this long before the lease is dropped
+    lease_grace_s: float = 15.0
+    # an IDLE operator with no input for this long loses the lease
+    lease_idle_timeout_s: float = 300.0
+    sse_heartbeat_s: float = 15.0
+    zone_slots: ZoneSlotNamesConfig = field(default_factory=ZoneSlotNamesConfig)
+    relative: RelativeMotionConfig = field(default_factory=RelativeMotionConfig)
+    table_regions: TableRegionsConfig = field(default_factory=TableRegionsConfig)
+    board_grid: BoardGridConfig = field(default_factory=BoardGridConfig)
+    place_correction: PlaceCorrectionConfig = field(default_factory=PlaceCorrectionConfig)
+
+
+@dataclass
 class AppConfig:
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
     perception: PerceptionConfig = field(default_factory=PerceptionConfig)
@@ -763,6 +980,7 @@ class AppConfig:
         default_factory=CalibrationCaptureConfig
     )
     session_tools: SessionToolsConfig = field(default_factory=SessionToolsConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -802,6 +1020,7 @@ def load_config(
     validate_task1(cfg)
     validate_task2(cfg)
     validate_task3(cfg)
+    validate_agent(cfg)
     return cfg
 
 
@@ -1001,6 +1220,126 @@ def validate_task3(cfg: AppConfig) -> None:
     for color, sentence in cfg.task3.task_templates.items():
         if not str(sentence).strip():
             raise ValueError(f"task3.task_templates[{color!r}] is empty")
+
+
+AGENT_PROVIDERS = ("anthropic", "openai", "gemini", "fake")
+
+
+def normalise_place_name(name: str) -> str:
+    """NFKC + casefold + drop whitespace, hyphens, underscores and punctuation."""
+    text = unicodedata.normalize("NFKC", str(name)).casefold()
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def validate_agent(cfg: AppConfig) -> None:
+    """Agent settings. Never touches the filesystem: every CLI loads this."""
+    agent = cfg.agent
+    if agent.provider not in AGENT_PROVIDERS:
+        raise ValueError(f"agent.provider must be one of {AGENT_PROVIDERS}")
+    if not str(agent.models.get(agent.provider, "")).strip():
+        raise ValueError(f"agent.models has no model id for provider {agent.provider!r}")
+    if agent.fallback_provider is not None:
+        if agent.fallback_provider not in AGENT_PROVIDERS:
+            raise ValueError(f"agent.fallback_provider must be one of {AGENT_PROVIDERS} or null")
+        if agent.fallback_provider == agent.provider:
+            raise ValueError("agent.fallback_provider must differ from agent.provider")
+        if not str(agent.models.get(agent.fallback_provider, "")).strip():
+            raise ValueError(
+                f"agent.models has no model id for fallback provider {agent.fallback_provider!r}"
+            )
+    if agent.max_tokens <= 0:
+        raise ValueError("agent.max_tokens must be positive")
+    if not 0 < agent.max_tool_turns <= 50:
+        raise ValueError("agent.max_tool_turns must be in (0, 50]")
+    if agent.max_history_messages < 4:
+        raise ValueError("agent.max_history_messages must be at least 4")
+    for name in (
+        "tool_timeout_s", "slot_snap_radius_mm", "place_clear_radius_mm", "camera_fresh_timeout_s",
+        "lease_grace_s", "lease_idle_timeout_s", "sse_heartbeat_s",
+    ):
+        if getattr(agent, name) <= 0:
+            raise ValueError(f"agent.{name} must be positive")
+    if agent.table_zone_margin_mm < 0:
+        raise ValueError("agent.table_zone_margin_mm must be non-negative")
+    if agent.zone_scan_max_per_color < 0:
+        raise ValueError("agent.zone_scan_max_per_color must be non-negative")
+
+    slots = agent.zone_slots
+    n_slots = len(cfg.task1.slot_uv)
+    if slots.frame not in ("camera_view", "robot"):
+        raise ValueError("agent.zone_slots.frame must be 'camera_view' or 'robot'")
+    if len(slots.labels) != n_slots or len(slots.korean_labels) != n_slots:
+        raise ValueError(
+            "agent.zone_slots.labels and korean_labels need one name per task1.slot_uv cell"
+        )
+    seen: dict[str, int] = {}
+    for index, name in enumerate([*slots.labels, *slots.korean_labels]):
+        key = normalise_place_name(name)
+        slot = index % n_slots
+        if not key:
+            raise ValueError("agent.zone_slots labels must not be empty")
+        if key in seen and seen[key] != slot:
+            raise ValueError(f"agent.zone_slots label {name!r} names two different cells")
+        seen[key] = slot
+    for alias, index in slots.aliases.items():
+        key = normalise_place_name(alias)
+        if not key:
+            raise ValueError("agent.zone_slots.aliases keys must not be empty")
+        if not isinstance(index, int) or not 0 <= index < n_slots:
+            raise ValueError(f"agent.zone_slots.aliases[{alias!r}] must be a slot index")
+        if key in seen and seen[key] != index:
+            raise ValueError(f"agent.zone_slots alias {alias!r} contradicts a label")
+        seen[key] = index
+
+    rel = agent.relative
+    if rel.frame not in ("arm", "base"):
+        raise ValueError("agent.relative.frame must be 'arm' or 'base'")
+    for name in (
+        "default_step_mm", "small_step_mm", "max_pick_offset_mm", "max_jog_mm", "max_shift_mm",
+        "jog_max_ik_error_mm", "max_gripper_roll_deg",
+    ):
+        if getattr(rel, name) <= 0:
+            raise ValueError(f"agent.relative.{name} must be positive")
+    if not rel.jog_min_z_mm < rel.jog_max_z_mm:
+        raise ValueError("agent.relative.jog_min_z_mm must be below jog_max_z_mm")
+
+    regions = agent.table_regions
+    if not regions.columns_deg or not regions.rows_fraction:
+        raise ValueError("agent.table_regions needs at least one column and one row")
+    lo, hi = cfg.perception.workspace_angle_min_deg, cfg.perception.workspace_angle_max_deg
+    for column, azimuth in regions.columns_deg.items():
+        if not lo <= float(azimuth) <= hi:
+            raise ValueError(
+                f"agent.table_regions.columns_deg[{column!r}] is outside the workspace sector"
+            )
+    for row, fraction in regions.rows_fraction.items():
+        if not 0.0 <= float(fraction) <= 1.0:
+            raise ValueError(f"agent.table_regions.rows_fraction[{row!r}] must be in [0, 1]")
+    if set(regions.column_korean) != set(regions.columns_deg):
+        raise ValueError("agent.table_regions.column_korean must name every column")
+    if set(regions.row_korean) != set(regions.rows_fraction):
+        raise ValueError("agent.table_regions.row_korean must name every row")
+    if regions.min_radius_mm <= 0 or regions.edge_margin_mm < 0:
+        raise ValueError("agent.table_regions radii must be positive")
+    if regions.search_step_mm <= 0 or regions.search_max_mm < 0:
+        raise ValueError("agent.table_regions search bounds must be positive")
+
+    grid = agent.board_grid
+    if grid.cell_mm <= 0:
+        raise ValueError("agent.board_grid.cell_mm must be positive")
+    if grid.origin_mm is not None and len(grid.origin_mm) != 2:
+        raise ValueError("agent.board_grid.origin_mm must be [x_mm, y_mm]")
+    correction = agent.place_correction
+    if correction.max_mm < 0 or correction.max_sample_mm <= 0:
+        raise ValueError("agent.place_correction bounds must be positive")
+    if math.hypot(correction.forward_mm, correction.left_mm) > correction.max_mm:
+        raise ValueError("agent.place_correction seed is larger than its own max_mm")
+
+    if grid.default_layer not in ("regions", "grid"):
+        raise ValueError("agent.board_grid.default_layer must be 'regions' or 'grid'")
+    for name in ("min_radius_mm", "base_keepout_depth_mm", "base_keepout_half_width_mm"):
+        if getattr(grid, name) < 0:
+            raise ValueError(f"agent.board_grid.{name} must be non-negative")
 
 
 def apply_override(cfg: AppConfig, override: str) -> None:

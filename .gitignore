@@ -48,3 +48,7 @@ models/
 # Local report source materials
 /docs/report/Chats/
 /docs/report/reference/
+
+# LLM agent transcripts, runtime lock, and API keys
+logs/agent/
+.env
