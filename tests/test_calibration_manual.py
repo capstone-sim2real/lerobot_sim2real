@@ -13,7 +13,7 @@ from agent.tools import ToolRegistry
 from agent_helpers import make_skills
 from session.calibration_joint_limit import CalibrationJointLimitIO
 from session.cancel import Cancelled
-from tools.astra_calibration_server import configure_manual_tools, definitions, WEB_MANUAL_TOOLS
+from tools.calibration_server import configure_manual_tools, definitions, WEB_MANUAL_TOOLS
 
 
 def configured(sk):

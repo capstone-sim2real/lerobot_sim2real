@@ -218,7 +218,7 @@ hover가 6.7mm 모자란다. 기울임 램프가 없으면 2층까지밖에 못 
 uv run --extra hardware --extra dev pytest -q
 ```
 
-현재 필수 회귀 테스트는 121개가 통과하고 2개가 선택 의존성 없이 건너뛴다. 하드웨어 동작 성공을
+현재 필수 회귀 테스트는 120개가 통과하고 2개가 선택 의존성 없이 건너뛴다. 하드웨어 동작 성공을
 뜻하지 않으며, 당시 실장비 결과는 [실험 기록](../experiments/README.md)에 둔다.
 실행 중 IPC와 관절 로그는 Git에서 제외한 `var/so101/`, FSM transition과 summary는
 기본적으로 `logs/pick_stack/`에 저장한다.

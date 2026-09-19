@@ -22,7 +22,7 @@ def main():
         if values.get('observation_id')=='latest':
             if observation is None:raise ValueError('observe_scene required before latest target')
             values['observation_id']=observation
-        p=subprocess.run([sys.executable,'-m','tools.astra_calibration_call',step['tool'],
+        p=subprocess.run([sys.executable,'-m','tools.agent_tool_call',step['tool'],
                           '--arguments',json.dumps(values),'--output',str(out/'calls')],capture_output=True,text=True)
         with (out/'client.log').open('a') as f:f.write(p.stdout+p.stderr)
         if p.returncode:raise RuntimeError('Tool client failed; see client.log')
