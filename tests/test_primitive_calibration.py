@@ -88,3 +88,37 @@ def test_observe_invalidates_prepared_descent(tmp_path):
     assert approach(sk).ok
     assert sk.observe_scene().ok
     assert cal.attempt is None and not sk._pick_ready
+
+
+def test_inspect_and_preview_preserve_pose_and_reference(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    before = len(robot.sent_actions)
+    attempt = cal.attempt
+    assert sk.inspect_motion().data['reference_valid']
+    result = sk.correct_hover(joint='elbow_flex', gain=.5, dry_run=True)
+    assert result.ok
+    assert cal.attempt is attempt
+    assert len(robot.sent_actions) == before
+
+
+def test_partial_descent_does_not_authorize_early_close(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    result = sk.descend_step(2)
+    assert result.ok and not result.data['depth_ready']
+    assert not sk.close_gripper().ok
+    assert cal.attempt is not None
+
+
+def test_partial_descent_load_abort(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    count = [0]
+    def loads():
+        count[0] += 1
+        return {j: (0 if count[0] == 1 else 1000) for j in sk.cfg.sensing.contact_joints}
+    robot.read_loads = loads
+    result = sk.descend_step(2)
+    assert not result.ok and result.data['stop_reason'] == 'load_increase'
+    assert not sk.close_gripper().ok

@@ -180,6 +180,7 @@ class AgentService:
     MANUAL_TOOLS = frozenset({
         "move_relative", "move_to_target", "align_gripper", "close_gripper", "descend_until_contact",
         "open_gripper", "return_to_home", "observe_scene", "collection_status",
+        "inspect_motion", "correct_hover", "descend_step",
     })
 
     def direct(self, token: str | None, name: str, arguments: dict[str, Any]) -> tuple[int, dict]:

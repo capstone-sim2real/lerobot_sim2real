@@ -13,6 +13,13 @@ def build_primitive_tools(cfg):
         "observation_id": {"type": "integer", "minimum": 1},
     }
     add("observe_scene", "Fresh image and CV objects without moving. Missing objects may be occluded; planar CV cannot verify a stack.", moves=False)
+    add("inspect_motion", "Read measured joints, loads, FK and nominal hover error; no motion, reference preserved.", moves=False)
+    add("correct_hover", "One bounded measured-error correction above the block. Select joint(s) and fraction; no arbitrary joint target. Preview with dry_run first. Fails on clearance/load/lag limits.", {
+        "joint": {"type": "string", "enum": ["all", "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]},
+        "gain": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "dry_run": {"type": "boolean"}})
+    add("descend_step", "One bounded empty-gripper approach segment then stop. Load increase/lag abort. Never closes; only final depth authorizes close_gripper.", {
+        "down_mm": {"type": "number", "exclusiveMinimum": 0, "maximum": cfg.agent.relative.max_jog_mm}}, ["down_mm"])
     add("get_state", "Measured joints and model FK, held state, contact state; no movement.", moves=False)
     add("describe_places", "List addressable cells and named slots; no movement.", moves=False)
     span = _cell_span(cfg)

@@ -351,7 +351,7 @@ class CalibrationMotion(Skills):
             "trial":self.trial, "cv_xy_mm":block.center_mm,
             "baseline_xy_mm":a.xy_mm,"hover_z_mm":a.hover_z_mm})
 
-    def calibration_correct_hover(self, dry_run=True):
+    def calibration_correct_hover(self, dry_run=True, joint="all", gain=1.0):
         """One bounded measured tracking correction, above the block only."""
         self.descent_ready=False
         a=self.baseline
@@ -362,11 +362,15 @@ class CalibrationMotion(Skills):
         current_z=self.s.ik.forward_position_mm(current)[2]
         if current_z < a.grasp_z_mm+cfg.agent.calibration_clearance.obstacle_height_mm:
             return SkillResult(False,"calibration_correct_hover","precondition")
+        if joint != "all" and joint not in a.hover.joints:
+            return SkillResult(False,"calibration_correct_hover","invalid_arguments")
+        if not math.isfinite(gain) or not 0 < gain <= 1:
+            return SkillResult(False,"calibration_correct_hover","invalid_arguments")
         errors={j:a.hover.joints[j]-current[j] for j in a.hover.joints}
         bound=cfg.agent.calibration_clearance.hover_correction_max_deg
         if max(map(abs,errors.values()))>cfg.motion.descent_max_lag:
             return SkillResult(False,"calibration_correct_hover","limit_exceeded")
-        errors={j:max(-bound,min(bound,e)) for j,e in errors.items()}
+        errors={j:(max(-bound,min(bound,e))*gain if joint in ("all",j) else 0.0) for j,e in errors.items()}
         goal={j:a.hover.joints[j]+e for j,e in errors.items()}
         if self.s.ik.forward_position_mm(goal)[2]<current_z:
             return SkillResult(False,"calibration_correct_hover","precondition")
@@ -573,8 +577,8 @@ class CalibrationMotion(Skills):
     def calibration_descend_step(self, down_mm):
         """One bounded approach segment, then return for external camera inspection.
 
-        Loads are evidence only here, not a contact classifier. Existing joint
-        tracking and CancellableRobotIO guards remain active. No automatic close.
+        Positive load magnitude increase stops the segment, as in guarded
+        descent. Joint tracking and cancellation remain active. No close.
         """
         self.descent_ready = False
         if self.attempt is None or self.s.held is not None:
@@ -608,6 +612,7 @@ class CalibrationMotion(Skills):
             previous=step
         samples=[]
         reason=None
+        baseline_loads=robot.read_loads()
         deadline=time.monotonic()+self.cfg.motion.move_timeout_s
         for step in commands:
             if time.monotonic()>deadline:
@@ -618,6 +623,9 @@ class CalibrationMotion(Skills):
             loads=robot.read_loads()
             lag=max(abs(measured[j]-step[j]) for j in goal)
             samples.append(dict(time=time.time(),q=measured,loads=loads,lag=lag))
+            if any(abs(loads[j])-abs(baseline_loads[j]) >= self.cfg.sensing.contact_load_delta
+                   for j in self.cfg.sensing.contact_joints):
+                reason="load_increase";break
             if lag>self.cfg.motion.descent_max_lag:
                 reason="tracking_lag";break
         current=robot.read_joints()
