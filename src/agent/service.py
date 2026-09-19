@@ -221,7 +221,8 @@ class AgentService:
         return 202, {"accepted": True}
 
     def jog(self, token: str | None, forward_mm: float, left_mm: float, up_mm: float) -> tuple[int, dict]:
-        return self.direct(token, "move_relative",
+        name = "move_arm" if "move_arm" in self.MANUAL_TOOLS else "move_relative"
+        return self.direct(token, name,
                            {"forward_mm": float(forward_mm), "left_mm": float(left_mm), "up_mm": float(up_mm)})
 
     def keyboard_start(self, token):

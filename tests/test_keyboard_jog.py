@@ -163,8 +163,8 @@ def test_continuous_path_keeps_shared_wrist_limit(monkeypatch):
         result.joints['wrist_roll'] = -66.
         return result
     monkeypatch.setattr(sk.s.ik, 'solve_holding_wrist_roll', outside)
-    with pytest.raises(ValueError, match='below measured limit'):
-        stream.run(sk, sk.s.cancel)
+    result = stream.run(sk, sk.s.cancel)
+    assert not result.ok and '손목' in result.detail
     assert not robot.sent_actions
 
 
@@ -197,19 +197,16 @@ def test_failed_next_plan_brakes_inside_previously_approved_path(monkeypatch):
     sk,robot=setup()
     stream=KeyboardJog(sk.cfg.agent.relative)
     stream.update(0,[1,0,0])
-    move=sk.move_arm
-    calls=[]
-    def only_first(*args,**kwargs):
-        calls.append(args)
-        if len(calls)>1:
-            return sk._result(False,'move_arm','out_of_workspace','boundary',t0=time.monotonic())
-        return move(*args,**kwargs)
-    monkeypatch.setattr(sk,'move_arm',only_first)
+    sk.cfg.agent.relative.max_jog_mm = 6.
+    sk.cfg.agent.relative.keyboard_timeout_s = 5.
+    stream.expires = stream.clock() + 5.
+    # The first 6mm is valid; no continuation can leave that space.
+    monkeypatch.setattr(sk.s, 'in_workspace', lambda xy: xy[0] <= 156.)
     initial=robot.joints['shoulder_pan']
     result=stream.run(sk,sk.s.cancel)
     assert result.reason=='out_of_workspace'
     assert len(robot.sent_actions)>1
-    assert max(p['shoulder_pan'] for p in robot.sent_actions)<=initial+calls[0][0]+1e-8
+    assert max(p['shoulder_pan'] for p in robot.sent_actions)<=initial+6.+1e-8
 
 
 def test_emergency_stop_interrupts_normal_deceleration(monkeypatch):
@@ -239,13 +236,96 @@ def test_intermediate_braking_path_is_checked_before_motion(monkeypatch):
     assert not robot.sent_actions
 
 
-def test_primitive_keyboard_rejects_low_lateral_motion():
+def test_primitive_keyboard_rejects_low_lateral_motion_while_holding():
     from session.primitives import PrimitiveSkills
     sk, robot = setup()
     sk = PrimitiveSkills(sk.s)
     sk.cfg.agent.primitives.lateral_clearance_mm = 200.
+    sk.s.held = object()
     stream = KeyboardJog(sk.cfg.agent.relative)
     stream.update(0, [1, 0, 0])
     result = stream.run(sk, sk.s.cancel)
     assert not result.ok and result.reason == 'precondition'
     assert not robot.sent_actions
+
+
+def test_empty_primitive_keyboard_can_leave_home_despite_pick_clearance(monkeypatch):
+    from session.primitives import PrimitiveSkills
+    sk, robot = setup()
+    sk = PrimitiveSkills(sk.s)
+    robot.joints['elbow_flex'] = 12.
+    sk.cfg.agent.primitives.lateral_clearance_mm = 200.
+    sk._grasp_failed = True  # Previous failed pick must not lock empty-hand jogging.
+    stream = KeyboardJog(sk.cfg.agent.relative)
+    stream.update(0, [1, 0, 0])
+    send = sk.s.robot.send_joints
+    def release(pose):
+        result = send(pose)
+        stream.close()
+        return result
+    monkeypatch.setattr(sk.s.robot, 'send_joints', release)
+    stream.run(sk, sk.s.cancel)
+    assert robot.sent_actions
+    assert all('gripper' not in pose for pose in robot.sent_actions)
+
+
+def test_held_key_reuses_plan_across_old_segment_boundaries(monkeypatch):
+    sk, robot = setup()
+    stream = KeyboardJog(sk.cfg.agent.relative)
+    stream.update(0, [1, 0, 0])
+    send = sk.s.robot.send_joints
+    count = [0]
+    def keep_holding(pose):
+        result = send(pose)
+        count[0] += 1
+        if count[0] == 65:
+            stream.close()
+        else:
+            stream.update(count[0], [1, 0, 0])
+        return result
+    monkeypatch.setattr(sk.s.robot, 'send_joints', keep_holding)
+    stream.run(sk, sk.s.cancel)
+    # Previously every 20 ticks at 200 Hz re-ran IK and reset from feedback.
+    assert count[0] == 66
+    assert sk.s.ik.solves == 2  # current span plus one prefetched continuation
+
+
+def test_prefetched_spans_cross_knots_without_stopping_during_slow_ik(monkeypatch):
+    from types import SimpleNamespace
+    sk, robot = setup()
+    cfg = sk.cfg.agent.relative
+    cfg.max_jog_mm = 6.
+    cfg.keyboard_tick_hz = 30.
+    now = [0.]
+    stream = KeyboardJog(cfg, clock=lambda: now[0])
+    stream.update(0, [1,0,0])
+    cancel = SimpleNamespace(raise_if_set=lambda: None, is_set=lambda: False,
+        event=SimpleNamespace(wait=lambda delay: now.__setitem__(0, now[0]+delay)))
+    solve = sk.s.ik.solve_holding_wrist_roll
+    def slow_steps(*args, **kwargs):
+        # 200ms of planning, split into 1ms numerical steps on the same thread.
+        for _ in range(200):
+            now[0] += .001
+            yield
+        return solve(*args, **kwargs)
+    monkeypatch.setattr(sk.s.ik, 'solve_holding_wrist_roll_steps', slow_steps, raising=False)
+    send = sk.s.robot.send_joints
+    samples = []
+    def record(pose):
+        result = send(pose)
+        samples.append((now[0], pose['shoulder_pan']))
+        if pose['shoulder_pan'] >= 169.:
+            stream.release()
+        elif not stream.releasing:
+            stream.update(len(samples), [1,0,0])
+        return result
+    monkeypatch.setattr(sk.s.robot, 'send_joints', record)
+    stream.run(sk, cancel)
+    for knot in (156.,162.,168.):
+        i = next(i for i,(_,x) in enumerate(samples) if x >= knot)
+        assert samples[i][1]-samples[i-1][1] > .3  # about .5 mm/tick; no stop at knots
+        assert samples[i][0]-samples[i-1][0] <= 1/cfg.keyboard_tick_hz+.002
+    # Next-span computation takes 200ms, yet it never stalls motor ticks.
+    gaps = [b[0]-a[0] for a,b in zip(samples,samples[1:-1])]
+    assert max(gaps) <= 1/cfg.keyboard_tick_hz+.002
+    assert samples[-1][1] == pytest.approx(samples[-2][1])

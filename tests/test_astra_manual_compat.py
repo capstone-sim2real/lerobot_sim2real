@@ -80,10 +80,10 @@ def test_http_config_jog_lease_and_denied_manual_tools():
     from session.primitives import PrimitiveSkills
     sk=PrimitiveSkills(sk.s)
     cfg=sk.cfg
-    hub=EventHub();holder={}
+    hub=EventHub();holder={};events=[]
     def builder(publish):
         svc=AgentService(cfg,provider=ScriptedProvider([]),skills_factory=lambda:sk,
-                         cancel=sk.s.cancel,publish=publish,system_prompt='',transcript_dir='')
+                         cancel=sk.s.cancel,publish=lambda e:(events.append(e),publish(e)),system_prompt='',transcript_dir='')
         configure_manual_tools(svc,cfg)
         svc.start=lambda: (svc._worker.start(),setattr(svc,'started',True))
         holder['svc']=svc
@@ -97,5 +97,7 @@ def test_http_config_jog_lease_and_denied_manual_tools():
         headers={**version,'x-operator-token':token}
         assert client.post('/api/jog',json={'forward_mm':5},headers=headers).status_code==202
         holder['svc'].wait_idle()
+        result=next(e for e in events if e['type']=='tool_result')
+        assert result['name']=='move_arm' and result['result']['ok'],result
         assert client.post('/api/manual',json={'tool':'pick_here'},headers=headers).status_code==400
         assert client.post('/api/manual',json={'tool':'move_to_pixel'},headers=headers).status_code==400

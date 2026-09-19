@@ -5,18 +5,9 @@ import time
 import secrets
 
 from .jog_ramp import JogRamp
-from control.trajectory import interpolate
 
 
 class JogReleased(Exception):
-    pass
-
-
-class JogDirectionChanged(Exception):
-    pass
-
-
-class JogPathRejected(Exception):
     pass
 
 
@@ -68,124 +59,158 @@ class KeyboardJog:
             return self.vector
 
     def run(self, skills, cancel):
+        from .jog_planner import plan_next, JogPathRejected
+
         cfg, session = self.cfg, skills.s
         period = 1. / cfg.keyboard_tick_hz
-        ramp = JogRamp(cfg)  # Missing optional dependency fails before any motion.
+        ramp = JogRamp(cfg)
         if hasattr(skills, "_invalidate_pick"):
             skills._invalidate_pick()
-        sent = False
-        path = None
-        direction = None
         if hasattr(skills, 'attempt'):
             skills.attempt = None
             skills.descent_ready = False
+        sent = False
+        path = following = planner = None
+        direction = None
+        last = None
+        failure = None
+        failure_reason = 'out_of_workspace'
+        next_tick = self.clock()
+        next_grasp_check = next_tick
 
-        def travel(*, braking=False):
-            nonlocal sent
-            ticks = max(1, math.ceil(cfg.keyboard_segment_s / period))
-            while True:
-                with self.lock:
-                    cancel.raise_if_set()
-                    desired = self.current()
-                    turning = desired != direction
-                    brake = braking or turning or self.releasing
-                    remaining = path['length'] - path['progress']
-                    # Keep the complete stop inside the already gated IK path.
-                    reserve = ramp.braking_distance() + 2 * cfg.keyboard_speed_mm_s * period
-                    brake = brake or remaining <= reserve
-                    if brake and ramp.stopped:
-                        if not braking and not turning and not self.releasing:
-                            raise JogReleased()  # No room to restart without a new key press.
-                        return
-                    delta = ramp.advance(0. if brake else path['speed'])
-                    progress = path['progress'] + delta
-                    if progress > path['length'] + 1e-8:
-                        raise RuntimeError('keyboard braking path exhausted')
-                    fraction = min(1., progress / path['length'])
-                    step = {j: path['start'][j] + (v-path['start'][j])*fraction for j,v in path['goal'].items()}
-                    previous = path['last']
-                    limit = min(1., session.cfg.motion.max_step_per_tick, cfg.keyboard_joint_speed_deg_s*period)
-                    if any(abs(v-previous[j]) > limit+1e-8 for j,v in step.items()):
-                        raise RuntimeError('keyboard joint step limit exceeded')
-                    session.robot.send_joints(step)
-                    path['last'] = step
-                    sent = True
-                    path['progress'] = progress
-                cancel.event.wait(period)
-                ticks -= 1
-                if not brake and ticks <= 0:
-                    return
+        def clearance():
+            if session.held is not None and hasattr(skills, '_held_check') and (direction[0] or direction[1]):
+                return session.grasp_z_mm + skills.limits.lateral_clearance_mm
+            return None
 
-        def playback(goal):
-            nonlocal path
-            cancel.raise_if_set()
-            start = session.robot.read_joints()
-            a, b = session.ik.forward_position_mm(start), session.ik.forward_position_mm(goal)
-            length = math.dist(a, b)
-            if length <= 1e-8:
-                raise RuntimeError('keyboard IK returned a zero-length path')
-            # Check the interpolated path, including its reserved braking portion.
-            # Endpoints alone do not cover a curved Cartesian path from joint interpolation.
-            slack = cfg.jog_max_ik_error_mm
-            lo, hi = min(a[2], cfg.jog_min_z_mm-slack), max(a[2], cfg.jog_max_z_mm+slack)
-            if hasattr(skills, '_held_check') and (direction[0] or direction[1]):
-                lo = max(lo, session.grasp_z_mm + skills.limits.lateral_clearance_mm)
-            for pose in interpolate(start, goal, min(1., session.cfg.motion.max_step_per_tick,
-                                                    cfg.keyboard_joint_speed_deg_s*period)):
-                x,y,z = session.ik.forward_position_mm(pose)
-                if not all(math.isfinite(v) for v in (x,y,z)) or not session.in_workspace((x,y)) or not lo-1e-8 <= z <= hi+1e-8:
-                    raise JogPathRejected('이동·감속 경로가 작업 범위를 벗어납니다.')
-            largest = max(abs(goal[j] - start[j]) for j in goal)
-            joint_speed = min(cfg.keyboard_joint_speed_deg_s,
-                              min(1., session.cfg.motion.max_step_per_tick) / period)
-            speed = min(cfg.keyboard_speed_mm_s, joint_speed*length/largest) if largest else cfg.keyboard_speed_mm_s
-            # A changed IK slope must not cause a step-limit violation while braking.
-            required_speed = ramp.input.current_velocity[0] + max(0., ramp.input.current_acceleration[0])**2/(2*cfg.keyboard_jerk_mm_s3)
-            if required_speed > speed + 1e-8:
-                if path is not None:travel(braking=True)
-                raise JogDirectionChanged()
-            path = dict(start=start, last=start, goal=goal, length=length, progress=0., speed=speed)
-            travel()
+        def begin():
+            nonlocal planner, failure
+            failure = None
+            start = path.goal if path is not None else session.robot.read_joints()
+            planner = plan_next(session, start, direction, clearance=clearance())
 
-        result = None
+        def advance_plan():
+            nonlocal planner, path, following, last, failure
+            try:
+                next(planner)
+            except StopIteration as done:
+                planner = None
+                if path is None:
+                    path = done.value
+                    last = dict(path.start)
+                else:
+                    following = done.value
+            except JogPathRejected as exc:
+                planner = None
+                failure = str(exc)
+
         try:
             while True:
                 cancel.raise_if_set()
                 desired = self.current()
-                if direction is None or ramp.stopped:
-                    direction = desired
                 if not any(desired) and ramp.stopped:
-                    if self.releasing:break
+                    if self.releasing:
+                        break
+                    direction = None
                     cancel.event.wait(period)
                     continue
-                if desired != direction and path is not None:
-                    travel(braking=True)
-                    continue
-                # Look ahead far enough to include braking, not only the next tick.
-                stop_time = cfg.keyboard_speed_mm_s/cfg.keyboard_acceleration_mm_s2 + 2*cfg.keyboard_acceleration_mm_s2/cfg.keyboard_jerk_mm_s3
-                distance = min(cfg.keyboard_speed_mm_s*(cfg.keyboard_segment_s+stop_time)+2*cfg.keyboard_speed_mm_s*period, cfg.max_jog_mm)
-                # Primitive contact/held state must not be bypassed by keyboard playback.
-                if hasattr(skills, '_held_check'):
-                    xyz = session.arm_position_mm()
-                    lateral = bool(direction[0] or direction[1])
-                    clear_z = session.grasp_z_mm + skills.limits.lateral_clearance_mm
-                    if ((session.held is not None and direction[2] < 0)
-                            or (lateral and xyz[2] < clear_z)
-                            or (not skills._held_check() and (lateral or direction[2] < 0))):
-                        result = skills._fail('move_relative', 'Lift/verify grasp before keyboard motion')
-                        if path is not None and not ramp.stopped:travel(braking=True)
+                turning = direction is not None and desired != direction
+                stopping = self.releasing or turning
+                if stopping:
+                    # Discard unfinished work immediately; an already validated
+                    # continuation may still be needed for braking.
+                    planner = None
+                if ramp.stopped and (stopping or direction is None):
+                    if self.releasing:
                         break
-                    skills._contact = False
-                    skills._target = None
-                try:
-                    result = skills.move_arm(*(v*distance for v in direction), _playback=playback)
-                except JogDirectionChanged:
+                    path = following = planner = None
+                    failure = None
+                    direction = desired
+                    if not any(direction):
+                        cancel.event.wait(period)
+                        continue
+                    if hasattr(skills, '_held_check') and session.held is not None:
+                        xyz = session.arm_position_mm()
+                        lateral = bool(direction[0] or direction[1])
+                        if (direction[2] < 0 or (lateral and xyz[2] < clearance())
+                                or (lateral and not skills._held_check())):
+                            failure_reason = 'precondition'
+                            failure = '블록을 든 상태입니다. 먼저 위로 들어 올리고 파지를 확인하세요.'
+                            break
+                    if hasattr(skills, '_held_check'):
+                        skills._contact = False
+                        skills._target = None
+                    begin()
+                    next_tick = self.clock()
+                    stopping = False
+                if path is None:
+                    if failure:
+                        break
+                    advance_plan()
                     continue
-                except JogPathRejected as exc:
-                    result = skills._result(False, 'move_arm', 'out_of_workspace', str(exc), t0=time.monotonic())
-                if not result.ok:
-                    if path is not None and not ramp.stopped:travel(braking=True)
-                    break
+                if not stopping and following is None and planner is None and failure is None:
+                    begin()
+                now = self.clock()
+                if now < next_tick:
+                    if planner is not None:
+                        # One bounded numerical step, on RobotWorker. No second
+                        # bus owner, no background IK thread, no queued commands.
+                        advance_plan()
+                    else:
+                        cancel.event.wait(next_tick-now)
+                    continue
+                with self.lock:
+                    cancel.raise_if_set()
+                    desired = self.current()
+                    stopping = self.releasing or desired != direction
+                    remaining = path.length-path.progress
+                    available = remaining + (following.length if following is not None else 0.)
+                    reserve = ramp.braking_distance() + 2*cfg.keyboard_speed_mm_s*period
+                    crossing_ready = (following is not None and
+                        ramp.input.current_velocity[0] + max(0., ramp.input.current_acceleration[0])**2 /
+                        (2*cfg.keyboard_jerk_mm_s3) <= following.speed + 1e-8)
+                    brake = stopping or available <= reserve or (not crossing_ready and remaining <= reserve)
+                    if brake and ramp.stopped:
+                        if stopping:
+                            continue
+                        if failure:
+                            break
+                        # A slow planner may exhaust the braking reserve. Stay
+                        # inside approved space and resume only when ready.
+                        if planner is not None:
+                            advance_plan()
+                            continue
+                        break
+                    speed = path.speed
+                    if following is not None:
+                        # Respect both segment slopes before crossing the knot.
+                        speed = min(speed, following.speed)
+                    elif remaining <= reserve:
+                        brake = True
+                    delta = ramp.advance(0. if brake else speed)
+                    if delta > available + 1e-8:
+                        raise RuntimeError('keyboard braking path exhausted')
+                    progress = path.progress + delta
+                    if progress > path.length and following is not None:
+                        progress -= path.length
+                        path, following = following, None
+                    if progress > path.length + 1e-8:
+                        raise RuntimeError('keyboard path exhausted')
+                    step = path.pose(min(path.length, progress))
+                    limit = min(1., session.cfg.motion.max_step_per_tick, cfg.keyboard_joint_speed_deg_s*period)
+                    if any(abs(v-last[j]) > limit+1e-8 for j,v in step.items()):
+                        raise RuntimeError('keyboard joint step limit exceeded')
+                    session.robot.send_joints(step)
+                    last = step
+                    path.progress = progress
+                    sent = True
+                # Never burst to catch up after an overrun.
+                next_tick = max(next_tick+period, now+period)
+                if self.clock() >= next_grasp_check:
+                    next_grasp_check = self.clock()+cfg.keyboard_segment_s
+                    if session.held is not None and hasattr(skills, '_held_check') and not skills._held_check():
+                        self.release()
+                        failure = '파지가 확인되지 않아 키보드 이동을 멈췄습니다.'
         except JogReleased:
             pass
         finally:
@@ -195,4 +220,6 @@ class KeyboardJog:
                 session.robot.send_joints({j: v for j, v in joints.items() if j != 'gripper'})
                 if session.held is not None:
                     session.held.over_xy_mm = tuple(session.ik.forward_position_mm(joints)[:2])
-        return result
+        if failure:
+            return skills._result(False, 'move_arm', failure_reason, failure, t0=time.monotonic())
+        return None

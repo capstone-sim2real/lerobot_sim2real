@@ -97,13 +97,13 @@ def test_manual_endpoint_validates_and_allowlists_tools():
         assert client.post("/api/manual", json={}, headers=headers).status_code == 400
         assert client.post("/api/manual", json={"tool": 5}, headers=headers).status_code == 400
         assert client.post("/api/manual", json={"tool": "run_task1"}, headers=headers).status_code == 400
-        assert client.post("/api/manual", json={"tool": "rotate_gripper", "arguments": "x"},
+        assert client.post("/api/manual", json={"tool": "move_relative", "arguments": "x"},
                            headers=headers).status_code == 400
         assert client.post(
             "/api/manual",
-            json={"tool": "rotate_gripper", "arguments": {"delta_deg": 30}},
+            json={"tool": "move_relative", "arguments": {"left_mm": 30}},
             headers={"X-Operator-Token": token},
         ).status_code == 428
-        response = client.post("/api/manual", json={"tool": "rotate_gripper", "arguments": {"delta_deg": 30}},
+        response = client.post("/api/manual", json={"tool": "move_relative", "arguments": {"left_mm": 30}},
                                headers=headers)
         assert response.status_code == 202
