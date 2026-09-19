@@ -809,6 +809,16 @@ class RelativeMotionConfig:
     max_pick_offset_mm: float = 25.0
     # One jog vector may not exceed this; larger requests are refused, not clamped.
     max_jog_mm: float = 50.0
+    # Continuous keyboard jog defaults; nominal speed, not measured hardware speed.
+    keyboard_speed_mm_s: float = 20.0
+    keyboard_segment_s: float = 0.1
+    keyboard_tick_hz: float = 30.0
+    keyboard_heartbeat_s: float = 0.1
+    keyboard_timeout_s: float = 0.4
+    keyboard_joint_speed_deg_s: float = 15.0
+    keyboard_acceleration_mm_s2: float = 100.0
+    keyboard_jerk_mm_s3: float = 1000.0
+    keyboard_release_timeout_s: float = 1.0
     # Assumed, not measured: gripper-frame z window a jog may target.
     jog_min_z_mm: float = 40.0
     jog_max_z_mm: float = 160.0
@@ -918,6 +928,30 @@ class AgentCameraViewConfig:
 
 
 @dataclass
+class CalibrationClearanceConfig:
+    """Experimental conservative envelopes, assumed until physically measured.
+
+    Used only by CalibrationSkills. The circular envelope covers both jaws at
+    every yaw; it intentionally does not claim a measured mesh collision test.
+    """
+    # Experimental hypothesis: neutral-frame bias rotates with retry jaw yaw.
+    wrist_roll_min_deg: float = -65.0
+    wrist_probe_target_deg: float = 90.0
+    wrist_probe_close_gripper: bool = True
+    hover_correction_max_deg: float = 3.0  # bounded experimental feedforward
+    # Assumed bounded trial offsets; learn from recorded outcomes, not success claims.
+    trial_offsets_mm: list[list[float]] = field(default_factory=lambda: [[5.0,0.0],[10.0,0.0],[0.0,5.0]])
+    rotate_retry_bias: bool = True
+    red_separation_kernel_px: int = 31
+    jaw_angle_step_deg: float = 5.0
+    tool_radius_mm: float = 60.0
+    block_radius_mm: float = 29.0
+    uncertainty_mm: float = 15.0
+    obstacle_height_mm: float = 20.0  # user-confirmed flat block height; reobserve after tipping
+    expected_colors: list[str] = field(default_factory=lambda: ["red", "green", "blue", "yellow", "wood"])
+
+
+@dataclass
 class AgentConfig:
     """LLM tool-calling agent (so101-agent). Unused by so101-run/so101-collect."""
 
@@ -977,6 +1011,7 @@ class AgentConfig:
     table_regions: TableRegionsConfig = field(default_factory=TableRegionsConfig)
     board_grid: BoardGridConfig = field(default_factory=BoardGridConfig)
     place_correction: PlaceCorrectionConfig = field(default_factory=PlaceCorrectionConfig)
+    calibration_clearance: CalibrationClearanceConfig = field(default_factory=CalibrationClearanceConfig)
 
 
 @dataclass
@@ -1326,6 +1361,15 @@ def validate_agent(cfg: AppConfig) -> None:
             raise ValueError(f"agent.relative.{name} must be positive")
     if not rel.jog_min_z_mm < rel.jog_max_z_mm:
         raise ValueError("agent.relative.jog_min_z_mm must be below jog_max_z_mm")
+    for name in ("keyboard_speed_mm_s", "keyboard_segment_s", "keyboard_tick_hz",
+                 "keyboard_heartbeat_s", "keyboard_timeout_s", "keyboard_joint_speed_deg_s",
+                 "keyboard_acceleration_mm_s2", "keyboard_jerk_mm_s3", "keyboard_release_timeout_s"):
+        value = getattr(cfg.agent.relative, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.relative.{name} must be finite and positive")
+    if cfg.agent.relative.keyboard_timeout_s <= 2 * cfg.agent.relative.keyboard_heartbeat_s:
+        raise ValueError("keyboard timeout must exceed two heartbeat periods")
+
 
     regions = agent.table_regions
     if not regions.columns_deg or not regions.rows_fraction:

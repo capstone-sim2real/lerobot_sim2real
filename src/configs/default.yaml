@@ -395,6 +395,22 @@ session_tools:
 
 # LLM 툴 콜링 에이전트(so101-agent) 전용. so101-run / so101-collect 는 읽지 않는다.
 agent:
+  # Experimental assumed envelope; actual jaw geometry has not been measured.
+  calibration_clearance:
+    wrist_roll_min_deg: -65.0
+    wrist_probe_target_deg: 90.0
+    wrist_probe_close_gripper: true
+    hover_correction_max_deg: 3.0
+    trial_offsets_mm: [[5.0, 0.0], [10.0, 0.0], [0.0, 5.0]]
+    rotate_retry_bias: true
+    red_separation_kernel_px: 31
+    jaw_angle_step_deg: 5.0
+    tool_radius_mm: 60.0
+    block_radius_mm: 29.0
+    uncertainty_mm: 15.0
+    obstacle_height_mm: 20.0  # user-confirmed flat block height
+    expected_colors: [red, green, blue, yellow, wood]
+
   # anthropic | openai | gemini | fake(오프라인 스크립트 재생)
   provider: openai
   # 기본 OpenAI 요청이 응답을 시작하기 전에 실패하면 Gemini로 같은 턴을 재시도한다.
@@ -499,6 +515,17 @@ agent:
     max_pick_offset_mm: 25.0
     # 조그 1회 벡터 한도. 넘으면 줄이지 않고 거부한다.
     max_jog_mm: 50.0
+    # Nominal keyboard speed; IK/serial latency can reduce actual speed.
+    keyboard_speed_mm_s: 20.0
+    keyboard_segment_s: 0.1
+    keyboard_tick_hz: 30.0
+    keyboard_heartbeat_s: 0.1
+    keyboard_timeout_s: 0.4
+    keyboard_joint_speed_deg_s: 15.0
+    # Assumed S-curve limits; physical smoothness still needs validation.
+    keyboard_acceleration_mm_s2: 100.0
+    keyboard_jerk_mm_s3: 1000.0
+    keyboard_release_timeout_s: 1.0
     # 가정값: 조그 목표 z 범위(mm)
     jog_min_z_mm: 40.0
     jog_max_z_mm: 160.0

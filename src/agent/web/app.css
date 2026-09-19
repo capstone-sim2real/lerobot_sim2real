@@ -226,7 +226,30 @@ body[data-camera=wrist] #camera-tools,body[data-camera=wrist] .perception-contro
 .perception-controls .overlay-options {left:auto;right:0;}
 #pixel-target-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 .pixel-workspace {fill:#10b98116;stroke:#10b981;stroke-width:2;pointer-events:none;}
-body[data-camera=shoulder] #camera-wrap {cursor:crosshair;}
+body[data-camera=shoulder] #camera-wrap.pixel-pointer-active {cursor:none;}
 .pixel-selection {padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
 #pixel-target-status {font-size:13px;line-height:1.6;color:var(--muted);}
 body[data-camera=wrist] #pixel-target-overlay {display:none;}
+
+.pixel-hover-ring {position:absolute;width:18px;height:18px;border:2px solid #fff;border-radius:50%;background:#2563eb;opacity:.35;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
+.pixel-selected-ring {fill:#2563eb;stroke:#fff;stroke-width:3;opacity:1;pointer-events:none;}
+.pixel-selected-ring[data-state=pending] {fill:#f59e0b;}
+.pixel-selected-ring[data-state=invalid] {fill:#dc2626;stroke:#fff;stroke-dasharray:none;}
+
+/* Match the camera card; scroll content without moving the command tabs. */
+.layout > .command-panel[data-slot=card] {
+  display:flex;flex-direction:column;gap:0;
+  height:var(--camera-panel-height, auto);min-height:0;overflow:hidden;
+}
+.command-panel > .workspace-tabs {flex-shrink:0;}
+.command-panel > #direct-controls {
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+}
+.command-panel > .chat-panel {
+  flex:1;height:auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+}
+.command-panel .chat {flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.command-panel .composer,.command-panel .composer-options {flex-shrink:0;}
+
+.pixel-hover-ring[data-state=pending] {background:#737373;}
+.pixel-hover-ring[data-state=invalid] {background:#dc2626;}

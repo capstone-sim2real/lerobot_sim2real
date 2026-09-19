@@ -866,7 +866,7 @@ class Skills:
 
     # ── arm ──────────────────────────────────────────────────────────
 
-    def move_arm(self, forward_mm: float = 0.0, left_mm: float = 0.0, up_mm: float = 0.0) -> SkillResult:
+    def move_arm(self, forward_mm: float = 0.0, left_mm: float = 0.0, up_mm: float = 0.0, *, _playback=None) -> SkillResult:
         action, t0, s, cfg = "move_arm", time.monotonic(), self.s, self.cfg
         rel = cfg.agent.relative
         norm = vector_norm(forward_mm, left_mm, up_mm)
@@ -881,10 +881,10 @@ class Skills:
         joints = s.robot.read_joints()
         x, y, z = s.ik.forward_position_mm(joints)
         tx, ty = offset_xy((x, y), forward_mm, left_mm, frame=rel.frame, base_xy_mm=s.base_xy)
-        return self._fly_to_xy(action, t0, joints, (x, y, z), (tx, ty), z + up_mm)
+        return self._fly_to_xy(action, t0, joints, (x, y, z), (tx, ty), z + up_mm, _playback=_playback)
 
     def _fly_to_xy(self, action: str, t0: float, joints, from_xyz, target_xy: XY,
-                   tz: float) -> SkillResult:
+                   tz: float, *, _playback=None) -> SkillResult:
         """Take the gripper to one xy at height ``tz``, gated like a jog.
 
         Shared by ``move_arm`` (a bounded relative vector) and
@@ -930,7 +930,10 @@ class Skills:
                 retry_advice="do_not_retry", t0=t0, target={"x": tx, "y": ty, "z": tz},
                 ik_error_mm=result.position_error_mm,
             )
-        s.player.move_to(result.joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+        if _playback is None:
+            s.player.move_to(result.joints, max_step=1.0, tol=cfg.motion.transit_arrival_tol)
+        else:
+            _playback(result.joints)
         if s.held is not None:
             s.held.over_xy_mm = (tx, ty)
         rx, ry, rz = s.arm_position_mm()

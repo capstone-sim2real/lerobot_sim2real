@@ -292,7 +292,16 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     @app.get("/api/config")
     async def ui_config():
         agent = cfg.agent
+        from perception.homography import PlaneCalibration
+        from session.pixel_target import pixel_preview_config
+        try:
+            preview = pixel_preview_config(cfg, PlaneCalibration.load(cfg.perception.calibration_path))
+        except (ValueError, OSError):
+            preview = None
         return {
+            "pixel_preview": preview,
+            "keyboard_jog": {"heartbeat_s": agent.relative.keyboard_heartbeat_s,
+                             "speed_mm_s": agent.relative.keyboard_speed_mm_s},
             "camera_base_url": agent.camera_base_url,
             "camera_view": asdict(agent.camera_view),
             "mjpeg_path": f"/video/{agent.camera_name}.mjpg",
@@ -300,6 +309,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             "default_step_mm": agent.relative.default_step_mm,
             "small_step_mm": agent.relative.small_step_mm,
             "places": svc().places,
+            "manual_tools": sorted(svc().MANUAL_TOOLS),
             "provider": svc().provider.name,
             "model": svc().provider.model,
         }
@@ -361,6 +371,38 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         if not current_control_ui(request):
             return stale_control_ui()
         return reply(svc().jog(token_of(request), *vector))
+
+    @app.post("/api/keyboard/start")
+    async def keyboard_start(request: Request):
+        if not current_control_ui(request):
+            return stale_control_ui()
+        return reply(svc().keyboard_start(token_of(request)))
+
+    @app.post("/api/keyboard/update")
+    async def keyboard_update(request: Request):
+        if not current_control_ui(request):
+            return stale_control_ui()
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("vector"), list):
+            return JSONResponse({"error": "keyboard direction required"}, status_code=400)
+        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
+                                         body.get("seq"), body["vector"]))
+
+    @app.post("/api/keyboard/release")
+    async def keyboard_release(request: Request):
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "keyboard session required"}, status_code=400)
+        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
+                                         0, [], release=True))
+
+    @app.post("/api/keyboard/stop")
+    async def keyboard_stop(request: Request):
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "keyboard session required"}, status_code=400)
+        return reply(svc().keyboard_update(token_of(request), body.get("session_id"),
+                                         0, [], stop=True))
 
     @app.post("/api/manual")
     async def manual(request: Request):

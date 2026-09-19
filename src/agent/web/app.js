@@ -21,6 +21,14 @@ try { token = sessionStorage.getItem(TOKEN_KEY); } catch (_) { /* storage unavai
 let control = { state: "idle" };
 let isOperator = false;
 let directPending = false;
+let manualTools = new Set();
+let keyboardConfig = null;
+const manualAllowed = name => manualTools.has(name);
+const MANUAL_BUTTON_TOOLS = {
+  'manual-home':'return_to_home', 'roll-ccw':'rotate_gripper', 'roll-cw':'rotate_gripper',
+  'pick-here':'pick_here', 'place-here':'place_here', 'open-gripper':'open_gripper',
+  'go-cell':'move_to_cell', 'move-pixel':'move_to_pixel', 'place-pixel':'place_at_pixel',
+};
 let streamingBubble = null;
 const toolChips = new Map();
 let events = null;
@@ -52,7 +60,7 @@ async function api(path, body) {
     "X-SO101-Control-Version": CONTROL_UI_VERSION,
   };
   if (token) headers["X-Operator-Token"] = token;
-  const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body || {}), keepalive: path === "/api/stop" });
+  const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body || {}), keepalive: path === "/api/stop" || path === "/api/keyboard/stop" || path === "/api/keyboard/release", signal:path.startsWith("/api/keyboard/")?AbortSignal.timeout(2000):undefined });
   let data = {};
   try { data = await response.json(); } catch (_) {}
   if (response.status === 403 && path !== "/api/lease") { isOperator = false; acquireLease(); }
@@ -266,6 +274,7 @@ function handleEvent(event) {
     case "tool_result": handleToolResult(event); break;
     case "turn_end": streamingBubble = null; break;
     case "stop_pressed": if (event.effective) addMessage("system", "비상정지 요청됨"); break;
+    case "keyboard_jog_end": showToast(event.message,"bad"); break;
     case "error": addMessage("error", event.message); break;
     default: break;
   }
@@ -274,6 +283,7 @@ function handleEvent(event) {
 // ── control state ───────────────────────────────────────────────────
 function applyControl(snapshot) {
   control = snapshot;
+  document.dispatchEvent(new CustomEvent("robot-control-state",{detail:snapshot}));
   const badge = $("state-badge");
   badge.textContent = STATE_TEXT[snapshot.state] || snapshot.state;
   badge.className = "badge " + (snapshot.state === "idle" ? "badge-idle"
@@ -288,6 +298,13 @@ function applyControl(snapshot) {
   for (const el of manualControls) {
     el.disabled = !idle;
   }
+  for (const [id, tool] of Object.entries(MANUAL_BUTTON_TOOLS)) {
+    const button=$(id);
+    if (!button) continue;
+    button.disabled = !idle || !manualAllowed(tool);
+    button.title = manualAllowed(tool) ? '' : '이 서버에서는 지원하지 않습니다. 보정 전용 절차를 사용하세요.';
+  }
+  for (const button of document.querySelectorAll('.jog-btn')) button.disabled=!idle || !manualAllowed('move_arm');
   $("stopped-banner").hidden = !(snapshot.state === "stopped" || snapshot.state === "homing" || snapshot.state === "stopping");
   $("home-button").disabled = !(snapshot.state === "stopped" && isOperator);
   $("home-button").textContent = snapshot.state === "homing" ? "복귀 중…" : "다시 시도(그리퍼 열기+home)";
@@ -343,6 +360,7 @@ $("reset").addEventListener("click", () => api("/api/reset"));
 
 async function directRequest(path, body) {
   if (directPending || control.state !== "idle" || !isOperator) return;
+  if (!manualAllowed(path === "/api/jog" ? "move_arm" : body.tool)) return;
   directPending = true;
   try {
     const { status, data } = await api(path, body);
@@ -567,43 +585,110 @@ function drawPlaces(places) {
   const svg=$('overlay');
   svg.replaceChildren();
   svg.setAttribute('viewBox',`0 0 ${places.image_size.join(' ')}`);
-  const sector=places.sector_px;
-  if(sector?.arc?.length) {
-    svg.append(svgEl('polygon',{class:'pixel-workspace',points:[sector.base,...sector.arc].map(p=>p.join(',')).join(' ')}));
-  }
 }
 
 let pixelTarget=null;
 let pixelSelectionGeneration=0;
 function enablePixelButtons() {
   const enabled=Boolean(pixelTarget) && selectedCamera()==='shoulder' && control?.state==='idle' && isOperator;
-  for(const id of ['move-pixel','place-pixel','pixel-to-chat'])$(id).disabled=!enabled;
+  $('move-pixel').disabled=!enabled || !manualAllowed('move_to_pixel');
+  $('place-pixel').disabled=!enabled || !manualAllowed('place_at_pixel');
+  $('pixel-to-chat').disabled=!enabled;
 }
+// Hover ring follows the pointer; the selected ring stays in image coordinates.
+const hoverRing=document.createElement('span');
+hoverRing.className='pixel-hover-ring';hoverRing.hidden=true;
+hoverRing.setAttribute('aria-hidden','true');
+$('camera-wrap').append(hoverRing);
+let pixelPreview=null;
+function cameraPixel(event) {
+  const image=$('camera'),rect=image.getBoundingClientRect();
+  return {u:Math.floor((event.clientX-rect.left)*image.naturalWidth/rect.width),
+    v:Math.floor((event.clientY-rect.top)*image.naturalHeight/rect.height),
+    width:image.naturalWidth,height:image.naturalHeight};
+}
+async function checkPixel(params,signal) {
+  const response=await fetch('/api/pixel-target?'+new URLSearchParams(params),{signal,cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error||'선택할 수 없는 위치입니다.');
+  return data.target;
+}
+// Same geometric gate as resolve_pixel; this preview never requests IK or motion.
+function previewPixel(params, rules=pixelPreview) {
+  if(!rules)return 'pending';
+  const {u,v,width,height}=params;
+  if(rules.camera_name!=='shoulder'||width!==rules.image_size[0]||height!==rules.image_size[1]
+    ||!Number.isInteger(u)||!Number.isInteger(v)||u<0||v<0||u>=width||v>=height)return 'invalid';
+  const H=rules.H,den=H[2][0]*u+H[2][1]*v+H[2][2];
+  if(!Number.isFinite(den)||den===0)return 'invalid';
+  const x=(H[0][0]*u+H[0][1]*v+H[0][2])/den;
+  const y=(H[1][0]*u+H[1][1]*v+H[1][2])/den;
+  if(![x,y,rules.z_mm].every(Number.isFinite))return 'invalid';
+  const dx=x-rules.base_xy_mm[0],dy=y-rules.base_xy_mm[1];
+  const angle=Math.atan2(dy,dx)*180/Math.PI,radius=Math.hypot(dx,dy);
+  let outer=rules.radius_mm;
+  const profile=rules.radius_by_angle_mm||[];
+  if(profile.length) {
+    let interpolated=profile[profile.length-1][1];
+    if(angle<profile[0][0])interpolated=profile[0][1];
+    else for(let i=1;i<profile.length;i++) {
+      if(angle<profile[i][0]) {
+        const [a,r]=profile[i-1],[b,t]=profile[i];
+        interpolated=r+(t-r)*(angle-a)/(b-a);break;
+      }
+    }
+    outer=Math.min(outer,interpolated);
+  }
+  return angle<rules.angle_min_deg||angle>rules.angle_max_deg||radius>outer
+    ||radius>outer-rules.edge_margin_mm||radius<rules.min_radius_mm
+    ||(Math.abs(dy)<=rules.keepout_half_width_mm&&dx<=rules.keepout_depth_mm)
+    ?'invalid':'valid';
+}
+function checkHoverPixel(event) {
+  hoverRing.dataset.state=previewPixel(cameraPixel(event));
+}
+function updateHoverRing(event) {
+  const image=$('camera'),wrap=$('camera-wrap');
+  const visible=selectedCamera()==='shoulder' && event.pointerType!=='touch' && image.naturalWidth>0;
+  hoverRing.hidden=!visible;wrap.classList.toggle('pixel-pointer-active',visible);
+  if(!visible){hideHoverRing();return;}
+  checkHoverPixel(event);
+  const rect=wrap.getBoundingClientRect();
+  hoverRing.style.left=`${event.clientX-rect.left}px`;
+  hoverRing.style.top=`${event.clientY-rect.top}px`;
+  hoverRing.style.width=`${21*rect.width/image.naturalWidth}px`;
+  hoverRing.style.height=`${21*rect.height/image.naturalHeight}px`;
+  hoverRing.style.borderWidth=`${3*rect.width/image.naturalWidth}px`;
+}
+function hideHoverRing() {
+  hoverRing.hidden=true;$('camera-wrap').classList.remove('pixel-pointer-active');
+}
+$('camera-wrap').addEventListener('pointermove',updateHoverRing);
+$('camera-wrap').addEventListener('pointerenter',updateHoverRing);
+$('camera-wrap').addEventListener('pointerleave',hideHoverRing);
+window.addEventListener('blur',hideHoverRing);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)hideHoverRing();});
 $('camera-wrap').addEventListener('click',async event=>{
   if(selectedCamera()!=='shoulder')return;
   const image=$('camera');
   if(!image.naturalWidth || !image.naturalHeight)return;
-  const rect=image.getBoundingClientRect();
-  const u=Math.floor((event.clientX-rect.left)*image.naturalWidth/rect.width);
-  const v=Math.floor((event.clientY-rect.top)*image.naturalHeight/rect.height);
+  const params=cameraPixel(event),{u,v}=params;
   const generation=++pixelSelectionGeneration;
   pixelTarget=null;enablePixelButtons();
   const overlay=$('pixel-target-overlay');overlay.replaceChildren();
   overlay.setAttribute('viewBox',`0 0 ${image.naturalWidth} ${image.naturalHeight}`);
-  const mark=svgEl('circle',{cx:u,cy:v,r:9,fill:'#f59e0b',stroke:'white','stroke-width':3});overlay.append(mark);
+  const mark=svgEl('circle',{cx:u,cy:v,r:9,class:'pixel-selected-ring'});
+  mark.dataset.state='pending';overlay.append(mark);
   $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) 확인 중…`;
   try {
-    const params=new URLSearchParams({u,v,width:image.naturalWidth,height:image.naturalHeight});
-    const response=await fetch('/api/pixel-target?'+params,{signal:AbortSignal.timeout(5000),cache:'no-store'});
-    const data=await response.json();
+    const target=await checkPixel(params,AbortSignal.timeout(5000));
     if(generation!==pixelSelectionGeneration)return;
-    if(!response.ok)throw Error(data.error||'선택할 수 없는 위치입니다.');
-    pixelTarget=data.target;mark.setAttribute('fill','#2563eb');
+    pixelTarget=target;mark.dataset.state='valid';
     $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) · X ${pixelTarget.x_mm.toFixed(1)} / Y ${pixelTarget.y_mm.toFixed(1)} / Z ${pixelTarget.z_mm.toFixed(2)} mm · 블록 윗면 고정. 실행 시 IK 검사`;
     enablePixelButtons();
   } catch(error) {
     if(generation!==pixelSelectionGeneration)return;
-    mark.setAttribute('fill','#dc2626');$('pixel-target-status').textContent=error.message;
+    mark.dataset.state='invalid';$('pixel-target-status').textContent=error.message;
   }
 });
 function pixelArguments() {
@@ -619,6 +704,10 @@ $('pixel-to-chat').addEventListener('click',()=>{
 async function loadConfig() {
   const response = await fetch("/api/config");
   const config = await response.json();
+  pixelPreview=config.pixel_preview||null;
+  keyboardConfig=config.keyboard_jog||null;
+  manualTools = new Set(config.manual_tools || []);
+  applyControl(control);
   $("model-badge").textContent = `${config.provider} · ${config.model}`;
   const selected=selectedCamera();
   $('camera-select').value=selected;
@@ -774,46 +863,106 @@ pollHealth();
 })();
 
 
-// Discrete keyboard commands reuse the existing manual buttons and server gate.
+// Held translation keys publish the latest direction; other actions stay discrete.
 (() => {
-  const toggle=document.getElementById('keyboard-toggle');
-  const status=document.getElementById('keyboard-status');
+  const toggle=$('keyboard-toggle'),status=$('keyboard-status');
   const held=new Set();
-  let armed=false;
-  const bindings={KeyW:'[data-jog="forward"]',KeyS:'[data-jog="back"]',
-    KeyA:'[data-jog="left"]',KeyD:'[data-jog="right"]',
-    KeyJ:'[data-jog="up"]',KeyK:'[data-jog="down"]',
-    KeyQ:'#roll-ccw',KeyE:'#roll-cw',KeyG:'#pick-here',KeyP:'#place-here',
-    KeyO:'#open-gripper',KeyH:'#manual-home'};
+  const directions={KeyW:[1,0,0],KeyS:[-1,0,0],KeyA:[0,1,0],KeyD:[0,-1,0],KeyJ:[0,0,1],KeyK:[0,0,-1]};
+  const actions={KeyQ:'#roll-ccw',KeyE:'#roll-cw',KeyG:'#pick-here',KeyP:'#place-here',KeyO:'#open-gripper',KeyH:'#manual-home'};
+  let armed=false,session=null,brakingSession=null,starting=false,timer=null,inFlight=false,epoch=0,seq=0;
   const editable=target=>target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]'));
+  const vector=()=>{const v=[0,0,0];for(const key of held)directions[key]?.forEach((n,i)=>v[i]+=n);return v;};
+  function stopStream(graceful=false) {
+    ++epoch;clearTimeout(timer);timer=null;
+    const old=session;session=null;
+    if(!graceful&&brakingSession) {
+      api('/api/keyboard/stop',{session_id:brakingSession}).catch(()=>{});brakingSession=null;
+    }
+    if(old) {
+      if(graceful)brakingSession=old;
+      api(graceful?'/api/keyboard/release':'/api/keyboard/stop',{session_id:old}).catch(()=>{});
+    }
+  }
   function setArmed(value) {
-    armed=value;held.clear();toggle.setAttribute('aria-pressed',String(armed));
+    stopStream();held.clear();armed=value;
+    toggle.setAttribute('aria-pressed',String(armed));
     toggle.textContent=armed?'키보드 끄기':'키보드 켜기';
-    status.textContent=armed?'활성 · 키를 누를 때마다 한 단계 실행':'꺼짐 · 버튼을 눌러 활성화';
+    status.textContent=armed?`활성 · WASD / J·K 누르는 동안 이동 · 떼면 감속 (설정 ${keyboardConfig?.speed_mm_s} mm/s)`:'꺼짐 · 버튼을 눌러 활성화';
     document.querySelector('.keyboard-control').classList.toggle('keyboard-armed',armed);
   }
-  toggle.addEventListener('click',()=>setArmed(!armed));
+  async function sendDirection() {
+    clearTimeout(timer);
+    if(!session||inFlight)return;
+    const id=session,v=vector();
+    if(!armed||!isOperator||!v.some(Boolean)){stopStream();return;}
+    inFlight=true;
+    try {
+      const {status:code,data}=await api('/api/keyboard/update',{session_id:id,seq:++seq,vector:v});
+      if(session!==id)return;
+      if(code!==200)throw Error(data.error||'연속 이동이 종료되었습니다.');
+    } catch(error) {
+      if(session===id){setArmed(false);showToast(error.message,'bad');}
+    } finally {
+      inFlight=false;
+      if(session===id)timer=setTimeout(sendDirection,keyboardConfig.heartbeat_s*1000);
+    }
+  }
+  async function startStream() {
+    if(starting||session||!vector().some(Boolean))return;
+    if(!keyboardConfig||!manualAllowed('move_arm')||control.state!=='idle'||!isOperator||directPending){held.clear();return;}
+    starting=true;const generation=epoch;
+    try {
+      const {status:code,data}=await api('/api/keyboard/start');
+      if(code!==202)throw Error(data.error||'연속 이동을 시작할 수 없습니다.');
+      // Start only reserves the worker. No motion until this first update.
+      if(generation!==epoch||!armed||!vector().some(Boolean)) {
+        api('/api/keyboard/stop',{session_id:data.session_id}).catch(()=>{});return;
+      }
+      session=data.session_id;seq=0;sendDirection();
+    } catch(error) {
+      if(generation===epoch){setArmed(false);showToast(error.message,'bad');}
+    } finally {starting=false;}
+  }
+  toggle.addEventListener('click',()=>{
+    if(!armed&&!keyboardConfig){showToast('연속 키보드 조작은 제어 서버에 변경 사항을 적용한 뒤 사용할 수 있습니다.','bad');return;}
+    setArmed(!armed);
+  });
   document.addEventListener('keydown',event=>{
-    if(event.key==='Escape') {setArmed(false);return;}
-    if(!armed || !bindings[event.code])return;
-    if(event.repeat || held.has(event.code)) {event.preventDefault();return;}
-    if(event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || editable(event.target) || document.hidden || document.getElementById('direct-controls').hidden)return;
-    event.preventDefault();held.add(event.code);
-    if(control.state!=='idle' || !isOperator || directPending)return;
-    const button=document.querySelector(bindings[event.code]);
-    if(button && !button.disabled) {
-      button.classList.add('key-pressed');button.click();
-      setTimeout(()=>button.classList.remove('key-pressed'),150);
+    if(event.key==='Escape'){setArmed(false);return;}
+    if(!armed)return;
+    if(event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||editable(event.target)) {setArmed(false);return;}
+    if(!directions[event.code]&&!actions[event.code])return;
+    if(document.hidden||$('direct-controls').hidden){setArmed(false);return;}
+    event.preventDefault();
+    if(event.repeat||held.has(event.code))return;
+    if(directions[event.code]) {
+      held.add(event.code);
+      if(!vector().some(Boolean)){stopStream(true);return;}
+      if(session)sendDirection();else startStream();
+    } else {
+      held.add(event.code);
+      if(session||starting||control.state!=='idle'||!isOperator||directPending)return;
+      const button=document.querySelector(actions[event.code]);
+      if(button&&!button.disabled)button.click();
     }
   });
-  document.addEventListener('keyup',event=>held.delete(event.code));
+  document.addEventListener('keyup',event=>{
+    if(!held.delete(event.code)||!directions[event.code])return;
+    if(!vector().some(Boolean))stopStream(true);
+    else if(session)sendDirection();
+    // No restart on key release: a new key press is required after a stop.
+  });
+  document.addEventListener('robot-control-state',event=>{
+    if(event.detail.state==='idle')brakingSession=null;
+    if(session&&(event.detail.state!=='busy'||event.detail.busy_with!=='keyboard_jog'))setArmed(false);
+  });
   window.addEventListener('blur',()=>setArmed(false));
+  window.addEventListener('pagehide',()=>setArmed(false));
   document.addEventListener('visibilitychange',()=>{if(document.hidden)setArmed(false);});
   document.addEventListener('focusin',event=>{if(editable(event.target))setArmed(false);});
-  document.getElementById('chat-tab').addEventListener('click',()=>setArmed(false));
+  $('chat-tab').addEventListener('click',()=>setArmed(false));
   setArmed(false);
 })();
-
 
 // Theme preference is local to the browser and never changes robot state.
 (() => {
@@ -837,4 +986,13 @@ pollHealth();
   media.addEventListener('change',()=>{if(!['light','dark'].includes(saved()))apply(null);});
   window.addEventListener('storage',event=>{if(event.key===key||event.key===null)apply(saved());});
   apply(saved());
+})();
+
+// Keep both command tabs aligned with the camera as its size changes.
+(() => {
+  const camera=document.querySelector('.camera-panel');
+  const commands=document.querySelector('.command-panel');
+  const syncHeight=()=>commands.style.setProperty('--camera-panel-height',`${camera.getBoundingClientRect().height}px`);
+  new ResizeObserver(syncHeight).observe(camera);
+  syncHeight();
 })();

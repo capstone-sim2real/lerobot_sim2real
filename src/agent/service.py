@@ -92,6 +92,7 @@ class AgentService:
         )
         self.places: dict[str, Any] = {}
         self.started = False
+        self._keyboard_jog = None
         self._telemetry_future = None
         self._telemetry_cache = {}
 
@@ -248,6 +249,61 @@ class AgentService:
     def jog(self, token: str | None, forward_mm: float, left_mm: float, up_mm: float) -> tuple[int, dict]:
         return self.direct(token, "move_arm",
                            {"forward_mm": float(forward_mm), "left_mm": float(left_mm), "up_mm": float(up_mm)})
+
+    def keyboard_start(self, token):
+        from .keyboard_jog import KeyboardJog
+        if "move_arm" not in self.MANUAL_TOOLS:
+            return 400, {"error": "keyboard jog unavailable"}
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        try:
+            import ruckig  # Optional agent dependency, checked before reserving the arm.
+        except ImportError:
+            return 503, {"error": "연속 가감속 기능에 필요한 ruckig 패키지가 설치되지 않았습니다."}
+        if not self.gate.try_begin(token, "keyboard_jog"):
+            return 409, {"error": "busy", **self.gate.snapshot()}
+        stream = KeyboardJog(self.cfg.agent.relative)
+        self._keyboard_jog = stream
+        self.cancel.clear()
+
+        def run():
+            fault = False
+            try:
+                result = self._execute(lambda skills: stream.run(skills, self.cancel))
+                if result is not None and not result.ok:
+                    from session.results import ROBOT_FAULT_REASONS
+                    fault = result.reason in ROBOT_FAULT_REASONS
+                    self._publish({"type": "keyboard_jog_end", "message": result.detail})
+            except Exception as exc:
+                fault = True
+                logger.exception("keyboard jog ended with a fault")
+                self._publish({"type": "keyboard_jog_end", "message": str(exc)})
+            finally:
+                stream.close()
+                self._keyboard_jog = None
+                self._after_command(fault)
+        self._spawn(run, "so101-keyboard-jog")
+        return 202, {"session_id": stream.id}
+
+    def keyboard_update(self, token, session_id, seq, vector, *, stop=False, release=False):
+        import math
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        stream = self._keyboard_jog
+        if stream is None or stream.id != session_id:
+            return 409, {"error": "keyboard session ended"}
+        if release:
+            stream.release()
+            return 200, {"releasing": True}
+        if stop:
+            stream.close()
+            return 200, {"stopped": True}
+        if (type(seq) is not int or seq < 0 or len(vector) != 3
+            or any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 1 for v in vector)):
+            return 400, {"error": "invalid keyboard direction"}
+        if not stream.update(seq, vector):
+            return 409, {"error": "expired or outdated keyboard input"}
+        return 200, {"accepted": True}
 
     def _after_command(self, robot_fault: bool) -> None:
         fault = robot_fault or self.cancel.is_set()

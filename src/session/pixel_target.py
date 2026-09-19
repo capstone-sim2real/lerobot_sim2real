@@ -34,3 +34,21 @@ def resolve_pixel(cfg, calib, u, v, frame_id):
     if not math.isfinite(z):
         raise ValueError('블록 윗면 보정 높이가 유효하지 않습니다.')
     return {'u':u, 'v':v, 'x_mm':point[0], 'y_mm':point[1], 'z_mm':z, 'calibration_id':frame_id}
+
+
+def pixel_preview_config(cfg, calib):
+    """Read-only browser preview; execution still uses resolve_pixel and IK."""
+    return {
+        'camera_name': cfg.agent.camera_name,
+        'H': calib.H.tolist(), 'image_size': list(calib.image_size),
+        'base_xy_mm': list(calib.base_xy_mm or (0.0, 0.0)),
+        'z_mm': calibration_grasp_z_mm(calib), 'calibration_id': calibration_id(calib),
+        'radius_mm': cfg.perception.workspace_radius_mm,
+        'radius_by_angle_mm': cfg.perception.workspace_radius_by_angle_mm,
+        'angle_min_deg': cfg.perception.workspace_angle_min_deg,
+        'angle_max_deg': cfg.perception.workspace_angle_max_deg,
+        'edge_margin_mm': cfg.agent.table_regions.edge_margin_mm,
+        'min_radius_mm': cfg.agent.board_grid.min_radius_mm,
+        'keepout_half_width_mm': cfg.agent.board_grid.base_keepout_half_width_mm,
+        'keepout_depth_mm': cfg.agent.board_grid.base_keepout_depth_mm,
+    }

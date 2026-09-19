@@ -18,6 +18,7 @@ REASONS = frozenset(
         "already_holding", "ik_gate", "camera_stale", "camera_unreachable", "cancelled",
         "bus_lost", "precondition", "disabled", "out_of_workspace", "destination_in_zone",
         "destination_blocked", "destination_unreachable", "no_free_region", "limit_exceeded",
+        "scene_incomplete", "neighbour_clearance", "scene_reposition_disabled",
         "height_limit", "invalid_arguments", "internal_error", "task_incomplete",
     }
 )
