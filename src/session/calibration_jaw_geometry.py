@@ -10,6 +10,28 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+def triangles_intersect_box(triangles, half_extents):
+    """Exact separating-axis test of triangles against an axis-aligned box.
+
+    Coordinates are relative to the box centre. Unlike per-triangle AABBs,
+    slanted faces do not fill their entire rectangular projection.
+    """
+    import numpy as np
+    t=np.asarray(triangles,dtype=float)
+    half=np.asarray(half_extents,dtype=float)
+    hit=np.all(t.min(axis=1)<=half,axis=1)&np.all(t.max(axis=1)>=-half,axis=1)
+    edges=np.roll(t,-1,axis=1)-t
+    axes=[np.cross(edges[:,0],edges[:,1])]
+    for edge in range(3):
+        for basis in np.eye(3):
+            axes.append(np.cross(edges[:,edge],basis))
+    for axis in axes:
+        projection=np.einsum('nvi,ni->nv',t,axis)
+        radius=np.abs(axis)@half
+        hit &= (projection.min(axis=1)<=radius)&(projection.max(axis=1)>=-radius)
+    return hit
+
+
 def transform(node):
     import numpy as np
     xyz = [float(v) for v in node.get("xyz", "0 0 0").split()]
@@ -88,11 +110,12 @@ class JawGeometry:
                     radius=half+margin
                     if np.any(projected.min(axis=0)>radius) or np.any(projected.max(axis=0)<-radius):continue
                     verts=(pose@triangles.T).T[:,:3].reshape(-1,3,3)*1000
-                    local_xy=(verts[:,:,:2]-center)@axes
-                    low,high=local_xy.min(axis=1),local_xy.max(axis=1)
-                    hit=(verts[:,:,2].min(axis=1)-margin<=cfg.obstacle_height_mm)
-                    hit &= np.all(low<=radius,axis=1)&np.all(high>=-radius,axis=1)
-                    if np.any(hit):
+                    triangle_local=np.empty_like(verts)
+                    triangle_local[:,:,:2]=(verts[:,:,:2]-center)@axes
+                    triangle_local[:,:,2]=verts[:,:,2]-cfg.obstacle_height_mm/2
+                    half3=np.array([*radius,cfg.obstacle_height_mm/2+margin])
+                    broad=np.all(triangle_local.min(axis=1)<=half3,axis=1)&np.all(triangle_local.max(axis=1)>=-half3,axis=1)
+                    if np.any(broad) and np.any(triangles_intersect_box(triangle_local[broad],half3)):
                         conflicts.add(color);pieces.add(name)
         return {"clear":not conflicts,"conflicts":sorted(conflicts),"colliding_links":sorted(pieces),
-                "geometry":"URDF triangle bounds, full moving-jaw sweep","physical_geometry_verified":False}
+                "geometry":"URDF triangle-box SAT, full moving-jaw sweep","physical_geometry_verified":False}

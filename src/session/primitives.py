@@ -273,7 +273,10 @@ class PrimitiveSkills(Skills):
                 if blocked:
                     return self._fail(action, "Empty approach descent stopped short; reobserve before closing", "grasp_blocked")
             else:
-                self.s.player.move_to(plan.joints)
+                # Match the already-used calibrated transport tolerance. FK
+                # waypoint and low-height lateral gates still decide progress.
+                self.s.player.move_to(plan.joints, tol=(self.cfg.motion.transit_arrival_tol
+                    if self.limits.calibrated_pick else self.cfg.motion.arrival_tol))
             if math.dist(self.s.arm_position_mm(), point) > self.limits.arrival_error_mm:
                 raise TimeoutError("Measured FK did not reach primitive waypoint")
         if self.s.held is not None:
