@@ -1,7 +1,7 @@
 """URDF collision-mesh bounds for experimental neighbour screening.
 
-Each mesh keeps its own box. Moving jaw covers its entire URDF joint range,
-so no unverified servo-percent to jaw-angle conversion is needed. Mesh boxes
+Each mesh keeps its own box. Moving-jaw angles may be supplied for the executed opening/closing segment;
+the legacy default conservatively covers the full URDF range. Mesh boxes
 are conservative, and this is not a full-arm collision checker.
 """
 import math
@@ -68,15 +68,38 @@ class JawGeometry:
                 homogeneous=np.column_stack((vertices,np.ones(len(vertices))))
                 self.boxes.append((name,(origin@corners.T).T,(origin@homogeneous.T).T))
 
-    def check(self, tcp_poses, obstacles, cfg):
+    def command_angles(self, positions, cfg):
+        """Encoder-scaled, uncertainty-bounded candidate angles (radians)."""
+        import numpy as np
+        if (not positions or any(not math.isfinite(v) or not 0 <= v <= 100 for v in positions)
+                or not math.isfinite(cfg.jaw_span_deg) or cfg.jaw_span_deg <= 0
+                or not math.isfinite(cfg.jaw_closed_angle_deg)
+                or not math.isfinite(cfg.jaw_angle_uncertainty_deg) or cfg.jaw_angle_uncertainty_deg < 0
+                or not math.isfinite(cfg.jaw_angle_step_deg) or cfg.jaw_angle_step_deg <= 0):
+            raise ValueError("Invalid jaw command mapping")
+        values=[cfg.jaw_closed_angle_deg+v*cfg.jaw_span_deg/100 for v in positions]
+        low=max(self.limits[0],math.radians(min(values)-cfg.jaw_angle_uncertainty_deg))
+        high=min(self.limits[1],math.radians(max(values)+cfg.jaw_angle_uncertainty_deg))
+        if low>high:raise ValueError("Jaw command outside URDF range")
+        return np.linspace(low,high,max(2,math.ceil(math.degrees(high-low)/cfg.jaw_angle_step_deg)+1))
+
+    def check(self, tcp_poses, obstacles, cfg, *, jaw_angles=None):
         import numpy as np
         step=math.radians(cfg.jaw_angle_step_deg)
         if not math.isfinite(step) or step<=0: raise ValueError("Invalid jaw angle step")
-        angles=np.linspace(*self.limits,max(2,math.ceil((self.limits[1]-self.limits[0])/step)+1))
+        angles=(np.linspace(*self.limits,max(2,math.ceil((self.limits[1]-self.limits[0])/step)+1))
+                if jaw_angles is None else np.asarray(jaw_angles,dtype=float))
+        if not len(angles) or not np.isfinite(angles).all() or min(angles)<self.limits[0] or max(angles)>self.limits[1]:
+            raise ValueError("Invalid jaw-angle candidates")
+        if not math.isfinite(cfg.jaw_mount_yaw_deg):
+            raise ValueError("Invalid jaw mount yaw")
+        mount=np.eye(4)
+        yaw=math.radians(cfg.jaw_mount_yaw_deg)
+        mount[:2,:2]=[[math.cos(yaw),-math.sin(yaw)],[math.sin(yaw),math.cos(yaw)]]
         local=[]
         for name,box,triangles in self.boxes:
             for angle in (angles if name.startswith("moving") else [None]):
-                t=self.to_link
+                t=mount@self.to_link
                 padding=0.0
                 if angle is not None:
                     r=np.eye(4);c,s=math.cos(angle),math.sin(angle);r[:2,:2]=[[c,-s],[s,c]]
@@ -118,4 +141,7 @@ class JawGeometry:
                     if np.any(broad) and np.any(triangles_intersect_box(triangle_local[broad],half3)):
                         conflicts.add(color);pieces.add(name)
         return {"clear":not conflicts,"conflicts":sorted(conflicts),"colliding_links":sorted(pieces),
-                "geometry":"URDF triangle-box SAT, full moving-jaw sweep","physical_geometry_verified":False}
+                "geometry":"URDF triangle-box SAT",
+                "jaw_angle_range_deg":[math.degrees(min(angles)),math.degrees(max(angles))],
+                "jaw_mount_yaw_deg":cfg.jaw_mount_yaw_deg,
+                "physical_geometry_verified":False}

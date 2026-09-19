@@ -940,10 +940,19 @@ class CalibrationClearanceConfig:
     wrist_probe_close_gripper: bool = True
     hover_correction_max_deg: float = 3.0  # bounded experimental feedforward
     # Assumed bounded trial offsets; learn from recorded outcomes, not success claims.
-    trial_offsets_mm: list[list[float]] = field(default_factory=lambda: [[5.0,0.0],[10.0,0.0],[0.0,5.0]])
+    trial_offsets_mm: list[list[float]] = field(default_factory=lambda: [[5.0,0.0],[10.0,0.0],[0.0,5.0],[-5.0,0.0],[-10.0,0.0],[0.0,-5.0],[0.0,10.0],[0.0,-10.0],[15.0,0.0],[15.0,-10.0]])
+    trial_yaw_offsets_deg: list[float] = field(default_factory=lambda: [-15.0,15.0])
     rotate_retry_bias: bool = True
     red_separation_kernel_px: int = 31
     jaw_angle_step_deg: float = 5.0
+    # Encoder span is 2490-1867 ticks at 4095 ticks/rev on this rig.
+    # Closed-angle origin is a provisional URDF/side-view alignment, not a
+    # measured camera calibration. Retain angle and spatial uncertainty.
+    jaw_mount_yaw_deg: float = 90.0  # Provisional rig visual alignment, matching default.yaml.
+    jaw_closed_angle_deg: float = -10.0
+    jaw_span_deg: float = 54.76923076923077
+    jaw_angle_uncertainty_deg: float = 5.0
+    jaw_open_positions: list[float] = field(default_factory=lambda: [95.0,85.0,75.0])
     tool_radius_mm: float = 60.0
     block_radius_mm: float = 29.0
     uncertainty_mm: float = 15.0
@@ -954,7 +963,7 @@ class CalibrationClearanceConfig:
 @dataclass
 class PrimitiveConfig:
     """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
-    calibrated_pick: bool = False  # Enable the measured experiment path explicitly.
+    calibrated_pick: bool = True  # Same calibrated primitive path as default.yaml.
     target_max_age_s: float = 120.0
     approach_clearance_mm: float = 60.0
     lateral_clearance_mm: float = 40.0

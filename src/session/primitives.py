@@ -28,6 +28,7 @@ class PrimitiveSkills(Skills):
         self._grasp_failed = False
         self._pick_calibration = None
         self._pick_ready = False
+        self._held_radial_tilt_deg = 0.0
         self._observed_scene = None
         from session.collection import Collection
         from control.trajectory import TrajectoryPlayer
@@ -238,7 +239,8 @@ class PrimitiveSkills(Skills):
         if not self.s.in_workspace(xyz[:2]):
             raise ValueError("Waypoint outside workspace")
         joints = self.s.robot.read_joints()
-        solved = self.s.ik.solve_holding_wrist_roll(*xyz, wrist_roll_deg=joints["wrist_roll"])
+        solved = self.s.ik.solve_holding_wrist_roll(*xyz, wrist_roll_deg=joints["wrist_roll"],
+            radial_tilt_deg=(self._held_radial_tilt_deg if self.s.held is not None else 0.0))
         if not math.isfinite(solved.position_error_mm) or solved.position_error_mm > self.cfg.agent.relative.jog_max_ik_error_mm:
             raise ValueError("Waypoint failed IK gate")
         if (abs(solved.joints["wrist_roll"]) > self.limits.wrist_roll_limit_deg
@@ -265,23 +267,84 @@ class PrimitiveSkills(Skills):
             return self._fail(action, str(exc), "ik_gate")
         self._contact = False
         deadline = time.monotonic() + self.cfg.motion.move_timeout_s
-        for point, plan in zip(points, plans):
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Primitive move deadline reached")
-            if point[2] < self.s.arm_position_mm()[2] and self.s.held is None:
+        descending_empty = xyz[2] < start[2] and self.s.held is None
+        if descending_empty:
+            # Near-table descent retains its existing guarded, bounded steps.
+            deadline = time.monotonic() + self.cfg.motion.move_timeout_s
+            for point, plan in zip(points, plans):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Primitive move deadline reached")
                 _, blocked = self.s.player.descend(plan.joints)
                 if blocked:
                     return self._fail(action, "Empty approach descent stopped short; reobserve before closing", "grasp_blocked")
-            else:
-                # Match the already-used calibrated transport tolerance. FK
-                # waypoint and low-height lateral gates still decide progress.
-                self.s.player.move_to(plan.joints, tol=(self.cfg.motion.transit_arrival_tol
-                    if self.limits.calibrated_pick else self.cfg.motion.arrival_tol))
-            if math.dist(self.s.arm_position_mm(), point) > self.limits.arrival_error_mm:
-                raise TimeoutError("Measured FK did not reach primitive waypoint")
+                if math.dist(self.s.arm_position_mm(), point) > self.limits.arrival_error_mm:
+                    raise TimeoutError("Measured FK did not reach primitive waypoint")
+        else:
+            # Check the measured path corridor without stopping at IK knots.
+            # Longitudinal servo lag is allowed while moving; final arrival is
+            # still checked against the requested endpoint below.
+            delta = tuple(b-a for a,b in zip(start, xyz))
+            length2 = sum(d*d for d in delta)
+            def check_progress():
+                actual = self.s.arm_position_mm()
+                t = (sum((v-a)*d for v,a,d in zip(actual,start,delta)) / length2
+                     if length2 else 0.0)
+                t = max(0.0, min(1.0, t))
+                nearest = tuple(a+t*d for a,d in zip(start,delta))
+                if math.dist(actual, nearest) > self.limits.arrival_error_mm:
+                    raise TimeoutError("Measured FK left primitive path corridor")
+            self.s.player.move_through([plan.joints for plan in plans],
+                tol=(self.cfg.motion.transit_arrival_tol if self.limits.calibrated_pick
+                     else self.cfg.motion.arrival_tol), check_progress=check_progress,
+                timeout_s=deadline-time.monotonic())
+            if self.limits.calibrated_pick:
+                self.s.player.settle(plans[-1].joints, tol=self.cfg.motion.arrival_tol,
+                                     timeout_s=min(self.cfg.motion.grasp_hover_settle_s,max(0.0,deadline-time.monotonic())))
+            correction = {}
+            if self.limits.calibrated_pick and self.s.held is not None:
+                nominal = plans[-1].joints
+                measured = self.s.robot.read_joints()
+                errors = {j: nominal[j]-measured[j] for j in nominal}
+                if max(map(abs, errors.values())) > self.cfg.motion.descent_max_lag:
+                    raise TimeoutError("Transit tracking error exceeds correction bound")
+                if max(map(abs, errors.values())) > self.cfg.motion.grasp_hover_arrival_tol:
+                    bound = self.cfg.agent.calibration_clearance.hover_correction_max_deg
+                    correction = {j: max(-bound,min(bound,e)) for j,e in errors.items()}
+                    corrected = {j: nominal[j]+correction[j] for j in nominal}
+                    if (corrected["wrist_roll"] < self.cfg.agent.calibration_clearance.wrist_roll_min_deg
+                            or abs(corrected["wrist_roll"]) > self.limits.wrist_roll_limit_deg):
+                        raise TimeoutError("Transit correction exceeds wrist limit")
+                    baseline_load = ContactMonitor(self.s.robot, self.cfg.sensing).start()
+                    def check_correction():
+                        check_progress()
+                        loads = self.s.robot.read_loads()
+                        q = self.s.robot.read_joints()
+                        # Loaded upward/transit motion naturally raises holding
+                        # torque. A descent's contact delta is not a jam test
+                        # here; retain bounded following error and path guards.
+                        if max(abs(q[j]-corrected[j]) for j in corrected) > self.cfg.motion.descent_max_lag:
+                            self._calibration()._record("transit_correction_stop", correction_deg=correction,
+                                baseline_load=baseline_load, loads=loads, nominal=nominal, corrected=corrected)
+                            self.s.robot.send_joints({j:q[j] for j in corrected})
+                            raise TimeoutError("Transit correction tracking lag")
+                    self.s.player.move_through([corrected], tol=self.cfg.motion.transit_arrival_tol,
+                                               check_progress=check_correction,
+                                               timeout_s=deadline-time.monotonic(),
+                                               max_step=self.cfg.motion.descent_step_per_tick)
+                    # A single bounded correction, never an accumulating loop.
+                    self.s.player.settle(corrected, tol=self.cfg.motion.arrival_tol,
+                                         timeout_s=min(self.cfg.motion.grasp_hover_settle_s,max(0.0,deadline-time.monotonic())),
+                                         check_progress=check_correction)
+                    check_correction()
+                    self._calibration()._record("transit_tracking_corrected", correction_deg=correction,
+                                                nominal=nominal, corrected=corrected, target_mm=list(xyz))
+            if math.dist(self.s.arm_position_mm(), xyz) > self.limits.arrival_error_mm:
+                raise TimeoutError("Measured FK did not reach primitive endpoint")
         if self.s.held is not None:
             self.s.held.over_xy_mm = tuple(self.s.arm_position_mm()[:2])
-        return self._result(True, action, "moved", commanded_mm=list(xyz), measured_fk_mm=list(self.s.arm_position_mm()))
+        return self._result(True, action, "moved", commanded_mm=list(xyz),
+                            measured_fk_mm=list(self.s.arm_position_mm()),
+                            tracking_correction_deg={} if descending_empty else correction)
 
     def move_to_target(self, target_type, phase, object_id=None, observation_id=None, slot=None, x=None, y=None):
         action = "move_to_target"
@@ -395,6 +458,11 @@ class PrimitiveSkills(Skills):
             except ValueError:
                 pass
         attempt = GraspAttempt("primitive", (0.,0.), xyz[:2], plan, plan, True, xyz[2], xyz[2])
+        # Carry the calibrated pick's approach tilt into lift/transport IK.
+        # Resetting to top-down can make a reachable lift fail its IK gate.
+        cal = self._pick_calibration
+        self._held_radial_tilt_deg = (cal.plan.radial_tilt_deg
+            if self.limits.calibrated_pick and cal is not None and cal.plan is not None else 0.0)
         self.s.held = HeldBlock(color, attempt, xyz[:2], self.s.in_zone(xyz[:2]), xyz[:2])
         self._target = None
         return self._result(True, "close_gripper", "held", grasp=asdict(check), identity_confirmed=False,
@@ -428,7 +496,7 @@ class PrimitiveSkills(Skills):
             plans = [self._solve((*start[:2], start[2]-distance*i/count)) for i in range(1,count+1)]
         except ValueError as exc:
             return self._fail(action, str(exc), "ik_gate")
-        monitor = ContactMonitor(self.s.robot, self.cfg.sensing)
+        monitor = ContactMonitor(self.s.robot, self.cfg.sensing, magnitude_increase=True)
         monitor.start()
         deadline = time.monotonic() + self.limits.contact_timeout_s
         for plan in plans:
@@ -449,6 +517,10 @@ class PrimitiveSkills(Skills):
                 if reading.contact:
                     self.s.robot.send_joints({j: measured[j] for j in plan.joints})
                     actual = self.s.arm_position_mm()
+                    if (self._target[0] != "object" and actual[2] > self.s.grasp_z_mm
+                            + self.cfg.agent.calibration_clearance.obstacle_height_mm):
+                        return self._fail(action, "Unexpected contact above table; still holding. Reobserve before retry",
+                                          "grasp_blocked")
                     backoff = self._solve((*actual[:2], min(start[2], actual[2]+self.limits.contact_backoff_mm)))
                     self.s.player.move_to(backoff.joints)
                     self._contact = True

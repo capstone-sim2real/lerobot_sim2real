@@ -61,8 +61,9 @@ def deliver(rig, monkeypatch):
     assert rig.call("close_gripper")["ok"]
     assert rig.call("move_relative", up_mm=50)["ok"]
     assert rig.call("move_to_target", target_type="slot", phase="preplace", slot="top-left")["ok"]
-    monkeypatch.setattr("session.primitives.ContactMonitor.check", lambda self: ContactReading(True))
-    assert rig.call("descend_until_contact", max_descent_mm=20)["ok"]
+    monkeypatch.setattr("session.primitives.ContactMonitor.check",
+                        lambda self: ContactReading(rig.sk.s.arm_position_mm()[2] <= rig.sk.s.grasp_z_mm))
+    assert rig.call("descend_until_contact", max_descent_mm=60)["ok"]
     assert rig.call("open_gripper")["ok"]
     assert rig.call("return_to_home")["ok"]
 

@@ -13,3 +13,35 @@ def test_real_crossing_and_top_contact_are_detected():
                         [[0,0,1],[3,0,1],[0,3,1]],
                         [[0,0,2],[3,0,2],[0,3,2]]],dtype=float)
     assert triangles_intersect_box(triangles,[1,1,1]).tolist()==[True,True,False]
+
+
+def test_opening_and_closing_ranges_are_separate():
+    import math
+    from config import CalibrationClearanceConfig
+    from session.calibration_jaw_geometry import JawGeometry
+    geometry=object.__new__(JawGeometry)
+    geometry.limits=(math.radians(-10),math.radians(100))
+    cfg=CalibrationClearanceConfig()
+    opened=geometry.command_angles([95],cfg)
+    closing=geometry.command_angles([2,95],cfg)
+    assert math.degrees(min(opened))>30
+    assert math.degrees(max(opened))<50
+    assert min(closing)<0 and max(closing)==max(opened)
+    assert max(geometry.command_angles([75],cfg))<max(opened)
+
+
+def test_mount_rotation_changes_which_neighbour_the_jaw_reaches():
+    from config import CalibrationClearanceConfig
+    from session.calibration_jaw_geometry import JawGeometry
+    geometry=object.__new__(JawGeometry)
+    geometry.limits=(0.,1.)
+    geometry.to_link=np.eye(4)
+    geometry.joint_origin=np.eye(4)
+    triangle=np.array([[.049,-.001,.01,1],[.051,-.001,.01,1],[.05,.001,.01,1]])
+    geometry.boxes=[("gripper_link",triangle,triangle)]
+    cfg=CalibrationClearanceConfig(uncertainty_mm=0,block_radius_mm=5,jaw_mount_yaw_deg=0)
+    obstacle={"yellow":(0.,50.)}
+    assert geometry.check([np.eye(4)],obstacle,cfg)["clear"]
+    cfg.jaw_mount_yaw_deg=90.
+    result=geometry.check([np.eye(4)],obstacle,cfg)
+    assert not result["clear"] and result["conflicts"]==["yellow"]

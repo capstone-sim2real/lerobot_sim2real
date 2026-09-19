@@ -81,7 +81,45 @@ class TrajectoryPlayer:
             self._robot.send_joints(goal)
             self._tick_sleep()
 
-    def settle(self, goal: Pose, *, tol: float, timeout_s: float) -> tuple[float, bool]:
+    def move_through(self, waypoints: list[Pose], *, tol: float | None = None,
+                     check_progress=None, timeout_s: float | None = None,
+                     max_step: float | None = None) -> Pose:
+        """Stream a preplanned path, settling only at its final goal.
+
+        Start from feedback once; interpolate subsequent segments from their
+        preceding command so waypoint boundaries do not restart the motion.
+        All writes retain RobotIO cancellation, recording and target clamps.
+        ``check_progress`` may reject measured path deviation after each tick.
+        """
+        current = self._robot.read_joints()
+        if not waypoints:
+            return current
+        tol = self._cfg.arrival_tol if tol is None else tol
+        deadline = time.monotonic() + (self._cfg.move_timeout_s if timeout_s is None else max(0.0, timeout_s))
+        previous = current
+        step_limit = self._cfg.max_step_per_tick if max_step is None else min(max_step,self._cfg.max_step_per_tick)
+        for goal in waypoints:
+            for step in interpolate(previous, goal, step_limit):
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Continuous move deadline reached")
+                self._robot.send_joints(step)
+                self._tick_sleep()
+                if check_progress is not None:
+                    check_progress()
+            previous = {**previous, **goal}
+        goal = waypoints[-1]
+        while True:
+            current = self._robot.read_joints()
+            if max(abs(current[j] - goal[j]) for j in goal) <= tol:
+                return current
+            if time.monotonic() > deadline:
+                raise TimeoutError("Continuous move did not reach final goal")
+            self._robot.send_joints(goal)
+            self._tick_sleep()
+            if check_progress is not None:
+                check_progress()
+
+    def settle(self, goal: Pose, *, tol: float, timeout_s: float, check_progress=None) -> tuple[float, bool]:
         """Hold ``goal`` for up to ``timeout_s``, trying to tighten onto ``tol``.
 
         Unlike ``move_to`` this neither interpolates nor raises: it is the
@@ -101,6 +139,8 @@ class TrajectoryPlayer:
                 return err, False
             self._robot.send_joints(goal)
             self._tick_sleep()
+            if check_progress is not None:
+                check_progress()
 
     def descend(
         self,

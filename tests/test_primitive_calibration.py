@@ -122,3 +122,96 @@ def test_partial_descent_load_abort(tmp_path):
     result = sk.descend_step(2)
     assert not result.ok and result.data['stop_reason'] == 'load_increase'
     assert not sk.close_gripper().ok
+
+
+def test_transit_fk_is_checked_after_bounded_motor_settle(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    sk.s.player.move_through = lambda *a, **k: dict(robot.joints)
+    def settle(goal, **kwargs):
+        robot.send_joints(goal)
+        return 0.0, True
+    sk.s.player.settle = settle
+    assert sk.move_relative(up_mm=30).ok
+
+
+def test_transit_streams_all_knots_and_settles_only_at_endpoint(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    sk.s.player.move_through = Mock(wraps=sk.s.player.move_through)
+    sk.s.player.move_to = Mock(side_effect=AssertionError("no per-knot stop"))
+    sk.s.player.settle = Mock(wraps=sk.s.player.settle)
+    assert sk.move_relative(up_mm=30).ok
+    assert len(sk.s.player.move_through.call_args.args[0]) >= 3
+    sk.s.player.move_through.assert_called_once()
+    sk.s.player.settle.assert_called_once()
+
+
+def test_transit_rejects_measured_path_deviation(tmp_path):
+    import pytest
+    sk, cal, robot = setup(tmp_path)
+    sk.s.arm_position_mm = Mock(side_effect=[(150.,0.,60.), (150.,0.,60.), (200.,0.,65.)])
+    with pytest.raises(TimeoutError, match="path corridor"):
+        sk.move_relative(up_mm=30)
+
+
+def test_held_motion_keeps_calibrated_pick_tilt(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    cal.plan.radial_tilt_deg = -3.0
+    assert sk.close_gripper().ok
+    sk.s.ik.solve_holding_wrist_roll = Mock(wraps=sk.s.ik.solve_holding_wrist_roll)
+    assert sk.move_relative(up_mm=30).ok
+    assert all(call.kwargs["radial_tilt_deg"] == -3.0
+               for call in sk.s.ik.solve_holding_wrist_roll.call_args_list)
+    sk.s.held = None
+    sk._solve((180.,0.,60.))
+    assert sk.s.ik.solve_holding_wrist_roll.call_args.kwargs["radial_tilt_deg"] == 0.0
+
+
+def test_loaded_transit_applies_only_one_bounded_tracking_correction(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    sk.cfg.motion.grasp_hover_arrival_tol = 1.0
+    original = sk.s.player.move_through
+    calls = []
+    def lagged(points, **kwargs):
+        calls.append(points)
+        result = original(points, **kwargs)
+        if len(calls) == 1:
+            robot.joints["elbow_flex"] -= 2.0
+        return result
+    sk.s.player.move_through = lagged
+    sk.s.player.settle = lambda *a, **k: (2.0, False)
+    result = sk.move_relative(up_mm=30)
+    assert result.ok
+    assert len(calls) == 2
+    assert result.data["tracking_correction_deg"]["elbow_flex"] == 2.0
+    assert max(map(abs,result.data["tracking_correction_deg"].values())) <= 3.0
+
+
+def test_magnitude_contact_ignores_load_sign_reversal():
+    from config import SensingConfig
+    from control.sensing import ContactMonitor
+    robot = Mock()
+    cfg = SensingConfig(contact_joints=["elbow_flex"], contact_baseline_samples=1)
+    robot.read_loads.side_effect = [{"elbow_flex":132.}, {"elbow_flex":-60.}, {"elbow_flex":-220.}]
+    monitor = ContactMonitor(robot,cfg,magnitude_increase=True)
+    monitor.start()
+    assert not monitor.check().contact
+    assert monitor.check().contact
+
+
+def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
+    from control.sensing import ContactReading
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    assert sk.move_relative(up_mm=50).ok
+    cell = min(sk.cells,key=lambda k: sum((a-b)**2 for a,b in zip(sk.cells[k],(180.,0.))))
+    assert sk.move_to_target("cell","preplace",x=cell[0],y=cell[1]).ok
+    monkeypatch.setattr("session.primitives.ContactMonitor.check",lambda self:ContactReading(True))
+    assert not sk.descend_until_contact(20).ok
+    assert not sk.open_gripper().ok
