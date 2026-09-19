@@ -149,8 +149,8 @@ motion:
   # 최신 9점 캘리브레이션 좌표를 그대로 사용한다. 과거 실기 보정은 비활성.
   grasp_radial_offset_mm: 0.0
   grasp_forward_offset_mm: 0.0
-  # 모든 블록을 그리퍼 로컬 L(접선 +) 방향으로 10mm 조준한다.
-  grasp_tangential_offset_mm: 10.0
+  # 모든 자동 파지를 그리퍼 로컬 L(접선 +) 방향으로 15mm 조준한다.
+  grasp_tangential_offset_mm: 15.0
   # false: 중립 요 기준(반경/접선) — 기존 측정이 모두 이 프레임에서 나옴
   # true : 조우가 블록 면과 평행해진 뒤의 프레임 기준(그리퍼 롤각 반영)
   grasp_offsets_follow_jaw_yaw: false

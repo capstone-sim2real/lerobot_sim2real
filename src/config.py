@@ -308,9 +308,9 @@ class MotionConfig:
     # Additional F/forward offset requested for every block and retry. Unlike
     # the measured bias above, this part survives reachability bias scaling.
     grasp_forward_offset_mm: float = 0.0
-    # Uniform +10mm toward the gripper-relative left (the tangent of the
+    # Uniform +15mm toward the gripper-relative left (the tangent of the
     # base-centred reach circle), applied to every block and every retry.
-    grasp_tangential_offset_mm: float = 10.0
+    grasp_tangential_offset_mm: float = 15.0
     # Which frame the offsets above (and the retry offsets below) live in.
     #
     # False: the NEUTRAL-yaw gripper frame — radial is base -> target, and

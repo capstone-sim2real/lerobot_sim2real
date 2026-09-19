@@ -288,11 +288,11 @@ def test_pick_stops_after_the_single_rotated_retry(monkeypatch):
     assert tried == ["centre", "roll_90"]
 
 
-def test_default_pick_aim_uses_only_the_requested_ten_mm_left_bias():
+def test_default_pick_aim_uses_only_the_requested_fifteen_mm_left_bias():
     cfg = AppConfig()
     assert cfg.motion.grasp_radial_offset_mm == 0.0
     assert cfg.motion.grasp_forward_offset_mm == 0.0
-    assert cfg.motion.grasp_tangential_offset_mm == 10.0
+    assert cfg.motion.grasp_tangential_offset_mm == 15.0
     assert cfg.motion.left_half_radial_offset_mm == 0.0
     assert cfg.motion.grasp_retry_offsets_mm == []
     assert cfg.motion.grasp_retry_roll_deg == pytest.approx(90.0)
@@ -300,8 +300,8 @@ def test_default_pick_aim_uses_only_the_requested_ten_mm_left_bias():
     detected = (200.0, 0.0)
     full = biased_grasp_xy(cfg.motion, *detected, scale=1.0)
     reduced = biased_grasp_xy(cfg.motion, *detected, scale=0.0)
-    assert full == pytest.approx((200.0, 10.0))
-    assert reduced == pytest.approx((200.0, 10.0))
+    assert full == pytest.approx((200.0, 15.0))
+    assert reduced == pytest.approx((200.0, 15.0))
 
 
 @pytest.mark.parametrize(
@@ -468,13 +468,13 @@ def test_reduced_bias_keeps_the_sideways_correction():
 
 
 @pytest.mark.parametrize("det", [(240.0, 0.0), (180.0, 140.0), (180.0, -140.0)])
-def test_default_grasp_aim_is_ten_mm_to_relative_left_everywhere(det):
+def test_default_grasp_aim_is_fifteen_mm_to_relative_left_everywhere(det):
     cfg = AppConfig().motion
     aimed = biased_grasp_xy(cfg, *det)
     phi = math.atan2(det[1], det[0])
     tangential = -(aimed[0] - det[0]) * math.sin(phi) + (aimed[1] - det[1]) * math.cos(phi)
 
-    assert tangential == pytest.approx(10.0, abs=1e-9)
+    assert tangential == pytest.approx(15.0, abs=1e-9)
 
 
 def test_left_ramp_is_off_by_default_and_grows_with_y():

@@ -321,7 +321,7 @@ P7→P13 실측 경로를 FK로 계산한 결과:
 | 이름 | 기본값 | 의미 |
 |---|---|---|
 | `grasp_radial_offset_mm` | 12.0 | 전역 반경 보정. **가장 먼저 튜닝할 값** |
-| `grasp_tangential_offset_mm` | 10.0 | 전역 그리퍼 상대 좌측 보정 |
+| `grasp_tangential_offset_mm` | 15.0 | 모든 자동 파지의 전역 그리퍼 상대 좌측 보정 |
 | `left_half_y_mm` | 0.0 | 이 값보다 y가 크면 좌측 절반 |
 | `left_half_radial_offset_mm` | 10.0 | 좌측 절반 추가 전방 보정 |
 | `left_half_tangential_offset_mm` | 0.0 | 좌측 절반 추가 좌측 보정 |
@@ -515,7 +515,7 @@ uv run --extra hardware --extra dev pytest -q
    또한 보정된 반경 280~320 mm에서 손목을 바깥쪽으로 0~5도 점진적으로 펴
    원거리의 `wrist_flex=95도` 포화를 줄입니다. `task1.pick_tilt_*`로 조절하며
    기존 `pick_lift_lower`와 근거리 파지에는 적용하지 않습니다.
-   모든 파지는 반경 접선의 그리퍼 상대 좌측으로 10 mm 보정됩니다. 다섯 배치
+   모든 자동 파지는 반경 접선의 그리퍼 상대 좌측으로 15 mm 보정됩니다. 다섯 배치
    슬롯 모두 실기 under-reach를 보상하도록 명목 내부 중심보다 반경상 20 mm 더
    멀리 명령하는 것이 현재 YAML 기본값입니다. 다만 2026-09-08 실장비 Task 1은
    이 기본값의 dry-run 실패 때문에
