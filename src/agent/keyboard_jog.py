@@ -71,6 +71,8 @@ class KeyboardJog:
         cfg, session = self.cfg, skills.s
         period = 1. / cfg.keyboard_tick_hz
         ramp = JogRamp(cfg)  # Missing optional dependency fails before any motion.
+        if hasattr(skills, "_invalidate_pick"):
+            skills._invalidate_pick()
         sent = False
         path = None
         direction = None

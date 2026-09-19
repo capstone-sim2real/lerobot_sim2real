@@ -418,6 +418,7 @@ agent:
     max_mean_period_error: 0.1
     idle_poll_s: 0.005
   primitives:
+    calibrated_pick: true
     # Assumed bounds: validate on the real arm before deployment.
     target_max_age_s: 120.0
     approach_clearance_mm: 60.0

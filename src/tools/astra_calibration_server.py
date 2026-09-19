@@ -76,13 +76,16 @@ def configure_manual_tools(service, cfg):
     for name, definition in service.registry._tools.items():
         if name not in allowed:
             continue
-        if name in WEB_MANUAL_TOOLS or name in primitive_names:
+        if name in WEB_MANUAL_TOOLS or name in primitive_names or name.startswith("calibration_"):
             run = definition.run
-            def manual_run(skills, arguments, run=run):
+            def manual_run(skills, arguments, run=run, name=name):
                 # A jog/open/release invalidates the earlier visually checked
                 # calibration pose, including when the ensuing command fails.
-                skills.attempt = None
-                skills.descent_ready = False
+                if name not in primitive_names and hasattr(skills, "_invalidate_pick"):
+                    skills._invalidate_pick()
+                if not name.startswith("calibration_"):
+                    skills.attempt = None
+                    skills.descent_ready = False
                 return run(skills, arguments)
             definition = replace(definition, run=manual_run)
         tools[name] = definition

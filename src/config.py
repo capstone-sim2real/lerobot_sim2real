@@ -931,8 +931,8 @@ class AgentCameraViewConfig:
 class CalibrationClearanceConfig:
     """Experimental conservative envelopes, assumed until physically measured.
 
-    Used only by CalibrationSkills. The circular envelope covers both jaws at
-    every yaw; it intentionally does not claim a measured mesh collision test.
+    Shared by calibration experiments and calibrated primitives. URDF jaw
+    mesh bounds are conservative; they are not a measured full-arm collision model.
     """
     # Experimental hypothesis: neutral-frame bias rotates with retry jaw yaw.
     wrist_roll_min_deg: float = -65.0
@@ -954,6 +954,7 @@ class CalibrationClearanceConfig:
 @dataclass
 class PrimitiveConfig:
     """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
+    calibrated_pick: bool = False  # Enable the measured experiment path explicitly.
     target_max_age_s: float = 120.0
     approach_clearance_mm: float = 60.0
     lateral_clearance_mm: float = 40.0

@@ -26,6 +26,9 @@ class PrimitiveSkills(Skills):
         self._target = None
         self._contact = False
         self._grasp_failed = False
+        self._pick_calibration = None
+        self._pick_ready = False
+        self._observed_scene = None
         from session.collection import Collection
         from control.trajectory import TrajectoryPlayer
         from control.motion import MotionController
@@ -34,6 +37,40 @@ class PrimitiveSkills(Skills):
         session.robot = self.collection.io
         session.player = TrajectoryPlayer(session.robot, self.cfg.motion)
         session.motion = MotionController(session.robot, session.poses, self.cfg.motion, self.cfg.sensing)
+
+    def _calibration(self):
+        if self._pick_calibration is None:
+            from pathlib import Path
+            from session.calibration_motion import CalibrationMotion
+            # This helper shares the existing session/IO; it never opens a bus
+            # or installs another recording wrapper.
+            output = Path(self.cfg.agent.collection.root) / "calibration-motion"
+            self._pick_calibration = CalibrationMotion(self.s, output)
+            self._pick_calibration.primitive_wrist_limit = self.limits.wrist_roll_limit_deg
+        return self._pick_calibration
+
+    def _invalidate_pick(self):
+        self._pick_ready = False
+        if self._pick_calibration is not None:
+            self._pick_calibration.attempt = None
+            self._pick_calibration.descent_ready = False
+
+    def _calibrated_target(self, block, phase):
+        cal = self._calibration()
+        self._pick_ready = False
+        if phase == "pregrasp":
+            result = cal.calibration_prepare(block.color, _scene=self._observed_scene,
+                                             _open_gripper=False)
+            if not result.ok and result.data.get("stop_reason") == "hover_not_settled":
+                result = cal.calibration_correct_hover(dry_run=False)
+        else:
+            result = cal.calibration_descend_guarded()
+            self._pick_ready = result.ok
+        result = replace(result, action="move_to_target")
+        result.data["calibrated_pick"] = True
+        if cal.baseline is not None:
+            result.data["calibrated_xy_mm"] = list(cal.baseline.xy_mm)
+        return result
 
     def idle_tick(self):
         self.collection.idle_tick()
@@ -109,6 +146,8 @@ class PrimitiveSkills(Skills):
             scene = self.s.observe(after=self.s._clock())
         except CameraError as exc:
             return self._fail("observe_scene", str(exc), "camera_stale" if exc.stale else "camera_unreachable")
+        self._invalidate_pick()
+        self._observed_scene = scene
         self.observation_id += 1
         self._observed_at = time.monotonic()
         self._objects = {f"{b.color}_1": b for b in [*scene.outside.values(), *scene.inside.values()]}
@@ -154,11 +193,13 @@ class PrimitiveSkills(Skills):
         solved = self.s.ik.solve_holding_wrist_roll(*xyz, wrist_roll_deg=joints["wrist_roll"])
         if not math.isfinite(solved.position_error_mm) or solved.position_error_mm > self.cfg.agent.relative.jog_max_ik_error_mm:
             raise ValueError("Waypoint failed IK gate")
-        if abs(solved.joints["wrist_roll"]) > self.limits.wrist_roll_limit_deg:
+        if (abs(solved.joints["wrist_roll"]) > self.limits.wrist_roll_limit_deg
+                or (self.limits.calibrated_pick and solved.joints["wrist_roll"] < self.cfg.agent.calibration_clearance.wrist_roll_min_deg)):
             raise ValueError("Wrist exceeds primitive neutral limit")
         return solved
 
     def _move(self, action, xyz):
+        self._invalidate_pick()
         start = self.s.arm_position_mm()
         lateral = math.dist(start[:2], xyz[:2]) > 1e-6
         clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
@@ -230,7 +271,10 @@ class PrimitiveSkills(Skills):
             goal = (*xyz[:2], self.s.grasp_z_mm)  # preserve intentional relative correction
         else:
             goal = (*xy, self.s.grasp_z_mm + self.limits.approach_clearance_mm)
-        result = self._move(action, goal)
+        if self.limits.calibrated_pick and phase in ("pregrasp", "grasp"):
+            result = self._calibrated_target(block, phase)
+        else:
+            result = self._move(action, goal)
         if result.ok:
             self._target = (target_type, object_id, observation_id, slot, x, y, phase)
             result.data["collection_zone_destination"] = phase == "preplace" and target_type != "object" and self.s.in_zone(xy)
@@ -242,6 +286,11 @@ class PrimitiveSkills(Skills):
             return self._fail("move_relative", "Relative vector exceeds limit", "invalid_arguments")
         if self.s.held is not None and up_mm < 0:
             return self._fail("move_relative", "Use descend_until_contact while holding")
+        if (self.limits.calibrated_pick and self._target and self._target[-1] == "pregrasp"
+                and up_mm == 0 and self._pick_calibration is not None):
+            self._pick_ready = False
+            return replace(self._pick_calibration.calibration_adjust(forward_mm, left_mm),
+                           action="move_relative")
         xyz = self.s.arm_position_mm()
         xy = offset_xy(xyz[:2], forward_mm, left_mm, frame=self.cfg.agent.relative.frame, base_xy_mm=self.s.base_xy)
         return self._move("move_relative", (*xy, xyz[2]+up_mm))
@@ -253,6 +302,14 @@ class PrimitiveSkills(Skills):
             return self._fail("align_gripper", str(exc))
         if self.s.held is not None:
             return self._fail("align_gripper", "Alignment requires empty gripper")
+        if self.limits.calibrated_pick:
+            cal = self._pick_calibration
+            if (self._target and self._target[1:3] == (object_id, observation_id)
+                    and self._target[-1] == "pregrasp" and cal is not None and cal.attempt is not None):
+                # The selected collision-checked grasp already includes alignment.
+                return self._result(True, "align_gripper", "moved", calibrated_pick=True,
+                                    alignment_already_applied=True)
+            return self._fail("align_gripper", "Approach the calibrated object first")
         xyz = self.s.arm_position_mm()
         if xyz[2] < self.s.grasp_z_mm + self.limits.lateral_clearance_mm:
             return self._fail("align_gripper", "Lift before alignment")
@@ -267,6 +324,9 @@ class PrimitiveSkills(Skills):
     def close_gripper(self):
         if self.s.held is not None:
             return self._fail("close_gripper", "Already holding", "already_holding")
+        if self.limits.calibrated_pick and not self._pick_ready:
+            return self._fail("close_gripper", "Complete calibrated grasp descent before closing")
+        self._pick_ready = False
         self._contact = False
         self.s.motion.close_gripper()
         check = check_grasp(self.s.robot, self.cfg.sensing)
@@ -350,6 +410,7 @@ class PrimitiveSkills(Skills):
     def open_gripper(self):
         if self.s.held is not None and not self._contact:
             return self._fail("open_gripper", "Held block may only be released after contact")
+        self._invalidate_pick()
         self.s.motion.open_gripper()
         self.s.held = None
         self._grasp_failed = False
@@ -358,10 +419,12 @@ class PrimitiveSkills(Skills):
         return self._result(True, "open_gripper", "released", stack_verified=False)
 
     def recover_and_home(self):
+        self._invalidate_pick()
         self.collection.discard("operator_recovery")
         return super().recover_and_home()
 
     def return_to_home(self):
+        self._invalidate_pick()
         if self.s.held is not None:
             return self._fail("return_to_home", "Place held block before returning home")
         self._target = None

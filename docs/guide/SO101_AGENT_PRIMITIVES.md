@@ -129,3 +129,27 @@ URDF 기반 FK이고 영상으로 측정한 그리퍼 위치가 아니다.
 STOP 후 자동 복귀는 없다. 수동 복구 버튼은 **그리퍼를 열고 홈으로 이동**하므로
 팔과 물체를 확인한 뒤 사용한다. 복구 동작은 데이터셋에 저장하지 않는다.
 정상 서버 종료에는 기존 ArmSession의 그리퍼 유지·홈 복귀 정리 동작이 남아 있다.
+
+
+### 보정된 파지 primitive
+
+`agent.primitives.calibrated_pick: true`일 때 기존 도구 이름으로 실험 보정 경로를
+사용한다. `observe_scene` → `open_gripper` → `move_to_target(pregrasp)` →
+`align_gripper` → `move_to_target(grasp)` → `close_gripper` 순서다.
+
+- pregrasp는 관측 ID에 해당하는 장면으로 기존 CV 위치 보정, 파지 bias/후보,
+  양쪽 턱의 URDF 간섭 검사를 실행한다. 기존 접근 계획에 정렬이 포함되므로
+  align_gripper는 해당 정렬 상태를 확인하고 중복 회전하지 않는다.
+- hover 정착 실패에만 기존 최대 3도 관절 피드포워드를 한 번 적용한다.
+  측정 관절과 명목 목표의 차이를 사용하며, 영상으로 잰 TCP 보정은 아니다.
+  블록 위 높이, 위쪽 보정 방향, 간섭, 부하, 추종 오차 조건은 그대로 유지한다.
+- grasp는 기존 부하 증가 감시 하강만 수행한다. 실패하면 close_gripper를 막고,
+  성공 후 별도 close_gripper에서 센서로 파지를 검증한다. 자동 운반은 없다.
+- hover에서 수평 move_relative는 명목 보정 계획에 대한 bounded residual을 쓴다.
+  다른 이동·키보드 조작·새 관측·홈 복귀는 이전 하강 승인을 무효화한다.
+- `session/calibration_motion.py`를 기존 보정 서버와 primitive가 공유한다.
+  버스와 녹화 IO는 원래 세션 하나를 사용한다. 설정은 기존
+  `agent.calibration_clearance`, motion 및 task1 값을 재사용한다.
+
+이 통합의 모의 테스트는 코드 경로·중단 조건 확인이다. 실제 primitive 조합의
+새로운 성공률을 측정한 결과는 아니며, 기존 실험 결과를 성공률로 전용하지 않는다.
