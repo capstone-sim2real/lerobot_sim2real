@@ -215,8 +215,12 @@ class TopDownIK:
         self._seed_table = table
         return table
 
-    def _nearest_seeds(self, r_mm: float, z_mm: float, n: int = 3) -> np.ndarray:
+    def _nearest_seeds(
+        self, r_mm: float, z_mm: float, n: int | None = None
+    ) -> np.ndarray:
         table = self._seeds()
+        if n is None:
+            n = self._cfg.seed_candidate_count
         d2 = (table[:, 0] - r_mm) ** 2 + (table[:, 1] - z_mm) ** 2
         idx = np.argsort(d2)[:n]
         return table[idx]

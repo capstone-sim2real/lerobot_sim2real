@@ -5,7 +5,7 @@ import dataclasses
 import pytest
 
 from camera.server import DEFAULT_OVERLAY_CONFIG
-from config import AppConfig, load_config, validate_perception_colors
+from config import AppConfig, load_config, validate_ik, validate_perception_colors
 
 
 def test_config_loads_overrides_and_rejects_unknown_key(tmp_path):
@@ -35,6 +35,13 @@ def test_default_agent_uses_openai_luna_with_gemini_fallback():
     assert agent.provider == "openai"
     assert agent.models["openai"] == "gpt-5.6-luna"
     assert agent.fallback_provider == "gemini"
+
+
+def test_ik_seed_candidate_count_must_be_positive():
+    cfg = AppConfig().ik
+    cfg.seed_candidate_count = 0
+    with pytest.raises(ValueError, match="seed_candidate_count"):
+        validate_ik(cfg)
 
 
 def test_every_gated_colour_must_have_a_prototype(tmp_path):

@@ -301,9 +301,14 @@ def _plan_at_scale(
             radial_tilt_deg=radial_tilt_deg,
         )
     ]
-    # Production retry: same XY and Z, jaw plane rotated by 90 degrees. Both
-    # signs are physically the same perpendicular jaw line; choose the solve
-    # that stays closest to wrist-roll neutral and inside the IK gate.
+    # Production retry: same XY and Z, jaw plane rotated by 90 degrees.  The
+    # two signs make the same perpendicular jaw line, but they do *not* make
+    # the same arm posture.  Turning across the centre line can put the wrist
+    # into the arm, so choose the outward turn from the detected half of the
+    # fan: +yaw (counter-clockwise/left) on y>centre, -yaw
+    # (clockwise/right) on y<=centre.  Do not silently fall back to the
+    # opposite sign when this posture is unreachable -- that would re-create
+    # the collision-prone motion this rule exists to avoid.
     retry_roll = abs(float(cfg.motion.grasp_retry_roll_deg))
     if retry_roll:
         primary_yaw = yaw_deg
@@ -314,18 +319,18 @@ def _plan_at_scale(
                 if callable(neutral_yaw)
                 else 0.0
             )
-        rotated: list[GraspAttempt] = []
-        for sign in (1.0, -1.0):
-            retry_yaw = primary_yaw + sign * retry_roll
-            retry_hover_z = highest_reachable_hover(
-                ik,
-                *base_xy,
-                grasp_z,
-                cfg,
-                retry_yaw,
-                radial_tilt_deg,
-            )
-            candidate = _solve_attempt(
+        retry_sign = 1.0 if y_mm > cfg.motion.left_half_y_mm else -1.0
+        retry_yaw = primary_yaw + retry_sign * retry_roll
+        retry_hover_z = highest_reachable_hover(
+            ik,
+            *base_xy,
+            grasp_z,
+            cfg,
+            retry_yaw,
+            radial_tilt_deg,
+        )
+        attempts.append(
+            _solve_attempt(
                 ik,
                 cfg,
                 "roll_90",
@@ -335,16 +340,6 @@ def _plan_at_scale(
                 retry_hover_z,
                 retry_yaw,
                 radial_tilt_deg=radial_tilt_deg,
-            )
-            rotated.append(candidate)
-        attempts.append(
-            min(
-                rotated,
-                key=lambda candidate: (
-                    not candidate.reachable,
-                    abs(candidate.hover.joints.get("wrist_roll", float("inf"))),
-                    candidate.hover.position_error_mm + candidate.grasp.position_error_mm,
-                ),
             )
         )
     for (label, _xy), offset in zip(candidate_points[1:], cfg.motion.grasp_retry_offsets_mm, strict=True):

@@ -135,6 +135,19 @@ class Task1SelectState(State):
         cls._archive_attempts(ctx, colors)
         ctx.extras["task1_retry_rounds"] = int(ctx.extras.get("task1_retry_rounds", 0)) + 1
 
+    def _retry_sweep_exhausted(
+        self, ctx: RunContext, colors: set[str]
+    ) -> StateName | None:
+        """Handle a frame in which every visible block is deferred.
+
+        Task 1 deliberately starts another sweep so a physical block is
+        never abandoned. Task 2 overrides this hook: repeatedly planning an
+        unreachable last block cannot improve the scene and used to spin at
+        roughly 1Hz until the global time budget or emergency stop.
+        """
+        self._archive_round_attempts(ctx, colors)
+        return None
+
     def step(self, ctx: RunContext) -> StateName | None:
         try:
             sample = self._perceive()
@@ -177,7 +190,9 @@ class Task1SelectState(State):
         if not eligible:
             # max_retries_per_block means "defer for this sweep", never
             # abandon a physical block. Start another sweep indefinitely.
-            self._archive_round_attempts(ctx, colors)
+            next_state = self._retry_sweep_exhausted(ctx, colors)
+            if next_state is not None:
+                return next_state
             eligible = detections
 
         bx, by = self._calib.base_xy_mm or (0.0, 0.0)

@@ -310,7 +310,7 @@ class MotionConfig:
     grasp_forward_offset_mm: float = 0.0
     # Uniform +10mm toward the gripper-relative left (the tangent of the
     # base-centred reach circle), applied to every block and every retry.
-    grasp_tangential_offset_mm: float = 5.0
+    grasp_tangential_offset_mm: float = 10.0
     # Which frame the offsets above (and the retry offsets below) live in.
     #
     # False: the NEUTRAL-yaw gripper frame — radial is base -> target, and
@@ -347,8 +347,9 @@ class MotionConfig:
         default_factory=list
     )
     # One same-position retry after an empty grasp or obstructed descent.
-    # The planner chooses +angle or -angle, whichever gives the smaller
-    # absolute wrist_roll while remaining reachable.
+    # Direction follows the fan half split at left_half_y_mm: +angle
+    # (counter-clockwise/left) on the left half, -angle (clockwise/right) on
+    # the right half. This keeps the retry wrist turning away from the arm.
     grasp_retry_roll_deg: float = 90.0
     # A descent that ends this far short of its goal (action units) counts as
     # blocked rather than arrived. A blocked PICK descent must never close the
@@ -374,7 +375,7 @@ class IkConfig:
     Placo's IK is seed-sensitive: a bad seed converges to hundreds of mm of
     error, so ``TopDownIK`` pre-builds a lookup table of top-down joint
     configurations (via forward kinematics, cached to disk) and seeds every
-    solve from the nearest entry.
+    solve from the nearest configured candidates.
     """
 
     urdf_path: str = "third_party/so101/so101.urdf"
@@ -386,6 +387,11 @@ class IkConfig:
     # this many degrees of straight down
     seed_tilt_max_deg: float = 3.0
     seed_cache_path: str = "src/configs/calib/ik_seed_table.npz"
+    # Number of nearest (radius, height) seed postures tried per solve. Three
+    # missed a reachable low grasp at (156, -112, 4)mm by 172mm; the tenth
+    # candidate converged to 2.4mm, so keep enough branches to cross that
+    # discontinuity in the seed table.
+    seed_candidate_count: int = 10
     # pan-offset retries to absorb the gripper's lateral offset from the pan
     # axis (AGENTS.md §7 measured ~27mm)
     pan_offset_candidates_deg: list[float] = field(
@@ -1017,6 +1023,7 @@ def load_config(
     for override in overrides or []:
         apply_override(cfg, override)
     validate_perception_colors(cfg.perception)
+    validate_ik(cfg.ik)
     validate_task1(cfg)
     validate_task2(cfg)
     validate_task3(cfg)
@@ -1074,6 +1081,11 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
             raise ValueError(
                 "perception.workspace_radius_by_angle_mm radii must be positive"
             )
+
+
+def validate_ik(cfg: "IkConfig") -> None:
+    if cfg.seed_candidate_count <= 0:
+        raise ValueError("ik.seed_candidate_count must be positive")
 
 
 def validate_task1(cfg: AppConfig) -> None:

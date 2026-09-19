@@ -1136,22 +1136,44 @@ class Skills:
         machine.run()
         s.last_scene = None
         verification = self._observe_or_fail(action, t0)
-        remaining = [] if isinstance(verification, SkillResult) else sorted(verification.outside)
+        verification_failed = isinstance(verification, SkillResult)
+        remaining = [] if verification_failed else sorted(verification.outside)
+        stop_reason = ctx.extras.get("task2_stop_reason")
+        if (
+            task == 2
+            and stop_reason is None
+            and ctx.budget_exhausted()
+            and (verification_failed or remaining)
+        ):
+            stop_reason = "time_budget_exhausted"
         data: dict[str, Any] = {
             "run_id": run_id,
             "remaining_outside": remaining,
             "place_actions": ctx.extras.get("task1_place_actions") if task == 1 else ctx.placed_count,
             "attempts": ctx.extras.get("task1_attempts_total") or ctx.attempts,
             "warnings": warnings or None,
+            "stop_reason": stop_reason,
+            "failed_blocks": ctx.extras.get("task2_failed_blocks"),
         }
         if task == 1:
             complete = bool(ctx.extras.get("task1_complete"))
             detail = "미션 1 완료: 적재 구역 밖에 블록이 없습니다." if complete else "미션 1이 끝났지만 완료 조건을 확인하지 못했습니다."
         else:
-            complete = True
-            detail = f"미션 2 완료: {ctx.placed_count}층을 쌓았습니다."
-            if ctx.extras.get("task2_stop_reason"):
-                detail += f" (종료 사유: {ctx.extras['task2_stop_reason']})"
+            complete = not verification_failed and not remaining
+            if complete:
+                detail = f"미션 2 완료: {ctx.placed_count}층을 쌓았습니다."
+            elif verification_failed:
+                detail = (
+                    f"미션 2가 {ctx.placed_count}층에서 끝났지만 카메라로 완료 여부를 "
+                    "확인하지 못했습니다."
+                )
+            else:
+                detail = (
+                    f"미션 2 미완료: {ctx.placed_count}층을 쌓았고 적재 구역 밖에 "
+                    f"{', '.join(remaining)} 블록이 남았습니다."
+                )
+            if stop_reason:
+                detail += f" (종료 사유: {stop_reason})"
         if warnings:
             detail += " " + " ".join(warnings)
         return self._result(complete, action, "ok" if complete else "task_incomplete", detail, t0=t0, **data)

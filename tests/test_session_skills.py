@@ -275,6 +275,25 @@ def test_task1_keeps_cells_that_already_hold_a_block():
     assert result.data["remaining_outside"] == []
 
 
+def test_task2_reports_incomplete_instead_of_looping_on_an_unreachable_block():
+    cfg = fast_cfg()
+    skills, _world, _robot = make_skills(
+        # The tower at r=214mm remains reachable while this pick does not;
+        # keep the block clear of the tower precondition radius as well.
+        {"red": (270.0, -130.0)}, cfg=cfg, ik=FakeIk(reach_mm=230.0)
+    )
+
+    result = skills.run_task(2)
+
+    assert not result.ok
+    assert result.reason == "task_incomplete"
+    assert result.data["remaining_outside"] == ["red"]
+    assert result.data["stop_reason"] == "pick_retries_exhausted"
+    assert result.data["failed_blocks"] == ["red"]
+    assert result.data["attempts"] == {"red": cfg.fsm.max_retries_per_block}
+    assert "미션 2 미완료" in result.detail
+
+
 def test_task3_is_disabled_by_default():
     skills, _world, robot = make_skills({})
     result = skills.run_task(3)

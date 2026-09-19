@@ -26,15 +26,29 @@ logger = logging.getLogger(__name__)
 
 
 class Task2SelectState(Task1SelectState):
-    """Task 1's SELECT with no extra Task-2 rejection.
+    """Task 1's SELECT with a bounded final-block failure.
 
     In-zone detections are already removed by the detector. Every detection
     left outside the zone is treated as a real block and retried, including
-    one lying close to the stack point after a failed placement.
+    one lying close to the stack point after a failed placement. Unlike Task
+    1, once every visible block has exhausted its per-block retry allowance,
+    Task 2 returns an explicit incomplete result instead of clearing the skip
+    set and spinning until the global time budget.
     """
 
     index_extra_key = "task2_level_index"
     plan_extra_key = "task2_stack_plan"
+
+    def _retry_sweep_exhausted(
+        self, ctx: RunContext, colors: set[str]
+    ) -> StateName | None:
+        failed = sorted(colors)
+        self._archive_round_attempts(ctx, colors)
+        ctx.extras["task2_failed_blocks"] = failed
+        ctx.extras["task2_stop_reason"] = "pick_retries_exhausted"
+        ctx.last_note = f"pick_retries_exhausted={','.join(failed)}"
+        return StateName.DONE
+
 
 class Task2TransportState(Task1TransportState):
     """Task 1's transport with the tower level replacing the colour slot."""

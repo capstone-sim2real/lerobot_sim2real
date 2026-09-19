@@ -483,6 +483,22 @@ def test_failed_pick_does_not_consume_a_level(monkeypatch):
     assert ctx.placed_count == 0
 
 
+def test_task2_stops_incomplete_when_all_visible_blocks_exhaust_retries(monkeypatch):
+    cfg = AppConfig()
+    cfg.task1.scan_interval_s = 0.0
+    monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
+    sample = Task1Perception([_block("red", 150.0, -120.0)], 1, 1000.0)
+    state = Task2SelectState(_Motion(), _Samples([sample]), _calibration(), cfg)
+    ctx = RunContext(cfg.fsm, attempts={"red": 2}, skipped={"red"})
+    state.enter(ctx)
+
+    assert state.step(ctx) is StateName.DONE
+    assert ctx.extras["task2_stop_reason"] == "pick_retries_exhausted"
+    assert ctx.extras["task2_failed_blocks"] == ["red"]
+    assert ctx.extras["task1_attempts_total"] == {"red": 2}
+    assert ctx.last_note == "pick_retries_exhausted=red"
+
+
 # --------------------------------------------------------------------------
 # SELECT guard
 # --------------------------------------------------------------------------

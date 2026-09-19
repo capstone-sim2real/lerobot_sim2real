@@ -27,6 +27,24 @@ def test_solve_within_reach_converges(ik: TopDownIK):
     assert set(result.joints) == set(ARM_JOINTS)
 
 
+def test_low_right_side_grasp_tries_past_the_three_bad_nearest_seeds(ik: TopDownIK):
+    """Regression from the red-block failure on 2026-09-19.
+
+    At this reachable point the three nearest radius/height seeds all drove
+    shoulder_pan to its limit and missed by over 170mm. A valid branch lies
+    within the first ten candidates.
+    """
+    result = ik.solve(
+        x_mm=156.063,
+        y_mm=-111.948,
+        z_mm=4.058,
+        yaw_deg=10.620,
+        radial_tilt_deg=-3.0,
+    )
+    assert result.position_error_mm < 5.0
+    assert result.tilt_error_deg < 6.0
+
+
 def test_solve_beyond_topdown_reach_reports_large_error(ik: TopDownIK):
     # r ~= 336mm, past the ~320mm top-down limit (AGENTS.md §7).
     result = ik.solve(x_mm=300.0, y_mm=150.0, z_mm=10.0, yaw_deg=0.0)
