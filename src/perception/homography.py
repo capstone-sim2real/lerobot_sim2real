@@ -28,6 +28,29 @@ import numpy as np
 _SB_FLAGS = cv2.CALIB_CB_NORMALIZE_IMAGE | cv2.CALIB_CB_EXHAUSTIVE | cv2.CALIB_CB_LARGER
 
 
+def _backup_existing(path: Path) -> None:
+    """Rename an existing calibration file out of the way before overwriting it.
+
+    Keeps the old calibration around under a timestamped name (from its own
+    meta, so re-saves don't clobber the backup filename) rather than losing
+    it silently to a plain overwrite.
+    """
+    if not path.exists():
+        return
+    try:
+        old_meta = json.loads(path.read_text()).get("meta", {})
+    except (json.JSONDecodeError, OSError):
+        old_meta = {}
+    stamp = old_meta.get("calibrated_at") or old_meta.get("saved_at")
+    if not stamp:
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(path.stat().st_mtime))
+    stamp = stamp.replace(":", "").replace("-", "")
+    backup = path.with_name(f"{path.stem}.pre-{stamp}{path.suffix}")
+    if backup.exists():
+        return  # this exact prior calibration is already backed up
+    path.rename(backup)
+
+
 @dataclass
 class PlaneCalibration:
     """Homography H maps pixel (x, y) -> board-plane (x_mm, y_mm)."""
@@ -37,6 +60,11 @@ class PlaneCalibration:
     square_mm: float
     base_xy_mm: tuple[float, float] | None = None
     zone_polygon_mm: list[tuple[float, float]] | None = None
+    # Chessboard lattice measured on this plane (origin_mm, u_mm, v_mm,
+    # pitch_mm, ...), written by tools/calibrate_board_grid.py. Display and
+    # addressing only: every command still travels as robot-base mm. It is
+    # tied to this H, so a camera move invalidates both together.
+    board_grid: dict[str, Any] | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     def pixel_to_board(self, points_px: np.ndarray) -> np.ndarray:
@@ -72,6 +100,7 @@ class PlaneCalibration:
     def save(self, path: Path | str) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        _backup_existing(path)
         payload = {
             "H": self.H.tolist(),
             "image_size": list(self.image_size),
@@ -80,6 +109,7 @@ class PlaneCalibration:
             "zone_polygon_mm": [list(p) for p in self.zone_polygon_mm]
             if self.zone_polygon_mm is not None
             else None,
+            "board_grid": self.board_grid,
             "meta": {**self.meta, "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S")},
         }
         with open(path, "w") as f:
@@ -97,6 +127,7 @@ class PlaneCalibration:
             zone_polygon_mm=[tuple(p) for p in payload["zone_polygon_mm"]]
             if payload.get("zone_polygon_mm")
             else None,
+            board_grid=payload.get("board_grid"),
             meta=payload.get("meta", {}),
         )
 

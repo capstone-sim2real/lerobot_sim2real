@@ -146,14 +146,16 @@ def detect_blocks(
     cfg: PerceptionConfig,
     *,
     is_rgb: bool = True,
+    include_zone: bool = False,
 ) -> list[BlockDetection]:
     """Detect candidate blocks in a top-camera frame.
 
     ``is_rgb`` is True for frames from lerobot cameras (RGB) and False for
-    images loaded with cv2.imread (BGR).
+    images loaded with cv2.imread (BGR). ``include_zone`` keeps blocks inside
+    the target zone; only the LLM agent sets it (see perception.scene).
     """
     detections, _ = detect_blocks_with_rejects(
-        frame, calib, cfg, is_rgb=is_rgb, collect_rejects=False
+        frame, calib, cfg, is_rgb=is_rgb, collect_rejects=False, include_zone=include_zone
     )
     return detections
 
@@ -166,6 +168,7 @@ def detect_blocks_with_rejects(
     is_rgb: bool = True,
     collect_rejects: bool = True,
     min_reject_area_mm2: float = 300.0,
+    include_zone: bool = False,
 ) -> tuple[list[BlockDetection], list[RejectedCandidate]]:
     """Same detection as :func:`detect_blocks`, plus the near-misses.
 
@@ -212,7 +215,10 @@ def detect_blocks_with_rejects(
     # the area beyond the reach sector is. Do this before colour assignment:
     # an already-placed block must not consume the one allowed slot for its
     # colour and hide another block of that colour outside the zone.
-    if calib.zone_polygon_mm:
+    # ``include_zone`` (agent only) skips this filter; callers that set it run
+    # the zone pass separately so a placed block still cannot take the one
+    # allowed slot of an outside block of the same colour.
+    if calib.zone_polygon_mm and not include_zone:
         detections = [d for d in detections if not point_in_zone(d.center_mm, calib)]
         rejects = [r for r in rejects if not point_in_zone(r.center_mm, calib)]
 
@@ -271,6 +277,13 @@ def _median_hue_sat(hsv: np.ndarray, contour: np.ndarray) -> tuple[float, float]
     return (float(np.median(patch[:, 0])), float(np.median(patch[:, 1])))
 
 
+def point_in_workspace(
+    center_mm: tuple[float, float], cfg: PerceptionConfig, base_xy: tuple[float, float]
+) -> bool:
+    """Whether a point lies inside the detector's workspace sector."""
+    return _in_workspace(center_mm, cfg, base_xy)
+
+
 def _in_workspace(
     center_mm: tuple[float, float], cfg: PerceptionConfig, base_xy: tuple[float, float]
 ) -> bool:
@@ -292,6 +305,31 @@ def workspace_radius_at_angle(cfg: PerceptionConfig, azimuth_deg: float) -> floa
     radii = np.asarray([float(pair[1]) for pair in profile], dtype=np.float64)
     interpolated = float(np.interp(float(azimuth_deg), angles, radii))
     return min(radius, interpolated)
+
+
+def workspace_sector_points_mm(
+    cfg: PerceptionConfig, base_xy: tuple[float, float], step_deg: float
+) -> np.ndarray:
+    """(N, 2) mm samples of the workspace sector's outer arc, base-relative.
+
+    Every operator surface that outlines the reachable area -- the camera
+    page and the agent page -- draws these same points, so the outline is
+    the gate by construction rather than a second, drifting copy of it.
+    """
+    if cfg.workspace_radius_mm <= 0:
+        raise ValueError("perception.workspace_radius_mm must be positive to draw the arc")
+    if step_deg <= 0:
+        raise ValueError("workspace sector step_deg must be positive")
+    lo, hi = cfg.workspace_angle_min_deg, cfg.workspace_angle_max_deg
+    count = max(2, int(math.ceil((hi - lo) / step_deg)) + 1)
+    angles_deg = np.linspace(lo, hi, count)
+    angles_rad = np.radians(angles_deg)
+    radii = np.asarray(
+        [workspace_radius_at_angle(cfg, angle) for angle in angles_deg], dtype=np.float64
+    )
+    return np.column_stack(
+        [base_xy[0] + radii * np.cos(angles_rad), base_xy[1] + radii * np.sin(angles_rad)]
+    )
 
 
 def _merge_coincident(
