@@ -79,6 +79,15 @@ class CameraRequestHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError, TypeError):
                 self._send_json({"available": False})
             return
+        if path == "/overlay-renderer.js":
+            script = Path(__file__).with_name("overlay_renderer.js").read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/javascript")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(script)))
+            self.end_headers()
+            self.wfile.write(script)
+            return
         if path == "/health":
             data: dict[str, Any] = {
                 "ok": True,

@@ -32,6 +32,7 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -197,6 +198,8 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     from fastapi import FastAPI, Request
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
+    from agent.camera_proxy import camera_router
+
     state: dict[str, Any] = {}
 
     @asynccontextmanager
@@ -220,6 +223,8 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             await asyncio.to_thread(service.shutdown)
 
     app = FastAPI(title="SO-101 Agent", lifespan=lifespan)
+
+    app.include_router(camera_router(cfg.agent.camera_base_url, cfg.agent.camera_name, settings=cfg.agent.camera_view))
 
     def svc():
         return state["service"]
@@ -249,6 +254,8 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
         html = html.replace("__APP_JS_VERSION__", str((WEB_DIR / "app.js").stat().st_mtime_ns))
         html = html.replace("__APP_CSS_VERSION__", str((WEB_DIR / "app.css").stat().st_mtime_ns))
+        html = html.replace("__OVERLAY_JS_VERSION__", str((WEB_DIR / "camera-overlay.js").stat().st_mtime_ns))
+        html = html.replace("__RENDERER_VERSION__", str((WEB_DIR.parent.parent / "camera" / "overlay_renderer.js").stat().st_mtime_ns))
         return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
 
     @app.get("/app.js")
@@ -267,11 +274,22 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             headers={"Cache-Control": "no-store, max-age=0"},
         )
 
+    @app.get("/camera-overlay.js")
+    async def camera_overlay_js():
+        return FileResponse(WEB_DIR / "camera-overlay.js", media_type="application/javascript",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/overlay-renderer.js")
+    async def overlay_renderer_js():
+        return FileResponse(WEB_DIR.parent.parent / "camera" / "overlay_renderer.js",
+                            media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
     @app.get("/api/config")
     async def ui_config():
         agent = cfg.agent
         return {
             "camera_base_url": agent.camera_base_url,
+            "camera_view": asdict(agent.camera_view),
             "mjpeg_path": f"/video/{agent.camera_name}.mjpg",
             "max_jog_mm": agent.relative.max_jog_mm,
             "default_step_mm": agent.relative.default_step_mm,
@@ -280,6 +298,10 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             "provider": svc().provider.name,
             "model": svc().provider.model,
         }
+
+    @app.get("/api/telemetry")
+    async def telemetry():
+        return svc().telemetry()
 
     @app.get("/api/health")
     async def health():

@@ -92,6 +92,8 @@ class AgentService:
         )
         self.places: dict[str, Any] = {}
         self.started = False
+        self._telemetry_future = None
+        self._telemetry_cache = {}
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -290,6 +292,21 @@ class AgentService:
         self.runner.reset()
         self._publish({"type": "reset"})
         return 200, {"reset": True}
+
+    def telemetry(self):
+        from .telemetry import collect
+        future = self._telemetry_future
+        if future is not None and future.done():
+            try:
+                self._telemetry_cache = future.result()
+            except Exception as exc:
+                self._telemetry_cache = {**self._telemetry_cache, "error": type(exc).__name__}
+            self._telemetry_future = None
+        age = time.time() - self._telemetry_cache.get("sampled_at", 0)
+        if self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
+            self._telemetry_future = self._worker.submit(collect)
+        return {**self._telemetry_cache, "pending": self._telemetry_future is not None,
+                "control": self.gate.snapshot()}
 
     def health(self) -> dict[str, Any]:
         return {

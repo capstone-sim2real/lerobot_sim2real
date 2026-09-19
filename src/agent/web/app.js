@@ -477,16 +477,11 @@ $("mic").addEventListener("click", () => {
 });
 
 // ── camera + clickable places ───────────────────────────────────────
+function selectedCamera() {
+  return new URLSearchParams(location.search).get('camera') === 'wrist' ? 'wrist' : 'shoulder';
+}
 function cameraUrl(config) {
-  const url = new URL(config.camera_base_url);
-  if (["127.0.0.1", "localhost"].includes(url.hostname) && !["127.0.0.1", "localhost"].includes(location.hostname)) {
-    // The venue exposes camera.server at the tailnet hostname's standard
-    // HTTPS port while this agent UI may use a different HTTPS port.
-    // Avoid mixed-content blocking (https page -> http MJPEG).
-    if (location.protocol === "https:") return `https://${location.hostname}${config.mjpeg_path}`;
-    url.hostname = location.hostname;
-  }
-  return url.origin + config.mjpeg_path;
+  return "/api/camera/video?camera=" + selectedCamera();
 }
 
 function svgEl(tag, attrs) {
@@ -612,13 +607,36 @@ async function loadConfig() {
   const response = await fetch("/api/config");
   const config = await response.json();
   $("model-badge").textContent = `${config.provider} · ${config.model}`;
+  const selected=selectedCamera();
+  $('camera-select').value=selected;
+  $('camera-select').addEventListener('change', e => {
+    const url=new URL(location.href);url.searchParams.set('camera',e.target.value);
+    try {sessionStorage.setItem('so101-draft', $('input').value);} catch (_) {}
+    location.assign(url.href);
+  });
+  try {const draft=sessionStorage.getItem('so101-draft');if(draft!==null){$('input').value=draft;sessionStorage.removeItem('so101-draft');}} catch (_) {}
+  document.body.dataset.camera=selected;
   const img = $("camera");
   img.onerror = () => { $("camera-missing").hidden = false; };
   img.onload = () => { $("camera-missing").hidden = true; };
   img.src = cameraUrl(config);
-  if (config.places && config.places.image_size) {
+  const toolsUrl = new URL(config.camera_base_url);
+  if (["127.0.0.1", "localhost"].includes(toolsUrl.hostname) &&
+      !["127.0.0.1", "localhost"].includes(location.hostname)) {
+    toolsUrl.hostname = location.hostname;
+    if (location.protocol === "https:") { toolsUrl.protocol = "https:"; toolsUrl.port = ""; }
+  }
+  $("camera-tools-link").href = toolsUrl.origin + "/";
+  if (selected === "shoulder" && config.places && config.places.image_size) {
     $("camera-wrap").style.aspectRatio = `${config.places.image_size[0]} / ${config.places.image_size[1]}`;
     drawPlaces(config.places);
+  }
+  if (selected === 'shoulder') await window.startCameraOverlay(config);
+  else {
+    $('overlay').setAttribute('hidden',''); $('perception-overlay').hidden=true;
+    $('detection-details').hidden=false;
+    $('detection-list').textContent='손목캠에는 헤드캠 보정·검출 결과를 겹쳐 표시하지 않습니다. 헤드캠으로 전환해 확인하세요.';
+    document.querySelectorAll('[data-camera-layer]').forEach(b=>b.disabled=true);
   }
 }
 
@@ -638,3 +656,105 @@ async function pollHealth() {
 loadConfig();
 acquireLease();
 pollHealth();
+
+// Workspace layout: preserve original controls and their event handlers.
+(() => {
+  const $ = id => document.getElementById(id);
+  document.querySelectorAll('[data-command-tab]').forEach(button => button.addEventListener('click', () => {
+    document.querySelectorAll('[data-command-tab]').forEach(b => {
+      const selected=b===button;b.setAttribute('aria-selected',String(selected));$(b.dataset.commandTab).hidden=!selected;
+    });
+  }));
+  $('command-chat').setAttribute('role','tabpanel');
+  $('command-chat').setAttribute('aria-labelledby','chat-tab');
+  $('overlay').addEventListener('click', e => {
+    if(e.target.closest('.slot-cell,.region-dot,.grid-cell')) $('chat-tab').click();
+  });
+  const controls=document.querySelector('.perception-controls');
+  controls.prepend($('camera-tools'));
+  const settings=document.createElement('details');settings.className='overlay-settings';
+  const label=document.createElement('summary');label.textContent='표시 설정';settings.append(label);
+  const options=document.createElement('div');options.className='overlay-options';settings.append(options);
+  controls.append(settings);
+  options.append(document.querySelector('.layer-buttons'));
+  options.append(document.querySelector('.color-filter'),$('camera-tools-link'));
+  $('diagnostic-detections').append($('candidate-hint'),$('fk-status'),$('detection-details'));
+  document.querySelectorAll('[data-diagnostic-tab]').forEach(button => button.addEventListener('click', () => {
+    const tab=button.dataset.diagnosticTab;document.body.dataset.diagnosticTab=tab;
+    document.querySelectorAll('[data-diagnostic-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));
+    $('robot-diagnostics').hidden=['detections','history'].includes(tab);
+    $('diagnostic-detections').hidden=tab!=='detections';$('diagnostic-history').hidden=tab!=='history';
+    if(tab==='detections') {
+      const detail=document.querySelector('[data-camera-layer="details"]');
+      if(detail.getAttribute('aria-pressed')!=='true')detail.click();
+    }
+  }));
+  document.body.dataset.diagnosticTab='joints';
+  const history=$('diagnostic-history');
+  new MutationObserver(() => {
+    const tools=[...$('chat').querySelectorAll('.tool,.msg-error')];
+    if(!tools.length)return;
+    history.replaceChildren(...tools.map(e=>e.cloneNode(true)));
+  }).observe($('chat'),{childList:true,subtree:true,characterData:true});
+})();
+
+// Diagnostic reads are serialized on the server's existing robot worker.
+(() => {
+  const panel = document.getElementById('robot-diagnostics');
+  const body = document.getElementById('telemetry-body');
+  const status = document.getElementById('telemetry-status');
+  const fmt = v => typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : v == null ? '—' : String(v);
+  const xyz = v => v ? v.map(fmt).join(' / ') + ' mm' : '—';
+  const add = (parent, tag, text) => {const e=document.createElement(tag);e.textContent=text;parent.append(e);return e;};
+  function table(parent, headings, rows) {
+    const wrap=add(parent,'div','');wrap.className='telemetry-scroll';
+    const t=add(wrap,'table',''); const h=add(t,'thead','');const tr=add(h,'tr','');
+    headings.forEach(x=>add(tr,'th',x));const b=add(t,'tbody','');
+    rows.forEach(row=>{const r=add(b,'tr','');row.forEach(x=>add(r,'td',x));});
+  }
+  async function poll() {
+    if (!panel.open || document.hidden) {setTimeout(poll,1000);return;}
+    try {
+      const r=await fetch('/api/telemetry',{cache:'no-store',signal:AbortSignal.timeout(4000)});
+      if(!r.ok)throw Error('HTTP '+r.status);
+      const d=await r.json(); const age=d.sampled_at ? (Date.now()/1000-d.sampled_at) : null;
+      status.textContent=age==null ? '최초 측정 대기 중' : `측정 ${new Date(d.sampled_at*1000).toLocaleTimeString()} (${age.toFixed(1)}초 전) · 조회 간격 1초 · ${d.pending?'조회 대기':'수신 완료'} · ${d.control?.state ?? ''} · ${d.control?.busy_with ?? '대기'}`;
+      status.classList.toggle('telemetry-stale',age==null||age>3);
+      const expanded=[...body.querySelectorAll('details')].map(e=>e.open);
+      const scrolls=[...body.querySelectorAll('.telemetry-scroll')].map(e=>e.scrollLeft);
+      body.replaceChildren();
+      if(d.error)add(body,'p','조회 오류: '+d.error);
+      add(body,'p','현재 FK X / Y / Z: '+xyz(d.fk));
+      add(body,'p','모터 목표값의 FK: '+xyz(d.target_fk));
+      add(body,'p','목표 − 현재 FK: '+xyz(d.fk_delta)+' · 거리 '+fmt(d.fk_distance)+' mm');
+      add(body,'p','FK는 모델 계산값이며, 목표는 현재 모터 레지스터 값입니다. 작업의 최종 목표나 실제 손끝 관측값과 다를 수 있습니다.');
+      document.getElementById('fk-summary').textContent='현재 FK  '+xyz(d.fk)+'   ·   목표 차이 '+fmt(d.fk_distance)+' mm';
+      const motors=d.motors ?? [];
+      table(body,['관절','단위','현재','모터 목표','차이','최소','최대'],motors.map(m=>[m.name,m.unit,...[m.current,m.target,m.error,m.minimum,m.maximum].map(fmt)]));
+      body.querySelector('.telemetry-scroll').dataset.diagnosticSection='joints';
+      body.querySelectorAll('.telemetry-scroll tbody tr').forEach((row,i)=>{
+        const m=motors[i];
+        if(m.current!=null && (m.current<m.minimum || m.current>m.maximum)) {
+          row.classList.add('joint-out-of-range');row.title='현재 값이 모터 보정 범위를 벗어났습니다';
+        }
+      });
+      const details=add(body,'details','');details.dataset.diagnosticSection='motors';add(details,'summary','인코더 · 부하 · 온도 · 전압 원시값 · 토크');
+      table(details,['모터','현재 tick','목표 tick','부하 raw','온도 °C','전압 raw','토크'],motors.map(m=>[m.name,...[m.encoder,m.goal_encoder,m.load,m.temperature,m.voltage_raw].map(fmt),m.torque==null?'—':m.torque?'ON':'OFF']));
+      add(details,'p','전압은 단위 변환 전 레지스터 값입니다. 부하 raw는 토크(N·m)가 아닙니다.');
+      const cal=add(body,'details','');cal.dataset.diagnosticSection='calibration';add(cal,'summary','보정 · 범위 · 안전 제한');
+      add(cal,'p','파일: '+(d.calibration_file??'—'));
+      add(cal,'p','모터 보정 일치: '+(d.calibration_match==null?'미확인':d.calibration_match?'일치':'불일치'));
+      add(cal,'p','틱당 상대 목표 제한: '+JSON.stringify(d.max_relative_target??null)+' · 각도 최소/최대는 모터 보정 범위 환산값입니다.');
+      table(cal,['모터','ID','Homing offset','최소 tick','최대 tick','URDF 최소 °','URDF 최대 °'],motors.map(m=>[m.name,m.id,m.calibration?.homing_offset,m.calibration?.range_min,m.calibration?.range_max,...(m.urdf_limits_deg??[null,null])].map(fmt)));
+      const g=motors.find(m=>m.name==='gripper');
+      add(body,'p',`세션 파지 상태: ${d.grasp?.held ? '보유 판정 기록 있음' : '보유 판정 기록 없음'} · 그리퍼 개방 ${fmt(g?.current)} / 100 · 부하 ${fmt(g?.load)} raw · 판정 모드 ${d.grasp?.mode??'—'}`);
+      add(body,'p',`파지 기준: 위치 > ${fmt(d.grasp?.position_threshold)}, |부하| ≥ ${fmt(d.grasp?.load_threshold)}. ${d.grasp?.note??''}`);
+      if(d.control?.message)add(body,'p','제어 메시지: '+d.control.message);
+      if(d.errors?.length)add(body,'p','읽기 오류: '+d.errors.join(', '));
+      [...body.querySelectorAll('details')].forEach(e=>e.open=true);
+      [...body.querySelectorAll('.telemetry-scroll')].forEach((e,i)=>e.scrollLeft=scrolls[i]??0);
+    } catch(e) {status.textContent='상태 조회 실패 · 기존 표는 마지막 측정값: '+e.message;status.classList.add('telemetry-stale');}
+    setTimeout(poll,1000);
+  }
+  poll();
+})();

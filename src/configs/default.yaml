@@ -418,6 +418,13 @@ agent:
   # 브라우저가 so101-camera의 MJPEG를 직접 연다
   camera_base_url: http://127.0.0.1:8090
   camera_name: shoulder
+  # 화면 표시용 운영 기본값. 물리 제어의 실측값이 아님.
+  camera_view:
+    stale_s: 3.0
+    poll_s: 0.5
+    retry_s: 5.0
+    connect_timeout_s: 3.0
+    read_timeout_s: 15.0
   # 팔이 움직인 뒤, 그 이후에 찍힌 프레임을 최대 이만큼 기다린다
   camera_fresh_timeout_s: 3.0
   lock_path: var/so101/robot.lock

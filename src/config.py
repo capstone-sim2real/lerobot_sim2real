@@ -907,6 +907,17 @@ class BoardGridConfig:
 
 
 @dataclass
+class AgentCameraViewConfig:
+    """Operator display timing defaults; not physical control limits."""
+
+    stale_s: float = 3.0
+    poll_s: float = 0.5
+    retry_s: float = 5.0
+    connect_timeout_s: float = 3.0
+    read_timeout_s: float = 15.0
+
+
+@dataclass
 class AgentConfig:
     """LLM tool-calling agent (so101-agent). Unused by so101-run/so101-collect."""
 
@@ -937,6 +948,7 @@ class AgentConfig:
     # the browser loads the MJPEG straight from so101-camera
     camera_base_url: str = "http://127.0.0.1:8090"
     camera_name: str = "shoulder"
+    camera_view: AgentCameraViewConfig = field(default_factory=AgentCameraViewConfig)
     # after the arm moves, wait up to this long for a frame captured later
     camera_fresh_timeout_s: float = 3.0
     lock_path: str = "var/so101/robot.lock"

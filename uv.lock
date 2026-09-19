@@ -2403,6 +2403,7 @@ dependencies = [
 [package.optional-dependencies]
 agent = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "uvicorn" },
 ]
 agent-anthropic = [
@@ -2432,6 +2433,7 @@ requires-dist = [
     { name = "datasets", marker = "extra == 'collect'", specifier = ">=4.7.0,<5.0.0" },
     { name = "fastapi", marker = "extra == 'agent'", specifier = ">=0.110" },
     { name = "google-genai", marker = "extra == 'agent-gemini'", specifier = ">=1.0" },
+    { name = "httpx", marker = "extra == 'agent'", specifier = ">=0.27" },
     { name = "lerobot", extras = ["feetech", "kinematics"], marker = "extra == 'hardware'", editable = "third_party/lerobot" },
     { name = "numpy", specifier = ">=2.0.0,<2.3.0" },
     { name = "openai", marker = "extra == 'agent-openai'", specifier = ">=1.60" },

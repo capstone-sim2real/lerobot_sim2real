@@ -14,7 +14,7 @@
     <span id="camera-badge" class="badge badge-muted">카메라 ?</span>
     <span id="model-badge" class="badge badge-muted"></span>
   </div>
-</header>
+<button id="stop" class="stop" title="비상정지 (Esc)">STOP <small>Esc</small></button></header>
 
 <div id="stopped-banner" class="banner" hidden>
   <div>
@@ -26,12 +26,16 @@
 
 <main class="layout">
   <section class="panel camera-panel">
+    <div class="camera-heading">
+      <label for="camera-select">카메라</label>
+      <select id="camera-select" aria-label="카메라 선택"><option value="shoulder">헤드캠</option><option value="wrist">손목캠</option></select>
+    </div>
     <div class="camera-wrap" id="camera-wrap">
       <img id="camera" alt="카메라 영상">
+      <canvas id="perception-overlay" aria-label="블록 검출 오버레이"></canvas>
       <svg id="overlay" preserveAspectRatio="none"></svg>
       <div id="camera-missing" class="camera-missing" hidden>카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
     </div>
-    <p class="hint">적재 구역 칸과, 아래 <b>부채꼴 / 격자</b> 중 고른 쪽을 누르면 입력창에 이름이나 좌표가 들어갑니다.</p>
     <div class="camera-tools" id="camera-tools">
       <div class="layer-toggle" role="radiogroup" aria-label="오버레이 선택">
         <label><input type="radio" name="places-layer" value="regions" checked><span>부채꼴</span></label>
@@ -39,8 +43,39 @@
       </div>
       <span id="grid-hover" class="grid-hover"></span>
     </div>
-    <div class="jog">
-      <div class="jog-title">팔 직접 움직이기 <small>(로봇 기준, LLM 없이 바로 실행)</small></div>
+    <section class="perception-controls" aria-label="카메라 표시 설정">
+      <div class="layer-buttons" role="group" aria-label="표시 항목">
+        <button type="button" class="layer-button" data-camera-layer="master" aria-pressed="false">전체 표시</button>
+        <button type="button" class="layer-button" data-camera-layer="places" aria-pressed="false">구역·격자</button>
+        <button type="button" class="layer-button" data-camera-layer="boxes" aria-pressed="false">블록 윤곽</button>
+        <button type="button" class="layer-button" data-camera-layer="centers" aria-pressed="false">중심점</button>
+        <button type="button" class="layer-button" data-camera-layer="axes" aria-pressed="false">파지 방향</button>
+        <button type="button" class="layer-button" data-camera-layer="candidates" aria-pressed="false">보정·재시도</button>
+        <button type="button" class="layer-button" data-camera-layer="rejects" aria-pressed="false">제외 검출</button>
+        <button type="button" class="layer-button" data-camera-layer="fk" aria-pressed="false">FK 기준점</button>
+        <button type="button" class="layer-button" data-camera-layer="details" aria-pressed="false">상세 정보</button>
+      </div>
+      <label class="color-filter">검출 색상
+        <select id="detection-color">
+          <option value="">전체</option><option value="green">초록</option>
+          <option value="yellow">노랑</option><option value="blue">파랑</option>
+          <option value="red">빨강</option><option value="wood">나무</option>
+        </select>
+      </label>
+      <a id="camera-tools-link" class="camera-tools-link" target="_blank" rel="noopener noreferrer">카메라 관리·캘리브레이션 ↗</a>
+      <p id="candidate-hint" class="hint" hidden>보정·재시도 후보는 카메라 분석 기준입니다. 현재 실행 중인 명령의 목표와 다를 수 있습니다.</p>
+      <p id="fk-status" class="hint" hidden></p>
+      <div id="detection-details" hidden><div id="detection-list" aria-live="off"></div></div>
+    </section>
+  </section>
+
+  <aside class="panel command-panel">
+    <div class="workspace-tabs" role="tablist" aria-label="명령 방식">
+      <button role="tab" aria-selected="true" aria-controls="direct-controls" id="direct-tab" data-command-tab="direct-controls">직접 조작</button>
+      <button role="tab" aria-selected="false" aria-controls="command-chat" id="chat-tab" data-command-tab="command-chat">LLM 대화</button>
+    </div>
+    <div id="direct-controls" role="tabpanel" aria-labelledby="direct-tab">    <div class="jog">
+      <div class="jog-title">팔 직접 움직이기</div>
       <div class="jog-grid">
         <span></span>
         <button class="btn jog-btn" data-jog="forward">앞 ▲<small>멀리</small></button>
@@ -65,7 +100,7 @@
       <button id="manual-home" class="btn manual-home-btn">🏠 home으로 복귀</button>
     </div>
     <div class="gripper">
-      <div class="jog-title">그리퍼 <small>(회전 · 집기 · 놓기, LLM 없이 바로 실행)</small></div>
+      <div class="jog-title">그리퍼</div>
       <div class="gripper-row">
         <button class="btn" id="roll-ccw">↺ 돌리기</button>
         <select id="roll-step" aria-label="회전 각도">
@@ -81,9 +116,7 @@
         <button class="btn" id="open-gripper">그리퍼 열기</button>
       </div>
     </div>
-  </section>
-
-  <section class="panel chat-panel">
+</div>  <section class="chat-panel" id="command-chat" hidden>
     <div id="chat" class="chat" aria-live="polite"></div>
     <form id="composer" class="composer">
       <button type="button" id="mic" class="btn btn-mic" title="음성 입력" aria-label="음성 입력" hidden>🎤</button>
@@ -97,10 +130,22 @@
       </div>
       <button type="button" id="reset" class="link">대화 초기화</button>
     </div>
+  </section></aside>
+  <section class="panel diagnostics-panel">
+    <div id="fk-summary" class="fk-summary">FK 측정 대기</div>
+    <div class="workspace-tabs diagnostic-tabs" role="tablist" aria-label="진단 정보">
+<button role="tab" aria-selected="true" data-diagnostic-tab="joints">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history">실행 기록</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open>
+      <summary>로봇 상태 · 모터 / FK / 보정</summary>
+      <p id="telemetry-status" role="status">측정 대기</p>
+      <div id="telemetry-body"></div>
+    </details>
+
+    <div id="diagnostic-detections" hidden></div>
+    <div id="diagnostic-history" hidden><p class="hint">실행 기록이 없습니다.</p></div>
   </section>
 </main>
 
-<button id="stop" class="stop" title="비상정지 (Esc)">STOP</button>
+
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
 <div id="lock" class="lock" hidden>
@@ -111,6 +156,8 @@
   </div>
 </div>
 
+<script src="/overlay-renderer.js?v=__RENDERER_VERSION__"></script>
+<script src="/camera-overlay.js?v=__OVERLAY_JS_VERSION__"></script>
 <script src="/app.js?v=__APP_JS_VERSION__"></script>
 </body>
 </html>
