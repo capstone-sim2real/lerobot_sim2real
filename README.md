@@ -8,6 +8,8 @@ PICK/VERIFY/TRANSPORT 흐름에 적층 PLACE 전략만 교체하는 목표 구�
 과거 ACT/SmolVLA 실험 문서는 CV+IK로 피벗한 근거를 보존하는 기록입니다. 현재
 실행법은 이 README와 [현재 아키텍처](docs/architecture.md),
 [CV+IK 가이드](docs/guide/SO101_CV_IK_파지운반.md)를 기준으로 합니다.
+자연어 조작이 필요할 때는 같은 CV+IK·안전 게이트를 재사용하는 별도
+`so101-agent` 웹 인터페이스를 사용합니다.
 
 LeRobot은 `third_party/lerobot` submodule로 고정하며, 프로젝트 루트의 단일 `uv` 환경에서 함께 실행합니다.
 
@@ -74,6 +76,9 @@ so101-camera
 기본값은 `0.0.0.0:8090`이며 비전 오버레이도 함께 활성화됩니다. 오버레이를
 완전히 끄려면 `so101-camera --no-overlay`를 사용합니다. 화면의 오버레이는
 원본 MJPEG 위에서 브라우저가 합성하므로 영상 스트림을 느리게 만들지 않습니다.
+`so101-run`, `so101-collect`, `so101-agent`는 카메라 health check에 응답이 없으면
+카메라 서버를 자동으로 시작하므로 보통 `so101-camera`를 따로 실행할 필요가 없습니다.
+이미 실행 중인 서버가 있으면 그대로 재사용하며 카메라 장치는 한 프로세스만 소유합니다.
 
 에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 직전 비교 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
 
@@ -83,8 +88,7 @@ so101-camera \
   --save-on-change --change-threshold 8 --max-save-interval-s 10
 ```
 
-블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행
-(카메라 서버를 먼저 띄워둔 채로):
+블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행:
 
 ```bash
 so101-run --task 1 --flow pick_lift_lower --color green
@@ -95,9 +99,16 @@ so101-run --task 1 --flow pick_lift_lower --color green
 ```bash
 so101-zone-calibrate                         # preview only
 so101-zone-calibrate --write                 # zone_polygon_mm 저장
+uv run python -m tools.calibrate_board_grid  # 체스판 격자 preview
+uv run python -m tools.calibrate_board_grid --write  # board_grid 저장
 so101-run --task 1 --dry-run                 # 모터 연결 없이 슬롯/IK 확인
 so101-run --task 1                           # 외부 블록이 5초간 없을 때까지 수집
 ```
+
+`board_grid`는 에이전트가 체스판 칸을 `(열, 행)`으로 지칭할 때 사용합니다. 측정값이
+없으면 25 mm 가상 격자로 동작하지만 `so101-agent --dry-run`이 경고하므로, 카메라를
+다시 장착했거나 보드를 옮긴 뒤에는 위 명령으로 다시 측정합니다. 카메라 UI에서는
+이 격자와 15개 이름 영역 오버레이를 전환할 수 있습니다.
 
 Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인 부분임. PLACE 횟수나
 색상 개수로 종료하지 않고, 홈 자세에서 fresh frame 기준 외부 검출이 5초 동안
@@ -116,7 +127,6 @@ Task 1의 수집 루프를 그대로 돌리면서 성공한 사이클 하나를 
 
 ```bash
 uv pip install --python .venv/bin/python "datasets>=4.7.0,<5.0.0" "av>=15.0.0,<16.0.0"
-so101-camera                                 # 손목캠도 쓰면 --wrist-device /dev/videoN
 so101-collect --dry-run                      # 카메라·슬롯·features 확인, 팔은 정지
 so101-collect                                # Ctrl-C 로 종료
 # 동일한 Task 3 진입점 별칭
@@ -147,8 +157,7 @@ cp .env.example .env && vi .env            # OPENAI_API_KEY와 GEMINI_API_KEY �
 so101-agent --dry-run                      # 칸·부채꼴 영역 IK, 조그 높이, API 키, 카메라 확인 (팔 정지)
 so101-agent --sim --provider fake          # 하드웨어·API 키 없이 UI와 툴 흐름 리허설
 
-so101-camera                               # 실기: 카메라 서버 먼저
-so101-agent                                # 기본 OpenAI gpt-5.6-luna, 실패 시 Gemini 폴백
+so101-agent                                # 카메라 자동 시작, 기본 OpenAI / Gemini 폴백
 so101-agent --provider gemini              # 명시하면 Gemini만 사용(폴백 없음)
 ```
 
@@ -196,6 +205,7 @@ so101-agent --provider gemini              # 명시하면 Gemini만 사용(폴�
 - [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
 - [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
 - [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
+- [SO-101 LLM 툴 콜링 에이전트 운영 가이드](docs/guide/SO101_LLM_에이전트.md)
 - [Task 3 ACT 데이터셋 자동 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)
 - [캘리브레이션 자료 위치](docs/calibration/README.md)
 - [정량 평가 기록](docs/eval/README.md)
