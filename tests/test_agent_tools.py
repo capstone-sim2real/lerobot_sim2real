@@ -22,7 +22,7 @@ def _never(_job):
 def test_tool_list_and_enums_follow_config():
     cfg = AppConfig()
     names = [t.spec.name for t in build_tools(cfg)]
-    assert len(names) == 15 and not any(n.startswith("run_task") for n in names)
+    assert len(names) == 18 and not any(n.startswith("run_task") for n in names)
     assert "begin_episode" in names and "save_episode" in names
 
     cfg.perception.color_prototypes["purple"] = [[140, 120]]
