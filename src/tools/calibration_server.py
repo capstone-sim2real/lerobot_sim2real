@@ -5,7 +5,7 @@ import logging
 import time
 from pathlib import Path
 from config import load_config
-from agent.server import EventHub, create_app, make_skills_factory
+from agent.server import API_KEY_ENV, EventHub, create_app, load_env_file, make_skills_factory
 from agent.service import AgentService
 from agent.tools import ToolDef, _obj, _mm
 from agent.provider.types import ToolSpec
@@ -99,8 +99,12 @@ def main():
     parser.add_argument("--port",type=int,default=8109)
     parser.add_argument("--dry-run",action="store_true")
     parser.add_argument("--set",action="append",default=[],dest="overrides")
+    parser.add_argument("--provider", choices=["anthropic", "openai", "gemini", "fake"])
+    parser.add_argument("--model")
+    parser.add_argument("--env-file")
     args=parser.parse_args()
     root=Path(__file__).resolve().parents[2]
+    load_env_file(args.env_file)
     output=Path(args.output).resolve()
     if args.dry_run:
         from agent_helpers import make_skills
@@ -130,6 +134,17 @@ def main():
         "camera.auto_start=false",
         "agent.lock_path=/home/ehdrms/lerobot_sim2real/local_operations/robot.lock"] + args.overrides)
     logging.basicConfig(level=logging.INFO)
+    provider_name = args.provider or cfg.agent.provider
+    if args.model:
+        cfg.agent.models[provider_name] = args.model
+    required = API_KEY_ENV.get(provider_name, [])
+    if required and not any(__import__("os").environ.get(name) for name in required):
+        parser.error(f"{' / '.join(required)} is required for provider {provider_name}")
+    try:
+        provider = build_provider(cfg.agent, provider=provider_name)
+    except (ImportError, ValueError) as exc:
+        parser.error(f"cannot initialize provider {provider_name}: {exc}")
+    logging.info("calibration server provider=%s model=%s", provider.name, provider.model)
     hub=EventHub()
     def service_builder(publish):
         raw_publish = publish
@@ -142,7 +157,7 @@ def main():
             session.robot._inner=CalibrationJointLimitIO(session.robot._inner,cfg.agent.calibration_clearance)
             return CalibrationSkills(session,output)
         skills_factory=make_skills_factory(cfg,cancel,sim=False,skills_builder=build_calibration)
-        service=AgentService(cfg,provider=build_provider(cfg.agent,provider="fake"),
+        service=AgentService(cfg,provider=provider,
                              skills_factory=skills_factory,cancel=cancel,publish=publish,
                              transcript_dir=str(output/"transcripts"))
         configure_manual_tools(service, cfg)
