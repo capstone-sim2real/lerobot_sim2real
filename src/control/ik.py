@@ -36,6 +36,15 @@ class IkResult:
         return True  # gate applied by the caller against cfg thresholds
 
 
+def finish_steps(steps):
+    """Consume an incremental numerical solve without changing synchronous callers."""
+    while True:
+        try:
+            next(steps)
+        except StopIteration as done:
+            return done.value
+
+
 def _topdown_pose(
     x_mm: float,
     y_mm: float,
@@ -264,7 +273,13 @@ class TopDownIK:
         """
         return wrist_roll + self.neutral_yaw_deg(x_mm, y_mm, z_mm)
 
-    def solve_holding_wrist_roll(
+    def solve_holding_wrist_roll(self, x_mm, y_mm, z_mm, wrist_roll_deg, *,
+                                radial_tilt_deg=0.0, max_iters=4, tol_deg=0.2):
+        return finish_steps(self.solve_holding_wrist_roll_steps(
+            x_mm, y_mm, z_mm, wrist_roll_deg, radial_tilt_deg=radial_tilt_deg,
+            max_iters=max_iters, tol_deg=tol_deg))
+
+    def solve_holding_wrist_roll_steps(
         self,
         x_mm: float,
         y_mm: float,
@@ -288,14 +303,15 @@ class TopDownIK:
         instead is not an option, the gripper is off the roll axis, so that
         moves the tool tip tens of mm off target.
         """
-        yaw = wrist_roll_deg + self.neutral_yaw_deg(x_mm, y_mm, z_mm)
-        result = self.solve(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
+        probe = yield from self.solve_steps(x_mm, y_mm, z_mm, yaw_deg=0.0)
+        yaw = wrist_roll_deg - probe.joints["wrist_roll"]
+        result = yield from self.solve_steps(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
         for _ in range(max_iters):
             error = wrist_roll_deg - result.joints["wrist_roll"]
             if abs(error) < tol_deg:
                 break
             yaw += error
-            result = self.solve(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
+            result = yield from self.solve_steps(x_mm, y_mm, z_mm, yaw_deg=yaw, radial_tilt_deg=radial_tilt_deg)
         return result
 
     def grasp_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float, block_angle_deg: float) -> float:
@@ -322,7 +338,10 @@ class TopDownIK:
         neutral = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
         return yaw, ((yaw - neutral) + 180.0) % 360.0 - 180.0
 
-    def solve(
+    def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+        return finish_steps(self.solve_steps(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg))
+
+    def solve_steps(
         self,
         x_mm: float,
         y_mm: float,
@@ -339,7 +358,8 @@ class TopDownIK:
         match something external, e.g. a detected block angle routed through
         ``grasp_yaw_deg()``."""
         if yaw_deg is None:
-            yaw_deg = self.neutral_yaw_deg(x_mm, y_mm, z_mm)
+            probe = yield from self.solve_steps(x_mm, y_mm, z_mm, yaw_deg=0.0)
+            yaw_deg = -probe.joints["wrist_roll"]
         k = self._load_kinematics()
         target = _topdown_pose(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
         r_mm = float(np.hypot(x_mm, y_mm))
@@ -354,6 +374,7 @@ class TopDownIK:
                 q = np.array([pan0 + dpan, lift, elbow, wf, 0.0])
                 for _ in range(self._cfg.ik_iters):
                     q = k.inverse_kinematics(q, target, orientation_weight=1.0)
+                    yield  # Numerical work only; the caller owns scheduling and cancellation.
                 achieved = k.forward_kinematics(q)
                 pos_err = float(np.linalg.norm(achieved[:3, 3] * 1000.0 - [x_mm, y_mm, z_mm]))
                 tilt_err = _tilt_deg(achieved)

@@ -62,7 +62,7 @@ class RuleBasedFakeProvider:
         text = re.sub(r"\s+", "", last.text or "")
         call = self._rule(text)
         if call is None:
-            yield TextDelta("(오프라인 fake 모드) 예: '노란 블록 좌상단으로', '미션 1', '상태', '홈', '초록 블록 밖으로'.")
+            yield TextDelta("(오프라인 fake 모드) 예: '관찰', '상태', '홈', '열기', '수집 현황'. 복합 작업 계획은 실제 LLM을 사용하세요.")
             yield TurnEnd("end_turn")
             return
         yield TextDelta(f"{call.name} 실행: {json.dumps(call.arguments, ensure_ascii=False)}\n")
@@ -71,35 +71,19 @@ class RuleBasedFakeProvider:
 
     @staticmethod
     def _rule(text: str) -> ToolCall | None:
-        color = next((v for k, v in _COLORS.items() if k in text), None)
-        slot = next((v for k, v in _SLOTS.items() if k in text), None)
-        mm = re.search(r"(\d+)mm", text)
-        distance = float(mm.group(1)) if mm else 20.0
-        if "미션1" in text or "task1" in text.lower():
-            return ToolCall("fake_1", "run_task1", {})
-        if "미션2" in text:
-            return ToolCall("fake_1", "run_task2", {})
+        if "수집" in text:
+            return ToolCall("fake_1", "collection_status", {})
         if "상태" in text:
             return ToolCall("fake_1", "get_state", {})
         if "홈" in text or "home" in text.lower():
             return ToolCall("fake_1", "return_to_home", {})
-        if "여기" in text:
-            return ToolCall("fake_1", "place_here", {})
-        if "왼쪽으로" in text and color is None:
-            return ToolCall("fake_1", "move_arm", {"left_mm": min(distance, 50.0)})
-        if color and ("멀리" in text or "가까이" in text) and "집" in text:
-            step = distance if mm else 5.0
-            forward = step if "멀리" in text else -step
-            return ToolCall("fake_1", "pick_block", {"color": color, "forward_mm": forward,
-                                                     "relative_to_last": "더" in text})
-        if color and slot:
-            return ToolCall("fake_1", "move_block_to_slot", {"color": color, "slot": slot})
-        if color and "밖" in text:
-            return ToolCall("fake_1", "move_block_to_table", {"color": color})
-        if color and "왼쪽" in text:
-            return ToolCall("fake_1", "shift_block", {"color": color, "forward_mm": 0.0, "left_mm": distance})
-        if color:
-            return ToolCall("fake_1", "pick_block", {"color": color})
+        if "열" in text:
+            return ToolCall("fake_1", "open_gripper", {})
+        if "닫" in text:
+            return ToolCall("fake_1", "close_gripper", {})
+        if "왼쪽" in text:
+            mm = re.search(r"(\d+)mm", text)
+            return ToolCall("fake_1", "move_relative", {"left_mm": float(mm.group(1)) if mm else 10.0})
         if "보여" in text or "관찰" in text or "블록" in text:
             return ToolCall("fake_1", "observe_scene", {})
         return None

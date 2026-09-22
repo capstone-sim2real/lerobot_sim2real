@@ -76,6 +76,7 @@ def calibration() -> PlaneCalibration:
 
 def fast_cfg() -> AppConfig:
     cfg = AppConfig()
+    cfg.agent.primitives.calibrated_pick = False  # Synthetic IK tests opt out of rig calibration.
     cfg.motion.fps = 0.0
     cfg.motion.gripper_action_wait_s = 0.0
     cfg.motion.place_settle_s = 0.0

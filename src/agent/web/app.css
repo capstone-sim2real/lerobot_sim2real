@@ -119,3 +119,137 @@ body { margin: 0; background: var(--bg); color: var(--ink);
   transition: opacity 0.2s, transform 0.2s; text-align: center; max-width: 100%; }
 .toast.bad { background: #7f1d1d; }
 .toast.show { opacity: 1; transform: translateY(0); }
+
+/* The observation canvas must not intercept the existing place clicks. */
+.camera-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.camera-wrap svg { z-index: 1; }
+.camera-missing { z-index: 3; }
+.perception-controls { margin: 12px 0; padding: 12px 0; border-block: 1px solid var(--line); }
+.perception-heading { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.layer-buttons { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.layer-button { border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 18px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px; }
+.layer-button[aria-pressed="true"] { color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; font-weight: 600; }
+.layer-button[aria-pressed="true"]::before { content: "✓ "; }
+.layer-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.layer-button:disabled { opacity: .45; cursor: default; }
+.color-filter { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.color-filter select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.layers-disabled { opacity: .45; pointer-events: none; }
+#detection-details { margin-top: 12px; max-height: 220px; overflow: auto; font-size: 12px; }
+.detection-row { display: grid; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+
+.camera-tools-link { display: inline-block; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.robot-diagnostics { margin:12px 0; padding:12px; border:1px solid #45536b; border-radius:10px; min-width:0; font-size:12px; }
+.robot-diagnostics summary {cursor:pointer;font-weight:700;}
+.robot-diagnostics p {overflow-wrap:anywhere; margin:8px 0;}
+.telemetry-scroll {overflow-x:auto;max-width:100%;margin:10px 0;}
+.robot-diagnostics table {border-collapse:collapse;width:100%;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.robot-diagnostics th,.robot-diagnostics td {padding:5px 8px;border-bottom:1px solid #45536b;text-align:right;}
+.robot-diagnostics th:first-child,.robot-diagnostics td:first-child {text-align:left;}
+.telemetry-stale {color:#d97706;}
+/* Camera-first desktop workspace. */
+.topbar {position:sticky;top:0;z-index:50;min-height:64px;padding:10px 24px;flex-wrap:nowrap;box-shadow:0 1px 8px #17243b06;}
+.topbar .status {margin-left:auto;}
+.topbar .stop {position:static;width:auto;height:42px;min-width:100px;border-radius:9px;border:0;box-shadow:none;font-size:16px;padding:0 18px;flex-shrink:0;}
+.stop small {font-size:11px;opacity:.8;margin-left:7px;}
+.layout {max-width:1680px;margin:auto;grid-template-columns:minmax(0,1fr) 360px;gap:16px;padding:20px 24px;align-items:start;}
+.panel {padding:16px;border-radius:14px;box-shadow:0 2px 6px #17243b03;}
+.camera-panel {position:relative;}
+.camera-wrap {border-radius:9px;}
+.camera-tools {display:inline-flex;}
+.perception-controls {margin-top:12px;position:relative;display:flex;flex-wrap:wrap;gap:10px;align-items:center;border:0;padding:0;}
+.perception-heading {width:100%;}
+.perception-heading strong {display:none;}
+.layer-buttons {flex:1;}
+.overlay-settings {position:relative;}
+.overlay-settings > summary {cursor:pointer;list-style:none;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;}
+.overlay-options {position:absolute;right:0;top:44px;z-index:20;width:280px;background:white;padding:16px;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 35px #15274226;display:flex;flex-wrap:wrap;gap:10px;}
+.overlay-options .color-filter {width:100%;}
+.workspace-tabs {display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:16px;padding-bottom:10px;overflow-x:auto;}
+.workspace-tabs button {border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:14px;font-weight:600;padding:10px 14px;white-space:nowrap;cursor:pointer;}
+.workspace-tabs button[aria-selected=true] {background:#eaf0ff;color:#2458cd;}
+.workspace-tabs button:focus-visible,summary:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.command-panel .jog {border:0;padding:0;}
+.jog-title {font-size:14px;margin:10px 0;}
+.jog-title small {display:block;font-size:12px;margin-top:4px;}
+.jog-grid {gap:8px;}
+.jog-grid .btn {min-height:48px;}
+.command-panel .btn {font-size:13px;padding:10px 8px;}
+.gripper-row .btn {min-width:80px;}
+.command-panel .gripper {margin-top:18px;padding-top:12px;}
+.cell-row {margin-top:14px;flex-wrap:wrap;}
+.chat-panel {min-height:440px;height:520px;}
+.chat {max-height:none;min-height:0;}
+.composer {flex-wrap:wrap;}
+.composer input {width:100%;flex-basis:100%;font-size:14px;}
+#send {margin-left:auto;}
+.diagnostics-panel {grid-column:1 / -1;}
+.fk-summary {font-variant-numeric:tabular-nums;font-size:17px;font-weight:650;background:#f6f8fc;border-radius:8px;padding:14px 16px;margin-bottom:16px;}
+.robot-diagnostics {margin:0;padding:0;border:0;font-size:14px;}
+.robot-diagnostics > summary {display:none;}
+#telemetry-status {font-size:12px;color:var(--muted);text-align:right;}
+#telemetry-body > p {font-size:12px;color:var(--muted);}
+#telemetry-body > p:nth-child(-n+4) {display:none;}
+#telemetry-body > details > summary {display:none;}
+#telemetry-body [data-diagnostic-section] {display:none;}
+body[data-diagnostic-tab=joints] #telemetry-body [data-diagnostic-section=joints],body[data-diagnostic-tab=motors] #telemetry-body [data-diagnostic-section=motors],body[data-diagnostic-tab=calibration] #telemetry-body [data-diagnostic-section=calibration] {display:block;}
+.robot-diagnostics th {font-size:12px;color:var(--muted);background:#f8fafc;}
+.robot-diagnostics th,.robot-diagnostics td {padding:10px 14px;border-bottom:1px solid var(--line);}
+.robot-diagnostics tbody tr:hover {background:#f8fafc;}
+#diagnostic-history {max-height:360px;overflow:auto;}
+#diagnostic-history .tool {max-width:100%;margin:8px 0;}
+#detection-list {max-height:320px;}
+.slot-text {opacity:0;}
+.slot-cell:hover + .slot-text {opacity:1;}
+@media(max-width:850px) {
+ .layout {grid-template-columns:1fr;padding:12px;gap:12px;}
+ .topbar {padding:10px 12px;gap:8px;flex-wrap:wrap;}
+ .brand {font-size:15px;} .topbar .status {order:3;width:100%;margin:0;}
+ .topbar .stop {margin-left:auto;}
+ .diagnostics-panel {grid-column:1;}
+ .chat-panel {height:420px;min-height:320px;}
+ .fk-summary {font-size:14px;line-height:1.7;}
+ .panel {padding:12px;}
+}
+body[data-diagnostic-tab=calibration] #telemetry-body > p:nth-child(-n+4) {display:block;}
+.robot-diagnostics tr.joint-out-of-range {background:#fff7ed;color:#9a3412;}
+.camera-heading {display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.camera-heading > label {font-size:14px;font-weight:650;}
+#camera-select {font:inherit;font-size:14px;padding:7px 30px 7px 10px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);}
+body[data-camera=wrist] #camera-tools,body[data-camera=wrist] .perception-controls {display:none;}
+
+.command-panel, .chat-panel {position:static;top:auto;}
+.overlay-options .layer-buttons {margin:0;flex-basis:100%;}
+.overlay-options {left:0;right:auto;max-width:calc(100vw - 48px);}
+.perception-controls {justify-content:space-between;}
+.perception-controls > .camera-tools {margin-right:auto;}
+.perception-controls .overlay-options {left:auto;right:0;}
+#pixel-target-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
+.pixel-workspace {fill:#10b98116;stroke:#10b981;stroke-width:2;pointer-events:none;}
+body[data-camera=shoulder] #camera-wrap.pixel-pointer-active {cursor:none;}
+.pixel-selection {padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
+#pixel-target-status {font-size:13px;line-height:1.6;color:var(--muted);}
+body[data-camera=wrist] #pixel-target-overlay {display:none;}
+
+.pixel-hover-ring {position:absolute;width:18px;height:18px;border:2px solid #fff;border-radius:50%;background:#2563eb;opacity:.35;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
+.pixel-selected-ring {fill:#2563eb;stroke:#fff;stroke-width:3;opacity:1;pointer-events:none;}
+.pixel-selected-ring[data-state=pending] {fill:#f59e0b;}
+.pixel-selected-ring[data-state=invalid] {fill:#dc2626;stroke:#fff;stroke-dasharray:none;}
+
+/* Match the camera card; scroll content without moving the command tabs. */
+.layout > .command-panel[data-slot=card] {
+  display:flex;flex-direction:column;gap:0;
+  height:var(--camera-panel-height, auto);min-height:0;overflow:hidden;
+}
+.command-panel > .workspace-tabs {flex-shrink:0;}
+.command-panel > #direct-controls {
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+}
+.command-panel > .chat-panel {
+  flex:1;height:auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+}
+.command-panel .chat {flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.command-panel .composer,.command-panel .composer-options {flex-shrink:0;}
+
+.pixel-hover-ring[data-state=pending] {background:#737373;}
+.pixel-hover-ring[data-state=invalid] {background:#dc2626;}

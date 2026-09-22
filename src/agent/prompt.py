@@ -11,7 +11,8 @@ from config import AppConfig
 def build_system_prompt(cfg: AppConfig, template_text: str | None = None) -> str:
     agent = cfg.agent
     if template_text is None:
-        template_text = Path(agent.system_prompt_path).read_text(encoding="utf-8")
+        path = agent.system_prompt_path
+        template_text = Path(path).read_text(encoding="utf-8")
     slots = agent.zone_slots
     rows = []
     for index, (label, korean) in enumerate(zip(slots.labels, slots.korean_labels)):

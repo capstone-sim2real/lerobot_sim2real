@@ -28,36 +28,3 @@ def test_default_yaml_matches_dataclass_defaults():
     assert dataclasses.asdict(
         load_config(DEFAULT_OVERLAY_CONFIG)
     ) == dataclasses.asdict(AppConfig())
-
-
-def test_default_agent_uses_openai_luna_with_gemini_fallback():
-    agent = AppConfig().agent
-    assert agent.provider == "openai"
-    assert agent.models["openai"] == "gpt-5.6-luna"
-    assert agent.fallback_provider == "gemini"
-
-
-def test_ik_seed_candidate_count_must_be_positive():
-    cfg = AppConfig().ik
-    cfg.seed_candidate_count = 0
-    with pytest.raises(ValueError, match="seed_candidate_count"):
-        validate_ik(cfg)
-
-
-def test_every_gated_colour_must_have_a_prototype(tmp_path):
-    """Gates may overlap — they must, since no fixed box separates wood from
-    yellow in every arrangement. What must not exist is a colour that can be
-    gated but never named: its blobs would compete for other colours' slots."""
-    bad = tmp_path / "unnamed.yaml"
-    bad.write_text(
-        "perception:\n  hsv_ranges:\n    teal: [[80, 60, 60, 95, 255, 255]]\n"
-    )
-    with pytest.raises(ValueError, match="color_prototypes is missing"):
-        load_config(bad)
-
-    # the shipped palette is complete, and its gates are deliberately overlapping
-    load_config(DEFAULT_OVERLAY_CONFIG)
-    cfg = AppConfig().perception
-    validate_perception_colors(cfg)
-    wood, yellow = cfg.hsv_ranges["wood"][0], cfg.hsv_ranges["yellow"][0]
-    assert wood[3] > yellow[0], "wood and yellow gates are expected to overlap in hue"

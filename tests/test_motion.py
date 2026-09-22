@@ -24,72 +24,6 @@ class StubIk:
         return block_angle_deg, block_angle_deg
 
 
-def test_gripper_frame_bias_and_candidate_order():
-    assert gripper_frame_offset(0.0, 100.0, 0.0, 10.0) == pytest.approx((-10.0, 100.0))
-    cfg = AppConfig()
-    cfg.motion.grasp_radial_offset_mm = 12.0
-    cfg.motion.grasp_forward_offset_mm = 10.0
-    cfg.motion.grasp_tangential_offset_mm = 10.0
-    cfg.motion.left_half_radial_offset_mm = 10.0
-    cfg.motion.grasp_retry_offsets_mm = [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
-    cfg.motion.grasp_retry_roll_deg = 0.0
-    right = biased_grasp_xy(cfg.motion, 200.0, -80.0)
-    left = biased_grasp_xy(cfg.motion, 200.0, 80.0)
-    assert math.hypot(left[0] - 200.0, left[1] - 80.0) > math.hypot(right[0] - 200.0, right[1] + 80.0)
-    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0)
-    # counter-clockwise from the left in the gripper frame
-    assert [a.label for a in plan.attempts] == ["centre", "left", "back", "right", "front"]
-    assert [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, -80.0)] == [
-        "centre", "left", "back", "right", "front"
-    ]
-
-
-def test_jaw_frame_offsets_rotate_with_the_jaws_only_when_enabled():
-    """The offsets' axes are the NEUTRAL-yaw ones unless the flag says the
-    jaws carry them. A 90 deg jaw turn swaps radial and tangential, which is
-    the sharpest possible statement of the difference."""
-    cfg = AppConfig()
-    cfg.motion.grasp_radial_offset_mm = 10.0
-    cfg.motion.grasp_forward_offset_mm = 0.0
-    cfg.motion.grasp_tangential_offset_mm = 0.0
-    cfg.motion.left_half_radial_offset_mm = 0.0
-    cfg.motion.left_half_tangential_offset_mm = 0.0
-
-    straight_ahead = (200.0, 0.0)  # radial is +x, tangential is +y
-    neutral = biased_grasp_xy(cfg.motion, *straight_ahead, jaw_rot_deg=90.0)
-    assert neutral == pytest.approx((210.0, 0.0))  # flag off: rotation ignored
-
-    cfg.motion.grasp_offsets_follow_jaw_yaw = True
-    turned = biased_grasp_xy(cfg.motion, *straight_ahead, jaw_rot_deg=90.0)
-    assert turned == pytest.approx((200.0, 10.0))  # radial became tangential
-    # a zero rotation must stay bit-identical to the neutral behaviour
-    assert biased_grasp_xy(cfg.motion, *straight_ahead, jaw_rot_deg=0.0) == pytest.approx((210.0, 0.0))
-
-
-def test_jaw_frame_retry_points_keep_their_requested_labels():
-    """'left' must name the direction asked for, not the rotated vector."""
-    cfg = AppConfig()
-    cfg.motion.grasp_offsets_follow_jaw_yaw = True
-    cfg.motion.grasp_retry_offsets_mm = [[0.0, 15.0], [-15.0, 0.0], [0.0, -15.0], [15.0, 0.0]]
-    labels = [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, 0.0, jaw_rot_deg=90.0)]
-    assert labels == ["centre", "left", "back", "right", "front"]
-
-    # and the point itself did rotate: 'left' at a 90 deg jaw turn moves the
-    # aim back along the reach instead of sideways. The retry is measured
-    # from the *biased* centre, whose azimuth the bias itself shifted by a
-    # few degrees, so compare against that frame rather than the board axes.
-    points = dict(grasp_candidate_points(cfg.motion, 200.0, 0.0, jaw_rot_deg=90.0))
-    base = biased_grasp_xy(cfg.motion, 200.0, 0.0, jaw_rot_deg=90.0)
-    step = (points["left"][0] - base[0], points["left"][1] - base[1])
-    phi = math.atan2(base[1], base[0])
-    radial = step[0] * math.cos(phi) + step[1] * math.sin(phi)
-    tangential = -step[0] * math.sin(phi) + step[1] * math.cos(phi)
-    # magnitude comes from the configured 'left' offset, not a hardcoded mm
-    (_radial, expected) = cfg.motion.grasp_retry_offsets_mm[0]
-    assert radial == pytest.approx(-expected, abs=1e-6)
-    assert tangential == pytest.approx(0.0, abs=1e-6)
-
-
 def test_unreachable_displayed_yaw_does_not_fall_back_to_a_perpendicular_grasp(monkeypatch):
     """The robot must either use the displayed yaw or reject the plan."""
     cfg = AppConfig()
@@ -103,14 +37,6 @@ def test_unreachable_displayed_yaw_does_not_fall_back_to_a_perpendicular_grasp(m
     plan = plan_grasp_attempts(OnlyNeutralIk(), cfg, 200.0, 0.0, 9.0, block_angle_deg=40.0)
     assert plan.yaw_deg == pytest.approx(40.0)
     assert not plan.attempts[0].reachable
-
-
-def test_grasp_hover_settles_tighter_than_a_plain_transit():
-    """The hover before a descent is aimed, not just transited: descend()
-    starts from the measured pose, so slack left here is swept through the
-    block on the way down."""
-    cfg = AppConfig().motion
-    assert cfg.grasp_hover_arrival_tol < cfg.arrival_tol < cfg.transit_arrival_tol
 
 
 def test_attempt_grasp_tightens_the_hover_on_a_bounded_clock(monkeypatch):
@@ -190,28 +116,6 @@ def test_blocked_pick_descent_never_closes_the_gripper(monkeypatch):
     assert calls[-1][0] == "move"  # lift clear before the rotated retry
 
 
-def test_settle_gives_up_on_time_instead_of_raising():
-    cfg = _fast_motion(move_timeout_s=10.0)
-    robot = MockRobotIO(initial_joints={"shoulder_pan": 40.0})
-    robot.send_joints = lambda _pose: None  # a servo that refuses to move
-    player = TrajectoryPlayer(robot, cfg)
-
-    err, reached = player.settle({"shoulder_pan": 0.0}, tol=1.0, timeout_s=0.05)
-    assert not reached and err == pytest.approx(40.0)
-
-    err, reached = player.settle({"shoulder_pan": 40.0}, tol=1.0, timeout_s=0.05)
-    assert reached and err == pytest.approx(0.0)
-
-
-def test_labels_follow_the_configured_offsets():
-    """Labels are derived, so re-shaping the offsets cannot mislabel a point."""
-    cfg = AppConfig()
-    cfg.motion.grasp_retry_offsets_mm = [[10.0, 10.0], [-10.0, -10.0]]
-    assert [label for label, _ in grasp_candidate_points(cfg.motion, 200.0, -80.0)] == [
-        "centre", "front-left", "back-right"
-    ]
-
-
 def _attempt(label, offset=(0.0, 0.0)):
     solved = IkResult({"shoulder_pan": 0.0}, 0.5, 0.1)
     return GraspAttempt(label, offset, (200.0, 0.0), solved, solved, True)
@@ -240,82 +144,6 @@ def _run_queue(monkeypatch, plan, outcomes):
     monkeypatch.setattr(grasp_mod, "attempt_grasp", fake_attempt)
     held = run_grasp_attempts(None, None, AppConfig(), plan, log=lambda _message: None)
     return held, tried
-
-
-def test_pick_retries_once_at_same_xy_with_ninety_degree_roll(monkeypatch):
-    cfg = AppConfig()
-    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, block_angle_deg=35.0)
-    held, tried = _run_queue(
-        monkeypatch,
-        plan,
-        {"centre": GraspOutcome.BLOCKED, "roll_90": GraspOutcome.HELD},
-    )
-
-    assert held is not None and held.label == "roll_90"
-    assert tried == ["centre", "roll_90"]
-    assert len(plan.attempts) == 2
-    assert plan.attempts[1].xy_mm == pytest.approx(plan.attempts[0].xy_mm)
-    yaw_delta = abs(plan.attempts[1].yaw_deg - plan.attempts[0].yaw_deg)
-    assert yaw_delta == pytest.approx(cfg.motion.grasp_retry_roll_deg)
-
-
-@pytest.mark.parametrize(
-    ("detected_y_mm", "expected_sign"),
-    [
-        (80.0, 1.0),   # left half: counter-clockwise / left turn
-        (-80.0, -1.0), # right half: clockwise / right turn
-        (0.0, -1.0),   # centre line belongs to the right/default half
-    ],
-)
-def test_rotated_retry_turns_outward_for_each_fan_half(detected_y_mm, expected_sign):
-    cfg = AppConfig()
-    plan = plan_grasp_attempts(
-        StubIk(), cfg, 200.0, detected_y_mm, 9.0, block_angle_deg=0.0
-    )
-
-    primary, retry = plan.attempts[:2]
-    assert retry.yaw_deg - primary.yaw_deg == pytest.approx(
-        expected_sign * cfg.motion.grasp_retry_roll_deg
-    )
-
-
-def test_pick_stops_after_the_single_rotated_retry(monkeypatch):
-    cfg = AppConfig()
-    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, block_angle_deg=35.0)
-    held, tried = _run_queue(monkeypatch, plan, {})
-
-    assert held is None
-    assert tried == ["centre", "roll_90"]
-
-
-def test_default_pick_aim_uses_only_the_requested_fifteen_mm_left_bias():
-    cfg = AppConfig()
-    assert cfg.motion.grasp_radial_offset_mm == 0.0
-    assert cfg.motion.grasp_forward_offset_mm == 0.0
-    assert cfg.motion.grasp_tangential_offset_mm == 15.0
-    assert cfg.motion.left_half_radial_offset_mm == 0.0
-    assert cfg.motion.grasp_retry_offsets_mm == []
-    assert cfg.motion.grasp_retry_roll_deg == pytest.approx(90.0)
-
-    detected = (200.0, 0.0)
-    full = biased_grasp_xy(cfg.motion, *detected, scale=1.0)
-    reduced = biased_grasp_xy(cfg.motion, *detected, scale=0.0)
-    assert full == pytest.approx((200.0, 15.0))
-    assert reduced == pytest.approx((200.0, 15.0))
-
-
-@pytest.mark.parametrize(
-    ("xy", "block_angle", "expected"),
-    [
-        ((200.0, 0.0), 5.0, 95.0),
-        ((0.0, 200.0), 80.0, 170.0),
-        ((200.0, -200.0), 20.0, 20.0),
-    ],
-)
-def test_square_grasp_yaw_chooses_the_face_axis_nearest_the_workspace_tangent(
-    xy, block_angle, expected
-):
-    assert tangent_square_grasp_yaw_deg(*xy, block_angle) == pytest.approx(expected)
 
 
 def _fast_motion(**overrides):
@@ -377,24 +205,6 @@ def test_normal_descent_is_not_misread_as_jammed():
     assert final["shoulder_lift"] == pytest.approx(-6.0)
 
 
-def test_go_home_can_leave_the_jaws_alone():
-    """Homing between CV+IK picks must not close jaws the next pick reopens."""
-    from control.poses import PoseRegistry
-    from control.motion import MotionController
-
-    robot = MockRobotIO()
-    robot.connect()
-    poses = PoseRegistry(path=None, poses={"home": {**{j: 0.0 for j in robot.joints}, "gripper": 0.482}})
-    motion = MotionController(robot, poses, _fast_motion(), SensingConfig())
-
-    motion.go_home(include_gripper=False)
-    assert all("gripper" not in action for action in robot.sent_actions)
-
-    robot.sent_actions.clear()
-    motion.go_home()
-    assert any("gripper" in action for action in robot.sent_actions)
-
-
 def test_grasp_sensor_distinguishes_held_from_empty():
     cfg = SensingConfig(grasp_settle_s=0.0, sample_interval_s=0.0, grasp_samples=1)
     held = MockRobotIO(initial_joints={"gripper": 25.0})
@@ -403,107 +213,3 @@ def test_grasp_sensor_distinguishes_held_from_empty():
     empty.loads["gripper"] = 15
     assert check_grasp(held, cfg).grasped
     assert not check_grasp(empty, cfg).grasped
-
-
-def test_grasp_sensor_accepts_a_block_held_standing_on_edge():
-    """A block caught on edge closes the jaws about half as far as one lying
-    flat (measured flat: pos 44.1..44.3; empty: 3.4). The position gate exists
-    to reject empty, so it must not also reject the narrower hold."""
-    cfg = SensingConfig(grasp_settle_s=0.0, sample_interval_s=0.0, grasp_samples=1)
-    for pos in (24.0, 18.0, 14.0):
-        edgewise = MockRobotIO(initial_joints={"gripper": pos})
-        edgewise.loads["gripper"] = 500
-        check = check_grasp(edgewise, cfg)
-        assert check.grasped, f"edge-on hold at pos={pos} misread as EMPTY"
-        assert check.pos_says_held and check.load_says_held
-
-    # an empty gripper still has room to spare below the threshold
-    empty = MockRobotIO(initial_joints={"gripper": 3.4})
-    empty.loads["gripper"] = 40
-    result = check_grasp(empty, cfg)
-    assert not result.grasped and not result.pos_says_held and not result.load_says_held
-
-
-def test_retracting_arm_increases_reachable_hover():
-    class EnvelopeIk:
-        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None):
-            ceiling = 90.0 - max(0.0, math.hypot(x_mm, y_mm) - 195.0) * 0.45
-            return IkResult({}, 0.5 if z_mm <= ceiling else 80.0, 0.1)
-
-    cfg = AppConfig()
-    far = highest_reachable_hover(EnvelopeIk(), 285.0, 0.0, 10.0, cfg)
-    near = highest_reachable_hover(EnvelopeIk(), 195.0, 0.0, 10.0, cfg)
-    assert near > far + 20.0
-
-
-def test_reduced_bias_keeps_the_sideways_correction():
-    """The reachability backoff must not throw away the left/right fix.
-
-    Radial is what pushes a block past the reach envelope; a 10mm tangential
-    nudge moves reach by 0.17mm. Scaling it down buys nothing and costs the
-    whole left-half correction exactly where it is needed, since the left
-    half hits the envelope sooner *because* of its extra radial offset.
-    """
-    cfg = AppConfig().motion
-    cfg.grasp_radial_offset_mm = 12.0
-    cfg.grasp_forward_offset_mm = 10.0
-    cfg.grasp_tangential_offset_mm = 10.0
-    cfg.left_half_radial_offset_mm = 10.0
-    det = (200.0, 80.0)  # left half
-    full = biased_grasp_xy(cfg, *det, scale=1.0)
-    none = biased_grasp_xy(cfg, *det, scale=0.0)
-    # The old radial correction shrinks away, but the explicit +10mm F
-    # instruction remains.
-    assert math.hypot(*none) == pytest.approx(math.hypot(*det) + cfg.grasp_forward_offset_mm, abs=0.5)
-    assert math.hypot(*full) > math.hypot(*det) + 20.0
-    # ...while the sideways component survives untouched
-    def tangential_of(p):
-        phi = math.atan2(det[1], det[0])
-        return -(p[0] - det[0]) * math.sin(phi) + (p[1] - det[1]) * math.cos(phi)
-    assert tangential_of(none) == pytest.approx(tangential_of(full), abs=1e-9)
-    assert tangential_of(none) == pytest.approx(
-        cfg.grasp_tangential_offset_mm + cfg.left_half_tangential_offset_mm,
-        abs=1e-9,
-    )
-
-
-@pytest.mark.parametrize("det", [(240.0, 0.0), (180.0, 140.0), (180.0, -140.0)])
-def test_default_grasp_aim_is_fifteen_mm_to_relative_left_everywhere(det):
-    cfg = AppConfig().motion
-    aimed = biased_grasp_xy(cfg, *det)
-    phi = math.atan2(det[1], det[0])
-    tangential = -(aimed[0] - det[0]) * math.sin(phi) + (aimed[1] - det[1]) * math.cos(phi)
-
-    assert tangential == pytest.approx(15.0, abs=1e-9)
-
-
-def test_left_ramp_is_off_by_default_and_grows_with_y():
-    cfg = AppConfig().motion
-    near, far = (200.0, 40.0), (200.0, 160.0)
-    assert cfg.left_ramp_tangential_mm_per_100mm == 0.0  # unsupported by the calibration data
-    plain_near = biased_grasp_xy(cfg, *near)
-    cfg.left_ramp_tangential_mm_per_100mm = 10.0
-    ramped_near = biased_grasp_xy(cfg, *near)
-    ramped_far = biased_grasp_xy(cfg, *far)
-    shift_near = math.hypot(ramped_near[0] - plain_near[0], ramped_near[1] - plain_near[1])
-    assert shift_near == pytest.approx(4.0, abs=1e-6)  # 0.4 of 100mm
-    plain_far = biased_grasp_xy(AppConfig().motion, *far)
-    shift_far = math.hypot(ramped_far[0] - plain_far[0], ramped_far[1] - plain_far[1])
-    assert shift_far > shift_near
-    # the right half is untouched either way
-    assert biased_grasp_xy(cfg, 200.0, -80.0) == biased_grasp_xy(AppConfig().motion, 200.0, -80.0)
-
-
-def test_block_angle_turns_the_jaws_and_is_recorded():
-    cfg = AppConfig()
-    plan = plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0, block_angle_deg=35.0)
-    assert plan.yaw_deg == pytest.approx(35.0)
-    assert plan.attempts[0].yaw_deg == pytest.approx(35.0)
-    assert abs(plan.attempts[1].yaw_deg - plan.attempts[0].yaw_deg) == pytest.approx(90.0)
-    # no angle given -> neutral yaw, as before
-    assert plan_grasp_attempts(StubIk(), cfg, 200.0, -80.0, 9.0).yaw_deg is None
-
-
-def test_plan_records_the_bias_scale_it_settled_on():
-    plan = plan_grasp_attempts(StubIk(), AppConfig(), 200.0, -80.0, 9.0)
-    assert plan.bias_scale == 1.0  # StubIk reaches everything

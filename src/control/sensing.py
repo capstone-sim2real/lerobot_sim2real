@@ -91,9 +91,10 @@ class ContactMonitor:
     baseline, then poll ``check()`` after each small descent step.
     """
 
-    def __init__(self, robot: BaseRobotIO, cfg: SensingConfig):
+    def __init__(self, robot: BaseRobotIO, cfg: SensingConfig, *, magnitude_increase: bool = False):
         self._robot = robot
         self._cfg = cfg
+        self._magnitude_increase = magnitude_increase
         self._baseline: dict[str, float] | None = None
 
     def start(self) -> dict[str, float]:
@@ -112,7 +113,11 @@ class ContactMonitor:
         if self._baseline is None:
             raise RuntimeError("ContactMonitor.check() before start(); capture a baseline first")
         loads = self._robot.read_loads()
-        deltas = {joint: abs(loads[joint] - self._baseline[joint]) for joint in self._cfg.contact_joints}
+        # Signed torque can reverse during free motion without increasing force.
+        # Legacy task callers retain their original signed-change detector.
+        deltas = {joint: (max(0.0, abs(loads[joint])-abs(self._baseline[joint]))
+                         if self._magnitude_increase else abs(loads[joint]-self._baseline[joint]))
+                  for joint in self._cfg.contact_joints}
         contact = any(delta >= self._cfg.contact_load_delta for delta in deltas.values())
         return ContactReading(
             contact=contact,

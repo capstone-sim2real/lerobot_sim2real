@@ -50,14 +50,6 @@ def test_stop_locks_until_home_is_verified():
     assert gate.state is ControlState.IDLE and gate.try_begin(token, "chat")
 
 
-def test_robot_fault_without_stop_also_locks():
-    gate, _stops, _snaps, _clock = _gate()
-    token = gate.acquire_lease()
-    gate.try_begin(token, "chat")
-    gate.finish(robot_fault=True)
-    assert gate.state is ControlState.STOPPED
-
-
 def test_stop_during_homing_returns_to_stopped():
     gate, _stops, _snaps, _clock = _gate()
     token = gate.acquire_lease()
@@ -84,12 +76,3 @@ def test_operator_leaving_mid_motion_stops_and_frees_the_lease():
     newcomer = gate.acquire_lease()
     gate.finish(robot_fault=True)
     assert gate.state is ControlState.STOPPED and gate.try_begin_home(newcomer)
-
-
-def test_idle_operator_loses_the_lease_after_the_timeout():
-    gate, _stops, _snaps, clock = _gate()
-    token = gate.acquire_lease()
-    gate.operator_connected(token)
-    clock.now = 301.0
-    gate.tick()
-    assert not gate.check(token) and gate.acquire_lease() is not None

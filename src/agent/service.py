@@ -92,6 +92,9 @@ class AgentService:
         )
         self.places: dict[str, Any] = {}
         self.started = False
+        self._keyboard_jog = None
+        self._telemetry_future = None
+        self._telemetry_cache = {}
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -161,34 +164,7 @@ class AgentService:
 
         def turn() -> None:
             try:
-                current_cv = None
-                if needs_fresh_scene(text):
-                    call = ToolCall(
-                        f"observe_scene_auto_{next(self._ids)}", "observe_scene", {"include_zone": True}
-                    )
-                    self._publish({
-                        "type": "tool_call", "id": call.id, "name": call.name,
-                        "arguments": call.arguments, "automatic": True,
-                    })
-                    result = self.registry.execute(call)
-                    self._publish({
-                        "type": "tool_result", "id": call.id, "name": call.name,
-                        "result": result.content, "automatic": True,
-                    })
-                    current_cv = result.content
-                    from session.results import ROBOT_FAULT_REASONS
-
-                    if result.content.get("reason") in ROBOT_FAULT_REASONS:
-                        self._publish({
-                            "type": "assistant_text",
-                            "text": "최신 장면을 확인하는 중 로봇 동작이 중단되었습니다.",
-                        })
-                        self._publish({"type": "turn_end", "robot_fault": True})
-                        outcome = TurnOutcome(robot_fault=True, error=result.content.get("detail"))
-                    else:
-                        outcome = self.runner.run_turn(text, current_cv=current_cv)
-                else:
-                    outcome = self.runner.run_turn(text)
+                outcome = self.runner.run_turn(text)
             except Exception as exc:  # noqa: BLE001 - a crashed turn is a fault
                 logger.exception("agent turn crashed")
                 self._publish({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
@@ -202,8 +178,9 @@ class AgentService:
     # Everything here is also an ordinary LLM tool (agent.tools.build_tools);
     # this only decides what a physical button on the page is allowed to fire.
     MANUAL_TOOLS = frozenset({
-        "move_arm", "move_to_cell", "rotate_gripper", "pick_here", "place_here",
-        "open_gripper", "return_to_home",
+        "move_relative", "move_to_target", "align_gripper", "close_gripper", "descend_until_contact",
+        "open_gripper", "return_to_home", "observe_scene", "collection_status",
+        "inspect_motion", "correct_hover", "descend_step",
     })
 
     def direct(self, token: str | None, name: str, arguments: dict[str, Any]) -> tuple[int, dict]:
@@ -214,7 +191,7 @@ class AgentService:
         call does -- a manual button is just a one-tool-call "turn" with no
         model in the loop.
         """
-        if name not in self.MANUAL_TOOLS:
+        if name not in self.MANUAL_TOOLS or name not in self.registry.names():
             return 400, {"error": f"'{name}' is not a manual control action"}
         if not self.gate.check(token):
             return 403, {"error": "not the operator"}
@@ -244,15 +221,77 @@ class AgentService:
         return 202, {"accepted": True}
 
     def jog(self, token: str | None, forward_mm: float, left_mm: float, up_mm: float) -> tuple[int, dict]:
-        return self.direct(token, "move_arm",
+        name = "move_arm" if "move_arm" in self.MANUAL_TOOLS else "move_relative"
+        return self.direct(token, name,
                            {"forward_mm": float(forward_mm), "left_mm": float(left_mm), "up_mm": float(up_mm)})
 
+    def keyboard_start(self, token):
+        from .keyboard_jog import KeyboardJog
+        if not {"move_arm", "move_relative"} & self.MANUAL_TOOLS:
+            return 400, {"error": "keyboard jog unavailable"}
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        try:
+            import ruckig  # Optional agent dependency, checked before reserving the arm.
+        except ImportError:
+            return 503, {"error": "연속 가감속 기능에 필요한 ruckig 패키지가 설치되지 않았습니다."}
+        if not self.gate.try_begin(token, "keyboard_jog"):
+            return 409, {"error": "busy", **self.gate.snapshot()}
+        stream = KeyboardJog(self.cfg.agent.relative)
+        self._keyboard_jog = stream
+        self.cancel.clear()
+
+        def run():
+            fault = False
+            try:
+                result = self._execute(lambda skills: stream.run(skills, self.cancel))
+                if result is not None and not result.ok:
+                    from session.results import ROBOT_FAULT_REASONS
+                    fault = result.reason in ROBOT_FAULT_REASONS
+                    self._publish({"type": "keyboard_jog_end", "message": result.detail})
+            except Exception as exc:
+                fault = True
+                logger.exception("keyboard jog ended with a fault")
+                self._publish({"type": "keyboard_jog_end", "message": str(exc)})
+            finally:
+                stream.close()
+                self._keyboard_jog = None
+                self._after_command(fault)
+        self._spawn(run, "so101-keyboard-jog")
+        return 202, {"session_id": stream.id}
+
+    def keyboard_update(self, token, session_id, seq, vector, *, stop=False, release=False):
+        import math
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        stream = self._keyboard_jog
+        if stream is None or stream.id != session_id:
+            return 409, {"error": "keyboard session ended"}
+        if release:
+            stream.release()
+            return 200, {"releasing": True}
+        if stop:
+            stream.close()
+            return 200, {"stopped": True}
+        if (type(seq) is not int or seq < 0 or len(vector) != 3
+            or any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 1 for v in vector)):
+            return 400, {"error": "invalid keyboard direction"}
+        if not stream.update(seq, vector):
+            return 409, {"error": "expired or outdated keyboard input"}
+        return 200, {"accepted": True}
+
     def _after_command(self, robot_fault: bool) -> None:
+        if self.started:
+            def finish(skills):
+                callback = getattr(type(skills), "end_command", None)
+                if callback is not None:
+                    callback(skills)
+                from session.results import SkillResult
+                return SkillResult(True, "end_command", "ok")
+            cleanup = self.registry.run_skill("end_command", finish)
+            robot_fault = robot_fault or cleanup.robot_fault
         fault = robot_fault or self.cancel.is_set()
         self.gate.finish(robot_fault=fault, message="동작이 중단되었습니다. home 복귀가 필요합니다." if fault else None)
-        if self.gate.state is ControlState.STOPPED and self.cfg.agent.stop_auto_home:
-            if self.gate.begin_auto_home():
-                self._spawn(self._home_job, "so101-agent-home")
 
     def stop(self) -> dict[str, Any]:
         stopped = self.gate.request_stop()
@@ -290,6 +329,21 @@ class AgentService:
         self.runner.reset()
         self._publish({"type": "reset"})
         return 200, {"reset": True}
+
+    def telemetry(self):
+        from .telemetry import collect
+        future = self._telemetry_future
+        if future is not None and future.done():
+            try:
+                self._telemetry_cache = future.result()
+            except Exception as exc:
+                self._telemetry_cache = {**self._telemetry_cache, "error": type(exc).__name__}
+            self._telemetry_future = None
+        age = time.time() - self._telemetry_cache.get("sampled_at", 0)
+        if self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
+            self._telemetry_future = self._worker.submit(collect)
+        return {**self._telemetry_cache, "pending": self._telemetry_future is not None,
+                "control": self.gate.snapshot()}
 
     def health(self) -> dict[str, Any]:
         return {

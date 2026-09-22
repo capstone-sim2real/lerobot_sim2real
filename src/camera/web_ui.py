@@ -188,6 +188,7 @@ _PAGE = """<!doctype html>
 <body>
   <div class="topbar">__OVERLAY_PICKER__</div>
   <main>__CAMERA_TILES__</main>
+  <script src="/overlay-renderer.js"></script>
   <script>
     const picker = document.querySelector('#overlay-color');
     const toolMenu = document.querySelector('#tool-menu');
@@ -250,45 +251,18 @@ _PAGE = """<!doctype html>
       return `${reject.color} ✕ ${reject.reason} ${value}`;
     };
 
-    const drawPolyline = (context, points, color, width, close = false) => {
-      if (!points || points.length < 2) return;
-      context.beginPath();
-      context.moveTo(points[0][0], points[0][1]);
-      points.slice(1).forEach((point) => context.lineTo(point[0], point[1]));
-      if (close) context.closePath();
-      context.strokeStyle = color;
-      context.lineWidth = width;
-      context.stroke();
-    };
-
-    const drawCross = (context, point, color, size = 6) => {
-      context.beginPath();
-      context.moveTo(point[0] - size, point[1]);
-      context.lineTo(point[0] + size, point[1]);
-      context.moveTo(point[0], point[1] - size);
-      context.lineTo(point[0], point[1] + size);
-      context.strokeStyle = color;
-      context.lineWidth = 2;
-      context.stroke();
-    };
-
-    const drawText = (context, text, point, color) => {
-      context.font = 'bold 13px Arial';
-      context.lineWidth = 4;
-      context.strokeStyle = '#000';
-      context.strokeText(text, point[0], point[1]);
-      context.fillStyle = color;
-      context.fillText(text, point[0], point[1]);
-    };
+    const {drawPolyline, drawCross, drawText} = window.CameraOverlayDrawing;
 
     const drawDetection = (context, detection) => {
-      drawPolyline(context, detection.box_px, '#55ff88', 2.5, true);
+      const boxColor = detection.in_zone ? '#ff9f43' : '#55ff88';
+      drawPolyline(context, detection.box_px, boxColor, 2.5, true);
+      if (detection.in_zone) drawText(context, '영역 안', [detection.center_px[0]+10, detection.center_px[1]-25], boxColor);
       (detection.box_px || []).forEach((point, index) => {
         context.beginPath();
         context.arc(point[0], point[1], 3, 0, Math.PI * 2);
-        context.fillStyle = '#55ff88';
+        context.fillStyle = boxColor;
         context.fill();
-        drawText(context, String(index + 1), [point[0] + 5, point[1] - 5], '#55ff88');
+        drawText(context, String(index + 1), [point[0] + 5, point[1] - 5], boxColor);
       });
 
       drawPolyline(context, detection.grasp_axis_px || detection.block_axis_px, '#ffff00', 3);

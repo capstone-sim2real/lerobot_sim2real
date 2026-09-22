@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_co
 from control.grasp import biased_grasp_xy, grasp_candidate_points
 from control.ik import tangent_square_grasp_yaw_deg
 from perception.detector import workspace_sector_points_mm
+from perception.zone import point_in_zone
 from perception import (
     BlockDetection,
     PlaneCalibration,
@@ -147,6 +149,7 @@ def detection_metadata(
 
     return {
         "color": detection.color,
+        "in_zone": bool(point_in_zone(centre, calibration)),
         "center_mm": list(centre),
         "center_px": [float(value) for value in centre_px],
         "box_mm": _point_list(box_mm),
@@ -237,6 +240,15 @@ class OverlayAnalyzer:
             is_rgb=False,
             collect_rejects=report_rejects,
         )
+        # A separate pass preserves outside colour slots while making already
+        # placed blocks visible. This affects display metadata only.
+        zone_detections, _ = detect_blocks_with_rejects(
+            frame, self.calibration,
+            replace(self.cfg.perception, max_per_color=self.cfg.agent.zone_scan_max_per_color),
+            is_rgb=False, collect_rejects=False, include_zone=True,
+        )
+        detections.extend(item for item in zone_detections
+                          if point_in_zone(item.center_mm, self.calibration))
         return {
             "camera": camera_name,
             "ready": True,

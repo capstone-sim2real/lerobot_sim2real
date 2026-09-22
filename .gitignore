@@ -55,3 +55,13 @@ logs/agent/
 
 # Timestamped calibration backups are local recovery artifacts.
 src/configs/calib/*.pre-*.json
+
+# Agent UI build dependencies (compiled browser assets are tracked).
+frontend/node_modules/
+frontend/.build/
+# Local composed demonstration datasets
+/datasets/agent/
+
+# Orin-only test environment and physical-trial evidence (kept on the host).
+/.venv-keyboard-test/
+/experiments/astra_cv_ik/

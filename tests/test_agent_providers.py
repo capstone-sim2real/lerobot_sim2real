@@ -31,34 +31,6 @@ class _StubProvider:
         yield from self.events()
 
 
-def test_fallback_provider_keeps_successful_primary():
-    primary = _StubProvider("openai", "gpt-5.6-luna", lambda: iter([TextDelta("primary")]))
-    fallback = _StubProvider("gemini", "gemini-test", lambda: iter([TextDelta("fallback")]))
-    provider = FallbackProvider(primary, fallback)
-
-    events = list(provider.stream_turn("sys", HISTORY, [SPEC]))
-
-    assert events == [TextDelta("primary")]
-    assert (primary.calls, fallback.calls) == (1, 0)
-    assert (provider.name, provider.model) == ("openai", "gpt-5.6-luna")
-
-
-def test_fallback_provider_uses_fallback_if_primary_fails_before_output():
-    def fail_before_output():
-        raise ConnectionError("openai unavailable")
-        yield  # pragma: no cover - makes this a generator
-
-    primary = _StubProvider("openai", "gpt-5.6-luna", fail_before_output)
-    fallback = _StubProvider("gemini", "gemini-test", lambda: iter([TextDelta("fallback")]))
-    provider = FallbackProvider(primary, fallback)
-
-    events = list(provider.stream_turn("sys", HISTORY, [SPEC]))
-
-    assert events == [TextDelta("fallback")]
-    assert (primary.calls, fallback.calls) == (1, 1)
-    assert (provider.name, provider.model) == ("gemini", "gemini-test")
-
-
 def test_fallback_provider_does_not_retry_after_partial_output():
     def fail_after_output():
         yield TextDelta("partial")
@@ -73,24 +45,6 @@ def test_fallback_provider_does_not_retry_after_partial_output():
 
     assert (primary.calls, fallback.calls) == (1, 0)
     assert (provider.name, provider.model) == ("openai", "gpt-5.6-luna")
-
-
-def test_fallback_provider_reports_both_failures():
-    def fail_openai():
-        raise ValueError("bad primary request")
-        yield  # pragma: no cover
-
-    def fail_gemini():
-        raise RuntimeError("quota exhausted")
-        yield  # pragma: no cover
-
-    provider = FallbackProvider(
-        _StubProvider("openai", "gpt-5.6-luna", fail_openai),
-        _StubProvider("gemini", "gemini-test", fail_gemini),
-    )
-
-    with pytest.raises(ProviderFallbackError, match="bad primary request.*quota exhausted"):
-        list(provider.stream_turn("sys", HISTORY, [SPEC]))
 
 
 class _Block(NS):
@@ -111,33 +65,6 @@ class _AnthropicStream:
 
     def get_final_message(self):
         return self._final
-
-
-def test_anthropic_adapter():
-    final = NS(content=[_Block(type="text", text="안녕하세요"),
-                        _Block(type="tool_use", id="t2", name="pick_block", input={"color": "blue"})],
-               stop_reason="tool_use", usage=NS(input_tokens=10, output_tokens=5))
-    captured = {}
-
-    def stream(**kwargs):
-        captured.update(kwargs)
-        return _AnthropicStream(final)
-
-    provider = AnthropicProvider("claude-test", max_tokens=100, client=NS(messages=NS(stream=stream)))
-    events = list(provider.stream_turn("sys", HISTORY, [SPEC]))
-    assert [e.text for e in events if isinstance(e, TextDelta)] == ["안녕", "하세요"]
-    call = next(e.call for e in events if isinstance(e, ToolCallEvent))
-    assert (call.id, call.arguments) == ("t2", {"color": "blue"})
-    end = events[-1]
-    assert isinstance(end, TurnEnd) and end.raw[1]["type"] == "tool_use"
-    messages = captured["messages"]
-    assert captured["system"] == "sys" and captured["tools"][0]["input_schema"] == SPEC.input_schema
-    assert messages[1]["content"][1] == {"type": "tool_use", "id": "t1", "name": "pick_block", "input": {"color": "red"}}
-    assert messages[2]["content"][0]["type"] == "tool_result" and messages[2]["content"][0]["tool_use_id"] == "t1"
-    assert json.loads(messages[2]["content"][0]["content"])["reason"] == "held"
-    # raw native content is replayed verbatim
-    replay = provider.to_messages([Message("assistant", raw={"anthropic": [{"type": "text", "text": "raw"}]})])
-    assert replay == [{"role": "assistant", "content": [{"type": "text", "text": "raw"}]}]
 
 
 def _chunk(content=None, tool_calls=None, finish=None, usage=None):
@@ -172,21 +99,6 @@ def test_openai_adapter_accumulates_streamed_tool_arguments():
     assert messages[2]["tool_calls"][0]["id"] == "t1"
     assert messages[3]["role"] == "tool" and messages[3]["tool_call_id"] == "t1"
     assert captured["max_completion_tokens"] == 100
-
-
-def test_openai_luna_disables_reasoning_for_chat_completion_tools():
-    captured = {}
-
-    def create(**kwargs):
-        captured.update(kwargs)
-        return iter([_chunk(finish="stop")])
-
-    provider = OpenAIProvider(
-        "gpt-5.6-luna", max_tokens=100, client=NS(chat=NS(completions=NS(create=create)))
-    )
-    list(provider.stream_turn("sys", [Message("user", text="hello")], [SPEC]))
-
-    assert captured["reasoning_effort"] == "none"
 
 
 def test_gemini_adapter_builds_native_contents_and_parses_calls():

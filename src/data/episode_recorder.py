@@ -180,6 +180,11 @@ class EpisodeRecorder:
         return self._open
 
     @property
+    def abort_reason(self) -> str | None:
+        """Latched recording quality failure, for orchestration to stop a take."""
+        return self._abort_reason
+
+    @property
     def frames(self) -> int:
         return self._frames
 

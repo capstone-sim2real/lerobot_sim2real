@@ -809,6 +809,16 @@ class RelativeMotionConfig:
     max_pick_offset_mm: float = 25.0
     # One jog vector may not exceed this; larger requests are refused, not clamped.
     max_jog_mm: float = 50.0
+    # Continuous keyboard jog defaults; nominal speed, not measured hardware speed.
+    keyboard_speed_mm_s: float = 20.0
+    keyboard_segment_s: float = 0.1
+    keyboard_tick_hz: float = 30.0
+    keyboard_heartbeat_s: float = 0.1
+    keyboard_timeout_s: float = 0.4
+    keyboard_joint_speed_deg_s: float = 15.0
+    keyboard_acceleration_mm_s2: float = 100.0
+    keyboard_jerk_mm_s3: float = 1000.0
+    keyboard_release_timeout_s: float = 1.0
     # Assumed, not measured: gripper-frame z window a jog may target.
     jog_min_z_mm: float = 40.0
     jog_max_z_mm: float = 160.0
@@ -907,10 +917,84 @@ class BoardGridConfig:
 
 
 @dataclass
+class AgentCameraViewConfig:
+    """Operator display timing defaults; not physical control limits."""
+
+    stale_s: float = 3.0
+    poll_s: float = 0.5
+    retry_s: float = 5.0
+    connect_timeout_s: float = 3.0
+    read_timeout_s: float = 15.0
+
+
+@dataclass
+class CalibrationClearanceConfig:
+    """Experimental conservative envelopes, assumed until physically measured.
+
+    Shared by calibration experiments and calibrated primitives. URDF jaw
+    mesh bounds are conservative; they are not a measured full-arm collision model.
+    """
+    # Experimental hypothesis: neutral-frame bias rotates with retry jaw yaw.
+    wrist_roll_min_deg: float = -65.0
+    wrist_probe_target_deg: float = 90.0
+    wrist_probe_close_gripper: bool = True
+    hover_correction_max_deg: float = 3.0  # bounded experimental feedforward
+    # Assumed bounded trial offsets; learn from recorded outcomes, not success claims.
+    trial_offsets_mm: list[list[float]] = field(default_factory=lambda: [[5.0,0.0],[10.0,0.0],[0.0,5.0],[-5.0,0.0],[-10.0,0.0],[0.0,-5.0],[0.0,10.0],[0.0,-10.0],[15.0,0.0],[15.0,-10.0]])
+    trial_yaw_offsets_deg: list[float] = field(default_factory=lambda: [-15.0,15.0])
+    rotate_retry_bias: bool = True
+    red_separation_kernel_px: int = 31
+    jaw_angle_step_deg: float = 5.0
+    # Encoder span is 2490-1867 ticks at 4095 ticks/rev on this rig.
+    # Closed-angle origin is a provisional URDF/side-view alignment, not a
+    # measured camera calibration. Retain angle and spatial uncertainty.
+    jaw_mount_yaw_deg: float = 90.0  # Provisional rig visual alignment, matching default.yaml.
+    jaw_closed_angle_deg: float = -10.0
+    jaw_span_deg: float = 54.76923076923077
+    jaw_angle_uncertainty_deg: float = 5.0
+    jaw_open_positions: list[float] = field(default_factory=lambda: [95.0,85.0,75.0])
+    tool_radius_mm: float = 60.0
+    block_radius_mm: float = 29.0
+    uncertainty_mm: float = 15.0
+    obstacle_height_mm: float = 20.0  # user-confirmed flat block height; reobserve after tipping
+    expected_colors: list[str] = field(default_factory=lambda: ["red", "green", "blue", "yellow", "wood"])
+
+
+@dataclass
+class PrimitiveConfig:
+    """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
+    calibrated_pick: bool = True  # Same calibrated primitive path as default.yaml.
+    target_max_age_s: float = 120.0
+    approach_clearance_mm: float = 60.0
+    lateral_clearance_mm: float = 40.0
+    alignment_tolerance_mm: float = 25.0
+    arrival_error_mm: float = 15.0
+    cartesian_step_mm: float = 10.0
+    contact_step_mm: float = 2.0
+    contact_max_descent_mm: float = 80.0
+    contact_timeout_s: float = 15.0
+    contact_backoff_mm: float = 2.0
+    wrist_roll_limit_deg: float = 90.0
+    image_max_width: int = 960
+    image_jpeg_quality: int = 80
+
+
+@dataclass
+class AgentCollectionConfig:
+    """Assumed recording quality gates; validate timing on hardware."""
+    root: str = "datasets/agent"
+    max_tick_gap_s: float = 0.1
+    max_mean_period_error: float = 0.1
+    idle_poll_s: float = 0.005
+
+
+@dataclass
 class AgentConfig:
     """LLM tool-calling agent (so101-agent). Unused by so101-run/so101-collect."""
 
     # anthropic | openai | gemini | fake
+    primitives: PrimitiveConfig = field(default_factory=PrimitiveConfig)
+    collection: AgentCollectionConfig = field(default_factory=AgentCollectionConfig)
     provider: str = "openai"
     # Used only for the configured default provider. An explicit --provider
     # selects exactly that provider so rehearsals and diagnostics stay clear.
@@ -925,18 +1009,19 @@ class AgentConfig:
         }
     )
     max_tokens: int = 4096
-    # LLM round trips (each may carry several tool calls) per user message
-    max_tool_turns: int = 12
+    # LLM round trips, one primitive call per response, per user message
+    max_tool_turns: int = 50
     # oldest turns are dropped from the context beyond this many messages
     max_history_messages: int = 60
-    # run_task1/2 can take minutes; a skill that runs longer is reported as a fault
+    # Includes local dataset/video finalization; longer calls are reported as faults
     tool_timeout_s: float = 900.0
-    system_prompt_path: str = "src/configs/agent_system_prompt.md"
+    system_prompt_path: str = "src/configs/agent_primitives_prompt.md"
     host: str = "0.0.0.0"
     port: int = 8099
     # the browser loads the MJPEG straight from so101-camera
     camera_base_url: str = "http://127.0.0.1:8090"
     camera_name: str = "shoulder"
+    camera_view: AgentCameraViewConfig = field(default_factory=AgentCameraViewConfig)
     # after the arm moves, wait up to this long for a frame captured later
     camera_fresh_timeout_s: float = 3.0
     lock_path: str = "var/so101/robot.lock"
@@ -948,13 +1033,7 @@ class AgentConfig:
     place_clear_radius_mm: float = 55.0
     # table placements must lie at least this far outside the zone polygon
     table_zone_margin_mm: float = 30.0
-    enable_task3_tool: bool = False
     transcript_dir: str = "logs/agent"
-    # After STOP (or any robot fault): drop whatever is held, home, close the
-    # jaws. True runs that automatically; false leaves it to the [home]
-    # button. Automatic by default -- this arena's arm/blocks are too small
-    # to hurt anyone and the zone is not within students' reach.
-    stop_auto_home: bool = True
     # operator SSE may be gone this long before the lease is dropped
     lease_grace_s: float = 15.0
     # an IDLE operator with no input for this long loses the lease
@@ -965,6 +1044,7 @@ class AgentConfig:
     table_regions: TableRegionsConfig = field(default_factory=TableRegionsConfig)
     board_grid: BoardGridConfig = field(default_factory=BoardGridConfig)
     place_correction: PlaceCorrectionConfig = field(default_factory=PlaceCorrectionConfig)
+    calibration_clearance: CalibrationClearanceConfig = field(default_factory=CalibrationClearanceConfig)
 
 
 @dataclass
@@ -1246,6 +1326,25 @@ def normalise_place_name(name: str) -> str:
 def validate_agent(cfg: AppConfig) -> None:
     """Agent settings. Never touches the filesystem: every CLI loads this."""
     agent = cfg.agent
+    if not agent.collection.root.strip():
+        raise ValueError("agent.collection.root must be set")
+    for name in ("max_tick_gap_s", "max_mean_period_error", "idle_poll_s"):
+        value = getattr(agent.collection, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.collection.{name} must be finite and positive")
+    primitive = agent.primitives
+    for name in ("target_max_age_s", "approach_clearance_mm", "lateral_clearance_mm",
+                 "alignment_tolerance_mm", "arrival_error_mm", "cartesian_step_mm",
+                 "contact_step_mm", "contact_max_descent_mm", "contact_timeout_s",
+                 "contact_backoff_mm", "wrist_roll_limit_deg"):
+        value = getattr(primitive, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.primitives.{name} must be finite and positive")
+    if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
+        raise ValueError("primitive approach clearance must cover lateral clearance")
+    if (type(primitive.image_jpeg_quality) is not int or type(primitive.image_max_width) is not int
+            or not 1 <= primitive.image_jpeg_quality <= 100 or primitive.image_max_width <= 0):
+        raise ValueError("invalid primitive image settings")
     if agent.provider not in AGENT_PROVIDERS:
         raise ValueError(f"agent.provider must be one of {AGENT_PROVIDERS}")
     if not str(agent.models.get(agent.provider, "")).strip():
@@ -1314,6 +1413,15 @@ def validate_agent(cfg: AppConfig) -> None:
             raise ValueError(f"agent.relative.{name} must be positive")
     if not rel.jog_min_z_mm < rel.jog_max_z_mm:
         raise ValueError("agent.relative.jog_min_z_mm must be below jog_max_z_mm")
+    for name in ("keyboard_speed_mm_s", "keyboard_segment_s", "keyboard_tick_hz",
+                 "keyboard_heartbeat_s", "keyboard_timeout_s", "keyboard_joint_speed_deg_s",
+                 "keyboard_acceleration_mm_s2", "keyboard_jerk_mm_s3", "keyboard_release_timeout_s"):
+        value = getattr(cfg.agent.relative, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.relative.{name} must be finite and positive")
+    if cfg.agent.relative.keyboard_timeout_s <= 2 * cfg.agent.relative.keyboard_heartbeat_s:
+        raise ValueError("keyboard timeout must exceed two heartbeat periods")
+
 
     regions = agent.table_regions
     if not regions.columns_deg or not regions.rows_fraction:

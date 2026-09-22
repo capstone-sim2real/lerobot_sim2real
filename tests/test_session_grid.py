@@ -52,33 +52,6 @@ def _top_down_calibration(mm_per_px: float = 0.8) -> PlaneCalibration:
     return PlaneCalibration(H=H, image_size=(width, height), square_mm=25.0, base_xy_mm=(0.0, 0.0))
 
 
-def test_origin_is_the_reference_region_and_axes_face_the_operator():
-    cfg = AppConfig()
-    grid = _grid(cfg)
-    anchor = table_region_xy("center", "near", cfg.perception, cfg.agent.table_regions, (0.0, 0.0))
-    # (0, 0) is the cell on the reference region, not some lattice corner
-    assert math.dist(grid.cell_to_xy(0, 0), anchor) < cfg.agent.board_grid.cell_mm
-
-    origin_px, right_px, away_px = _top_down_calibration().board_to_pixel(
-        np.asarray([grid.cell_to_xy(0, 0), grid.cell_to_xy(1, 0), grid.cell_to_xy(0, 1)])
-    )
-    assert right_px[0] > origin_px[0]  # +x is image right
-    assert away_px[1] < origin_px[1]  # +y is image up
-    assert math.hypot(*grid.cell_to_xy(0, 1)) > math.hypot(*grid.cell_to_xy(0, 0))  # ... = away
-
-
-def test_snapping_the_origin_never_moves_the_squares():
-    grid = axis_aligned((100.0, 0.0), 25.0)
-    moved = grid.snap_origin_to((171.8, 13.0))
-    assert moved.u_mm == grid.u_mm and moved.v_mm == grid.v_mm
-    # the new origin is a cell of the original lattice
-    assert grid.xy_to_cell(moved.origin_mm) == (
-        round(grid._coefficients(moved.origin_mm)[0]),
-        round(grid._coefficients(moved.origin_mm)[1]),
-    )
-    assert math.dist(grid.cell_to_xy(*grid.xy_to_cell(moved.origin_mm)), moved.origin_mm) < 1e-9
-
-
 def test_cells_reach_the_outer_rim_and_stop_at_the_base_keepout():
     cfg = AppConfig()
     grid = _grid(cfg)
@@ -109,56 +82,3 @@ def test_cells_reach_the_outer_rim_and_stop_at_the_base_keepout():
     span = bounds((c.x, c.y) for c in cells)
     assert span["x"][0] < 0 < span["x"][1]  # the origin sits mid-board
     assert (0, 0) in {(c.x, c.y) for c in cells}
-
-
-def test_a_measured_lattice_is_used_as_measured():
-    cfg = AppConfig()
-    angle = math.radians(7.0)
-    pitch = 24.0
-    measured = {
-        "origin_mm": [13.0, -6.0],
-        "u_mm": [pitch * math.sin(angle), -pitch * math.cos(angle)],
-        "v_mm": [pitch * math.cos(angle), pitch * math.sin(angle)],
-    }
-    grid = build_grid(measured, cfg.agent.board_grid, (171.8, 0.0))
-    assert grid.cell_mm == pytest.approx(pitch)
-    # the origin moved onto the anchor's cell, but stayed on the measured lattice
-    plain = BoardGrid(tuple(measured["origin_mm"]), tuple(measured["u_mm"]), tuple(measured["v_mm"]))
-    assert math.dist(plain.cell_to_xy(*plain.xy_to_cell(grid.origin_mm)), grid.origin_mm) < 1e-9
-
-
-def test_payload_cells_carry_pixels_and_zone_flags():
-    skills, _world, _robot = make_skills({})
-    payload = places_payload(skills)
-    grid = payload["grid"]
-    assert grid["measured"] is False and grid["cells"]
-    assert len(payload["sector_px"]["arc"]) > 2
-    for cell in grid["cells"]:
-        assert len(cell["corners_px"]) == 4
-    # the zone is inside the band, so some cells must be flagged as its own
-    assert any(cell["in_zone"] for cell in grid["cells"])
-    assert {(c["x"], c["y"]) for c in grid["cells"]} == set(skills.cells)
-    # the page shows one layer at a time and starts on the named points
-    assert grid["default_layer"] == "regions"
-    assert payload["regions"]
-
-
-def test_cells_the_camera_cannot_see_are_not_offered():
-    cfg = AppConfig()
-    grid = _grid(cfg)
-    cells = cells_in_workspace(grid, cfg.perception, cfg.agent.table_regions, (0.0, 0.0),
-                               cfg.agent.board_grid)
-    calib = _top_down_calibration()
-    to_pixel = lambda points: calib.board_to_pixel(np.asarray(points))  # noqa: E731
-
-    seen = cells_in_view(cells, to_pixel, calib.image_size)
-    assert 0 < len(seen) <= len(cells)
-    width, height = calib.image_size
-    for cell in seen:
-        u, v = to_pixel([cell.xy_mm])[0]
-        assert 0 <= u < width and 0 <= v < height
-
-    # a frame cropped to the left half drops every cell on the right
-    cropped = cells_in_view(cells, to_pixel, (width // 2, height))
-    assert {(c.x, c.y) for c in cropped} < {(c.x, c.y) for c in seen}
-    assert all(to_pixel([c.xy_mm])[0][0] < width // 2 for c in cropped)

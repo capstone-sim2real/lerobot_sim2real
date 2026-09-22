@@ -5,6 +5,7 @@ Reads ANTHROPIC_API_KEY from the environment.
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any, Iterator, Sequence
 
@@ -32,7 +33,10 @@ class AnthropicProvider:
                     {
                         "type": "tool_result",
                         "tool_use_id": result.call_id,
-                        "content": json.dumps(result.content, ensure_ascii=False),
+                        "content": ([{"type": "text", "text": json.dumps(result.content, ensure_ascii=False)}] + [
+                            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                             "data": base64.b64encode(im.jpeg).decode("ascii")}} for im in result.images
+                        ]) if result.images else json.dumps(result.content, ensure_ascii=False),
                         "is_error": result.is_error,
                     }
                     for result in message.tool_results

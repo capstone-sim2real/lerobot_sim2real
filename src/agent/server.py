@@ -27,11 +27,11 @@ import asyncio
 import collections
 import json
 import logging
-import math
 import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -145,7 +145,7 @@ class EventHub:
 # ── wiring ───────────────────────────────────────────────────────────
 
 
-def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool):
+def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool, skills_builder=None):
     """Runs on the robot thread: open the session (and IK) there."""
 
     def factory():
@@ -179,7 +179,8 @@ def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool):
         else:
             session = ArmSession.open(cfg, prebuild_ik=True, **kwargs)
         check_jog_window(session.cfg, session.grasp_z_mm)
-        return Skills(session)
+        from session.primitives import PrimitiveSkills
+        return (skills_builder or PrimitiveSkills)(session)
 
     return factory
 
@@ -196,6 +197,8 @@ def check_jog_window(cfg: AppConfig, grasp_z_mm: float) -> None:
 def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     from fastapi import FastAPI, Request
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+
+    from agent.camera_proxy import camera_router
 
     state: dict[str, Any] = {}
 
@@ -221,24 +224,13 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
 
     app = FastAPI(title="SO-101 Agent", lifespan=lifespan)
 
+    app.include_router(camera_router(cfg.agent.camera_base_url, cfg.agent.camera_name, settings=cfg.agent.camera_view))
+
     def svc():
         return state["service"]
 
     def token_of(request: Request) -> str | None:
         return request.headers.get("x-operator-token") or request.query_params.get("token")
-
-    def reply(result: tuple[int, dict]) -> JSONResponse:
-        code, body = result
-        return JSONResponse(body, status_code=code)
-
-    def current_control_ui(request: Request) -> bool:
-        return request.headers.get("x-so101-control-version") == CONTROL_UI_VERSION
-
-    def stale_control_ui() -> JSONResponse:
-        return JSONResponse(
-            {"error": "조작 화면이 이전 버전입니다. Ctrl+Shift+R로 새로고침해 주세요."},
-            status_code=428,
-        )
 
     @app.get("/")
     async def index():
@@ -247,8 +239,11 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         # reaches the robot API. Give each asset a content-changing URL and
         # forbid caching so an asset-only edit appears on the next reload.
         html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__SHADCN_CSS_VERSION__", str((WEB_DIR / "shadcn.css").stat().st_mtime_ns))
         html = html.replace("__APP_JS_VERSION__", str((WEB_DIR / "app.js").stat().st_mtime_ns))
         html = html.replace("__APP_CSS_VERSION__", str((WEB_DIR / "app.css").stat().st_mtime_ns))
+        html = html.replace("__OVERLAY_JS_VERSION__", str((WEB_DIR / "camera-overlay.js").stat().st_mtime_ns))
+        html = html.replace("__RENDERER_VERSION__", str((WEB_DIR.parent.parent / "camera" / "overlay_renderer.js").stat().st_mtime_ns))
         return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
 
     @app.get("/app.js")
@@ -259,6 +254,10 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             headers={"Cache-Control": "no-store, max-age=0"},
         )
 
+    @app.get("/shadcn.css")
+    async def shadcn_css():
+        return FileResponse(WEB_DIR / "shadcn.css", media_type="text/css", headers={"Cache-Control":"no-store"})
+
     @app.get("/app.css")
     async def app_css():
         return FileResponse(
@@ -267,19 +266,57 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             headers={"Cache-Control": "no-store, max-age=0"},
         )
 
+    @app.get("/camera-overlay.js")
+    async def camera_overlay_js():
+        return FileResponse(WEB_DIR / "camera-overlay.js", media_type="application/javascript",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/overlay-renderer.js")
+    async def overlay_renderer_js():
+        return FileResponse(WEB_DIR.parent.parent / "camera" / "overlay_renderer.js",
+                            media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
     @app.get("/api/config")
     async def ui_config():
         agent = cfg.agent
+        from perception.homography import PlaneCalibration
+        from session.pixel_target import pixel_preview_config
+        try:
+            preview = pixel_preview_config(cfg, PlaneCalibration.load(cfg.perception.calibration_path))
+        except (ValueError, OSError):
+            preview = None
         return {
+            "pixel_preview": preview,
+            "keyboard_jog": {"heartbeat_s": agent.relative.keyboard_heartbeat_s,
+                             "speed_mm_s": agent.relative.keyboard_speed_mm_s},
             "camera_base_url": agent.camera_base_url,
+            "camera_view": asdict(agent.camera_view),
             "mjpeg_path": f"/video/{agent.camera_name}.mjpg",
             "max_jog_mm": agent.relative.max_jog_mm,
             "default_step_mm": agent.relative.default_step_mm,
             "small_step_mm": agent.relative.small_step_mm,
             "places": svc().places,
+            "manual_tools": sorted(svc().MANUAL_TOOLS),
             "provider": svc().provider.name,
             "model": svc().provider.model,
         }
+
+    @app.get("/api/pixel-target")
+    async def pixel_target(u: int, v: int, width: int, height: int):
+        from perception.homography import PlaneCalibration
+        from session.pixel_target import calibration_id, resolve_pixel
+        try:
+            calib = PlaneCalibration.load(cfg.perception.calibration_path)
+            if (width, height) != tuple(calib.image_size):
+                raise ValueError("영상 해상도와 보정 해상도가 다릅니다.")
+            target = resolve_pixel(cfg, calib, u, v, calibration_id(calib))
+            return {"target": target, "note": "블록 1개 윗면 기준 · 실행 시 IK 재검사"}
+        except (ValueError, OSError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.get("/api/telemetry")
+    async def telemetry():
+        return svc().telemetry()
 
     @app.get("/api/health")
     async def health():
@@ -287,65 +324,8 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
         body["camera_ok"] = await asyncio.to_thread(camera_ok, cfg)
         return body
 
-    @app.post("/api/lease")
-    async def lease(request: Request):
-        token = svc().acquire_lease(token_of(request))
-        return {"token": token}
-
-    @app.post("/api/lease/release")
-    async def lease_release(request: Request):
-        return {"released": svc().gate.release_lease(token_of(request) or "")}
-
-    @app.post("/api/lease/force-release")
-    async def lease_force_release(request: Request):
-        host = request.client.host if request.client else ""
-        if host not in ("127.0.0.1", "::1", "localhost"):
-            return JSONResponse({"error": "local only"}, status_code=403)
-        svc().gate.force_release()
-        return {"released": True}
-
-    @app.post("/api/chat")
-    async def chat(request: Request):
-        body = await request.json()
-        return reply(svc().chat(token_of(request), str(body.get("text", ""))))
-
-    @app.post("/api/jog")
-    async def jog(request: Request):
-        body = await request.json()
-        try:
-            vector = [float(body.get(k, 0.0)) for k in ("forward_mm", "left_mm", "up_mm")]
-        except (TypeError, ValueError):
-            return JSONResponse({"error": "numbers required"}, status_code=400)
-        if not all(math.isfinite(v) for v in vector):
-            return JSONResponse({"error": "numbers required"}, status_code=400)
-        if not current_control_ui(request):
-            return stale_control_ui()
-        return reply(svc().jog(token_of(request), *vector))
-
-    @app.post("/api/manual")
-    async def manual(request: Request):
-        body = await request.json()
-        name = body.get("tool")
-        if not isinstance(name, str):
-            return JSONResponse({"error": "'tool' is required"}, status_code=400)
-        arguments = body.get("arguments") or {}
-        if not isinstance(arguments, dict):
-            return JSONResponse({"error": "'arguments' must be an object"}, status_code=400)
-        if not current_control_ui(request):
-            return stale_control_ui()
-        return reply(svc().direct(token_of(request), name, arguments))
-
-    @app.post("/api/stop")
-    async def stop():
-        return svc().stop()
-
-    @app.post("/api/home")
-    async def home(request: Request):
-        return reply(svc().home(token_of(request)))
-
-    @app.post("/api/reset")
-    async def reset(request: Request):
-        return reply(svc().reset_chat(token_of(request)))
+    from agent.manual_api import register_manual_api
+    register_manual_api(app, svc, control_ui_version=CONTROL_UI_VERSION)
 
     @app.get("/api/events")
     async def events(request: Request):

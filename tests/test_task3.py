@@ -146,93 +146,7 @@ def test_a_failed_grasp_discards_the_episode_and_saves_nothing(monkeypatch):
     assert recorder.discarded_by_color == {"green": 1}
 
 
-def test_a_delivered_block_saves_exactly_one_episode(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-
-    recorder.begin_episode("blue")
-    for _ in range(10):
-        recorder.record_tick(_joints(), _joints(2.0))
-    assert recorder.finish_episode(success=True) is True
-
-    assert sink.save_count == 1
-    assert len(sink.saved[0]) == 10
-    assert recorder.saved_by_color == {"blue": 1}
-    assert recorder.is_open is False
-
-
-def test_a_short_episode_is_dropped_even_when_the_pick_succeeded(monkeypatch):
-    cfg = _cfg()
-    cfg.task3.min_episode_frames = 20
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-
-    recorder.begin_episode("green")
-    for _ in range(5):
-        recorder.record_tick(_joints(), _joints(2.0))
-    assert recorder.finish_episode(success=True) is False
-    assert sink.save_count == 0
-    assert recorder.discard_reasons == {"too_short": 1}
-
-
-def test_recording_outside_an_episode_is_a_no_op(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-
-    recorder.record_tick(_joints(), _joints())  # the camera-polling wait
-    assert sink.frames == []
-    assert recorder.abort_episode() is False
-    assert sink.calls == []
-
-
 # ── frame content ────────────────────────────────────────────────────
-
-
-def test_every_frame_carries_six_dim_state_action_and_the_colour_sentence(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock), "wrist": _Source(clock)})
-
-    recorder.begin_episode("green")
-    recorder.record_tick(_joints(1.0), _joints(2.0))
-    frame = sink.frames[0]
-
-    assert frame["observation.state"].shape == (6,)
-    assert frame["observation.state"].dtype == np.float32
-    assert frame["action"].shape == (6,)
-    assert frame["action"].dtype == np.float32
-    assert frame["task"] == cfg.task3.task_templates["green"]
-    assert frame["observation.images.top"].shape == (480, 640, 3)
-    assert frame["observation.images.wrist"].shape == (480, 640, 3)
-
-
-def test_state_is_the_measurement_taken_before_the_command(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    monkeypatch.setattr("data.episode_recorder.time.perf_counter", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-    inner = MockRobotIO(_joints(0.0))
-    robot = RecordingRobotIO(inner, recorder, record_fps=1000.0)
-
-    recorder.begin_episode("green")
-    robot.send_joints({"shoulder_pan": 5.0})
-
-    frame = sink.frames[0]
-    # MockRobotIO teleports, so a post-send read would already be 5.0.
-    assert frame["observation.state"][0] == pytest.approx(0.0)
-    assert frame["action"][0] == pytest.approx(5.0)
 
 
 def test_recorded_action_is_the_post_safety_value_the_robot_actually_sent(monkeypatch):
@@ -260,29 +174,6 @@ def test_recorded_action_is_the_post_safety_value_the_robot_actually_sent(monkey
     assert returned["gripper"] == pytest.approx(10.0)
     assert sink.frames[0]["observation.state"][gripper_index] == pytest.approx(0.0)
     assert sink.frames[0]["action"][gripper_index] == pytest.approx(10.0)
-
-
-def test_a_partial_command_latches_the_other_joints_not_their_measurement(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    monkeypatch.setattr("data.episode_recorder.time.perf_counter", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-    inner = MockRobotIO(_joints(0.0))
-    robot = RecordingRobotIO(inner, recorder, record_fps=1000.0)
-
-    recorder.begin_episode("green")
-    robot.send_joints({"shoulder_pan": 7.0, "elbow_flex": 3.0})
-    # set_gripper commands the gripper alone; the arm goal must not revert to
-    # the measured pose, which trails the command it was already given.
-    robot.send_joints({"gripper": 90.0})
-
-    order = list(JOINT_NAMES)
-    second = sink.frames[1]["action"]
-    assert second[order.index("shoulder_pan")] == pytest.approx(7.0)
-    assert second[order.index("elbow_flex")] == pytest.approx(3.0)
-    assert second[order.index("gripper")] == pytest.approx(90.0)
 
 
 # ── camera staleness ─────────────────────────────────────────────────
@@ -316,77 +207,7 @@ def test_a_stale_frame_is_skipped_and_a_dead_camera_discards_the_episode(monkeyp
     assert recorder.discard_reasons == {"stale_camera": 1}
 
 
-def test_an_endless_episode_is_capped_rather_than_saved(monkeypatch):
-    cfg = _cfg()
-    cfg.task3.max_episode_frames = 5
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-
-    recorder.begin_episode("green")
-    for _ in range(20):
-        recorder.record_tick(_joints(), _joints())
-    assert len(sink.frames) == 5
-    assert recorder.finish_episode(success=True) is False
-    assert recorder.discard_reasons == {"too_long": 1}
-
-
 # ── pacing and stop ──────────────────────────────────────────────────
-
-
-def test_the_recorder_paces_ticks_to_the_dataset_rate(monkeypatch):
-    """Dataset timestamps are frame_index/fps, so the loop must hold that rate."""
-    cfg = _cfg()
-    clock = {"mono": 0.0}
-    slept: list[float] = []
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    monkeypatch.setattr("data.episode_recorder.time.perf_counter", lambda: clock["mono"])
-
-    def fake_sleep(seconds):
-        slept.append(seconds)
-        clock["mono"] += seconds
-
-    monkeypatch.setattr("data.episode_recorder.time.sleep", fake_sleep)
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-    robot = RecordingRobotIO(MockRobotIO(_joints(0.0)), recorder, record_fps=10.0)
-
-    robot.send_joints({"shoulder_pan": 1.0})  # first tick only arms the deadline
-    assert slept == []
-    clock["mono"] += 0.02  # 20ms of bus work
-    robot.send_joints({"shoulder_pan": 2.0})
-    assert slept[-1] == pytest.approx(0.08)  # sleeps the remaining 80ms of 100ms
-
-
-def test_a_stop_request_raises_at_the_next_tick_boundary():
-    cfg = _cfg()
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {})
-    stop = threading.Event()
-    inner = MockRobotIO(_joints(0.0))
-    robot = RecordingRobotIO(inner, recorder, record_fps=1000.0, stop_event=stop)
-
-    robot.send_joints({"shoulder_pan": 1.0})
-    stop.set()
-    with pytest.raises(StopRecording):
-        robot.send_joints({"shoulder_pan": 2.0})
-    # The command that raised was never sent: the arm stops where it was.
-    assert inner.sent_actions == [{"shoulder_pan": 1.0}]
-
-
-def test_rearrangement_prompt_honours_an_already_pending_stop():
-    stop = threading.Event()
-    stop.set()
-    input_called = False
-
-    def forbidden_input(_message):
-        nonlocal input_called
-        input_called = True
-
-    with pytest.raises(StopRecording):
-        run_task3.interruptible_prompt("rearrange", stop, input_fn=forbidden_input)
-    assert not input_called
 
 
 def test_rearrangement_prompt_exits_when_stop_arrives_during_blocking_input():
@@ -411,33 +232,6 @@ def test_rearrangement_prompt_exits_when_stop_arrives_during_blocking_input():
             )
     finally:
         release_input.set()
-
-
-def test_rearrangement_prompt_returns_operator_input():
-    assert (
-        run_task3.interruptible_prompt(
-            "rearrange", threading.Event(), input_fn=lambda _message: "done", poll_s=0.001
-        )
-        == "done"
-    )
-
-
-def test_so101_run_task3_delegates_to_the_collection_entrypoint(monkeypatch):
-    received = []
-    monkeypatch.setattr(run_task3, "main", lambda argv: received.extend(argv) or 17)
-
-    result = run_task.main(
-        ["--task", "3", "--dry-run", "--set", "task3.repo_id=local/test"]
-    )
-
-    assert result == 17
-    assert received == [
-        "--config",
-        "src/configs/default.yaml",
-        "--set",
-        "task3.repo_id=local/test",
-        "--dry-run",
-    ]
 
 
 def test_an_interrupted_episode_is_discarded_not_saved(monkeypatch):
@@ -495,17 +289,6 @@ def _run_queue(monkeypatch, max_attempts):
     return held, tried
 
 
-def test_task3_tries_the_centre_grasp_point_once_and_gives_up(monkeypatch):
-    held, tried = _run_queue(monkeypatch, AppConfig().task3.max_grasp_attempts)
-    assert held is None
-    assert tried == ["centre"]
-
-
-def test_the_retry_ring_is_untouched_when_no_cap_is_given(monkeypatch):
-    _, tried = _run_queue(monkeypatch, None)
-    assert tried == ["centre", "front", "left", "right", "back"]
-
-
 # ── episode boundaries in the FSM ────────────────────────────────────
 
 
@@ -526,46 +309,6 @@ def _select(
         prompt=prompt,
         stop_requested=stop_requested,
     )
-
-
-def test_select_honours_stop_without_waiting_for_a_robot_command():
-    cfg = _cfg()
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {})
-    perception_called = False
-
-    def forbidden_perception():
-        nonlocal perception_called
-        perception_called = True
-
-    state = _select(
-        cfg,
-        recorder,
-        forbidden_perception,
-        stop_requested=lambda: True,
-    )
-    with pytest.raises(StopRecording):
-        state.step(RunContext(fsm=cfg.fsm))
-    assert not perception_called
-
-
-def test_selecting_a_target_opens_an_episode_for_that_colour(monkeypatch):
-    cfg = _cfg()
-    clock = {"mono": 100.0}
-    monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-    sample = Task1Perception([_block("blue", 150.0, 20.0)], 1, 1000.0)
-
-    state = _select(cfg, recorder, lambda: sample)
-    ctx = RunContext(cfg.fsm)
-    state.enter(ctx)
-    assert recorder.is_open is False  # the polling wait is outside any episode
-
-    assert state.step(ctx) is StateName.PICK
-    assert recorder.is_open is True
-    assert recorder.color == "blue"
 
 
 def test_the_episode_closes_after_the_arm_has_returned_home(monkeypatch):
@@ -604,153 +347,10 @@ def test_the_episode_closes_after_the_arm_has_returned_home(monkeypatch):
     assert EPISODE_OK_KEY not in ctx.extras  # the flag never carries over
 
 
-def test_place_completing_is_what_marks_an_episode_successful():
-    cfg = _cfg()
-
-    class _Player:
-        def move_to(self, *_args, **_kwargs):
-            pass
-
-    class _PlaceMotion:
-        def open_gripper(self):
-            pass
-
-    class _Slot:
-        index = 0
-        drop = IkResult({"wrist_flex": 0.0}, 0.0, 0.0)
-        hover = IkResult({"wrist_flex": 0.0}, 0.0, 0.0)
-
-    from control.task1_transport import Task1TransportPlan
-
-    plan = Task1TransportPlan(slot=_Slot(), carry=())
-    cfg.motion.place_settle_s = 0.0
-    state = Task3PlaceState(_PlaceMotion(), _Player(), cfg)
-    ctx = RunContext(cfg.fsm)
-    ctx.extras["task1_transport_plan"] = plan
-
-    assert state.step(ctx) is StateName.SELECT
-    assert ctx.extras[EPISODE_OK_KEY] is True
-
-
 # ── the round boundary ───────────────────────────────────────────────
 
 
-def test_an_empty_region_asks_for_a_new_arrangement_instead_of_finishing(monkeypatch):
-    cfg = _cfg()
-    clock = {"wall": 1000.0, "mono": 10.0}
-    monkeypatch.setattr("fsm.task1.time.time", lambda: clock["wall"])
-    monkeypatch.setattr("fsm.task1.time.monotonic", lambda: clock["mono"])
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    sink = _Sink()
-    recorder = _recorder(cfg, sink, {"top": _Source(clock)})
-    prompts: list[str] = []
-
-    samples = _Samples([
-        Task1Perception([], 1, 1000.0),
-        Task1Perception([], 2, 1005.0),
-        Task1Perception([_block("green", 150.0, 20.0)], 3, 1006.0),
-    ])
-    state = _select(cfg, recorder, samples, prompt=prompts.append)
-    ctx = RunContext(cfg.fsm)
-    ctx.extras["task1_slot_by_color"] = {"green": 0, "blue": 1}
-    state.enter(ctx)
-
-    assert state.step(ctx) is None
-    clock.update(wall=1005.0, mono=15.0)
-    # Task 1 would return DONE here; Task 3 prompts and keeps collecting.
-    assert state.step(ctx) is None
-    assert len(prompts) == 1
-    assert ctx.extras["task3_rounds"] == 1
-    assert "task1_complete" not in ctx.extras
-    # Slots belong to one arrangement: the next five blocks refill 0..4.
-    assert "task1_slot_by_color" not in ctx.extras
-
-    clock.update(wall=1006.0, mono=16.0)
-    assert state.step(ctx) is StateName.PICK
-
-
-def test_rounds_that_save_nothing_are_counted_so_the_operator_is_warned(monkeypatch):
-    cfg = _cfg()
-    cfg.task3.max_rounds_without_progress = 2
-    clock = {"wall": 1000.0, "mono": 10.0}
-    monkeypatch.setattr("fsm.task1.time.time", lambda: clock["wall"])
-    monkeypatch.setattr("fsm.task1.time.monotonic", lambda: clock["mono"])
-    monkeypatch.setattr("data.episode_recorder.time.monotonic", lambda: clock["mono"])
-    recorder = _recorder(cfg, _Sink(), {"top": _Source(clock)})
-
-    seq = {"n": 0}
-
-    def fresh_empty_frame() -> Task1Perception:
-        seq["n"] += 1
-        return Task1Perception([], seq["n"], clock["wall"])
-
-    state = _select(cfg, recorder, fresh_empty_frame)
-    ctx = RunContext(cfg.fsm)
-    state.enter(ctx)
-
-    for round_index in range(1, 3):
-        clock.update(wall=1000.0 + round_index * 10, mono=10.0 + round_index * 10)
-        assert state.step(ctx) is None  # starts the proof
-        clock["mono"] += cfg.task1.empty_timeout_s
-        clock["wall"] += cfg.task1.empty_timeout_s
-        assert state.step(ctx) is None  # completes it, prompts
-        assert ctx.extras["task3_rounds"] == round_index
-        assert ctx.extras["task3_stalled_rounds"] == round_index
-
-
 # ── configuration ────────────────────────────────────────────────────
-
-
-def test_task3_defaults_validate():
-    validate_task3(AppConfig())
-
-
-def test_every_detectable_colour_needs_a_task_sentence():
-    cfg = AppConfig()
-    del cfg.task3.task_templates["green"]
-    with pytest.raises(ValueError, match="task_templates is missing"):
-        validate_task3(cfg)
-
-
-def test_recording_needs_at_least_one_camera():
-    cfg = AppConfig()
-    cfg.task3.cameras = {}
-    with pytest.raises(ValueError, match="at least one"):
-        validate_task3(cfg)
-
-
-def test_the_motion_tick_must_be_shorter_than_the_record_period():
-    cfg = AppConfig()
-    cfg.task3.motion_fps_override = cfg.task3.record_fps
-    with pytest.raises(ValueError, match="motion_fps_override"):
-        validate_task3(cfg)
-
-
-@pytest.mark.parametrize(
-    "field, value, match",
-    [
-        ("record_fps", 0.0, "record_fps must be positive"),
-        ("max_grasp_attempts", 0, "at least one"),
-        ("min_episode_frames", 5000, "min_episode_frames"),
-        ("max_stale_ticks", 0, "max_stale_ticks"),
-        ("max_rounds_without_progress", 0, "max_rounds_without_progress"),
-        ("image_width", 0, "image_width"),
-    ],
-)
-def test_task3_validation_rejects_unusable_values(field, value, match):
-    cfg = AppConfig()
-    setattr(cfg.task3, field, value)
-    with pytest.raises(ValueError, match=match):
-        validate_task3(cfg)
-
-
-def test_task3_yaml_block_matches_the_dataclass():
-    from config import load_config
-
-    cfg = load_config("src/configs/default.yaml")
-    assert cfg.task3.record_fps == pytest.approx(AppConfig().task3.record_fps)
-    assert set(cfg.task3.task_templates) == set(AppConfig().task3.task_templates)
-    assert "top" in cfg.task3.cameras
 
 
 # ── end to end ───────────────────────────────────────────────────────

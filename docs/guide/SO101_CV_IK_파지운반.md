@@ -413,7 +413,7 @@ uv run --extra hardware --extra dev pytest -q
 | `tests/test_motion.py` | 그리퍼 로컬 오프셋, 후보 순서·라벨, 재시도 큐, 하강 도달/막힘 판정, `go_home` |
 | `tests/test_fsm.py` | FSM 예산·VERIFY 게이트, CV+IK PICK 어댑터 |
 | `tests/test_config_contracts.py`, `tests/test_perception_contracts.py`, `tests/test_selection_contracts.py` | 설정, homography, 검출, 타깃 선택 |
-| `tests/test_camera_contracts.py`, `tests/test_camera_http.py` | 카메라 서비스와 HTTP 계약 |
+| `tests/test_camera_contracts.py` | 카메라 서비스와 HTTP 계약 |
 | `tests/test_ik.py` | 실제 URDF 기반 IK (placo 필요, 없으면 스킵) |
 
 ---

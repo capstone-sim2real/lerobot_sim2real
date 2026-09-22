@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SO-101 로봇팔 에이전트</title>
+<script>
+(() => {
+  let mode;
+  try {mode=localStorage.getItem('so101-theme');} catch (_) {}
+  const dark=mode==='dark'||(mode!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark',dark);
+  document.documentElement.dataset.theme=dark?'dark':'light';
+  document.documentElement.style.colorScheme=dark?'dark':'light';
+})();
+</script>
+<link rel="stylesheet" href="/app.css?v=__APP_CSS_VERSION__">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">SO-101 로봇팔 에이전트</div>
+  <div class="status">
+    <span id="state-badge" class="badge badge-idle">연결 중…</span>
+    <span id="camera-badge" class="badge badge-muted">카메라 ?</span>
+    <span id="model-badge" class="badge badge-muted"></span>
+  </div>
+<button type="button" id="theme-toggle" class="btn" aria-label="다크 모드 전환" aria-pressed="false">다크 모드</button>
+<button id="stop" class="stop" title="비상정지 (Esc)">STOP <small>Esc</small></button></header>
+
+<div id="stopped-banner" class="banner" hidden>
+  <div>
+    <strong>비상정지됨</strong>
+    <span id="stopped-message">그리퍼를 열고 home 복귀를 시도하는 중입니다…</span>
+  </div>
+  <button id="home-button" class="btn btn-primary">다시 시도(그리퍼 열기+home)</button>
+</div>
+
+<main class="layout">
+  <section class="panel camera-panel">
+    <div class="camera-heading">
+      <label for="camera-select">카메라</label>
+      <select id="camera-select" aria-label="카메라 선택"><option value="shoulder">헤드캠</option><option value="wrist">손목캠</option></select>
+    </div>
+    <div class="camera-wrap" id="camera-wrap">
+      <img id="camera" alt="카메라 영상">
+      <canvas id="perception-overlay" aria-label="블록 검출 오버레이"></canvas>
+      <svg id="overlay" preserveAspectRatio="none"></svg>
+      <svg id="pixel-target-overlay" preserveAspectRatio="none" aria-label="선택한 픽셀 위치"></svg>
+      <div id="camera-missing" class="camera-missing" hidden>카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
+    </div>
+    <div class="camera-tools" id="camera-tools">
+      <span>헤드캠 픽셀 선택</span>
+      <span id="grid-hover" class="grid-hover"></span>
+    </div>
+    <section class="perception-controls" aria-label="카메라 표시 설정">
+      <div class="layer-buttons" role="group" aria-label="표시 항목">
+        <button type="button" class="layer-button" data-camera-layer="master" aria-pressed="false">전체 표시</button>
+        <button type="button" class="layer-button" data-camera-layer="places" aria-pressed="false">작업 범위</button>
+        <button type="button" class="layer-button" data-camera-layer="boxes" aria-pressed="false">블록 윤곽</button>
+        <button type="button" class="layer-button" data-camera-layer="centers" aria-pressed="false">중심점</button>
+        <button type="button" class="layer-button" data-camera-layer="axes" aria-pressed="false">파지 방향</button>
+        <button type="button" class="layer-button" data-camera-layer="candidates" aria-pressed="false">보정·재시도</button>
+        <button type="button" class="layer-button" data-camera-layer="rejects" aria-pressed="false">제외 검출</button>
+        <button type="button" class="layer-button" data-camera-layer="fk" aria-pressed="false">FK 기준점</button>
+        <button type="button" class="layer-button" data-camera-layer="details" aria-pressed="false">상세 정보</button>
+      </div>
+      <label class="color-filter">검출 색상
+        <select id="detection-color">
+          <option value="">전체</option><option value="green">초록</option>
+          <option value="yellow">노랑</option><option value="blue">파랑</option>
+          <option value="red">빨강</option><option value="wood">나무</option>
+        </select>
+      </label>
+      <a id="camera-tools-link" class="camera-tools-link" target="_blank" rel="noopener noreferrer">카메라 관리·캘리브레이션 ↗</a>
+      <p id="candidate-hint" class="hint" hidden>보정·재시도 후보는 카메라 분석 기준입니다. 현재 실행 중인 명령의 목표와 다를 수 있습니다.</p>
+      <p id="fk-status" class="hint" hidden></p>
+      <div id="detection-details" hidden><div id="detection-list" aria-live="off"></div></div>
+    </section>
+  </section>
+
+  <aside class="panel command-panel">
+    <div class="workspace-tabs" role="tablist" aria-label="명령 방식">
+      <button role="tab" aria-selected="true" aria-controls="direct-controls" id="direct-tab" data-command-tab="direct-controls">직접 조작</button>
+      <button role="tab" aria-selected="false" aria-controls="command-chat" id="chat-tab" data-command-tab="command-chat">LLM 대화</button>
+    </div>
+    <div id="direct-controls" role="tabpanel" aria-labelledby="direct-tab">
+      <div class="keyboard-control">
+        <div class="keyboard-heading"><strong>키보드 조작</strong><button type="button" class="btn" id="keyboard-toggle" aria-pressed="false">키보드 켜기</button></div>
+        <p id="keyboard-status" role="status">꺼짐 · 버튼을 눌러 활성화</p>
+        <details><summary>단축키 보기</summary><div class="keyboard-legend">
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 앞·왼쪽·뒤·오른쪽</span>
+          <span><kbd>J</kbd> 위 <kbd>K</kbd> 아래 · 누르는 동안 이동, 떼면 부드럽게 감속</span>
+          <span><kbd>Q</kbd><kbd>E</kbd> 손목 회전 · 회전 각도 설정 적용</span>
+          <span><kbd>G</kbd> 집기 <kbd>P</kbd> 놓기 <kbd>O</kbd> 열기 <kbd>H</kbd> 홈</span>
+          <span><kbd>Esc</kbd> 정지 · 입력 중에도 사용 가능</span>
+        </div></details>
+      </div>
+      <div class="pixel-selection">
+        <strong>선택 위치</strong>
+        <p id="pixel-target-status">헤드캠 영상에서 목표점을 클릭하세요. 높이는 블록 1개 윗면으로 고정됩니다.</p>
+        <div class="gripper-row">
+          <button type="button" class="btn" id="move-pixel" disabled>선택 위치로 이동</button>
+          <button type="button" class="btn" id="place-pixel" disabled>선택 위치에 놓기</button>
+        </div>
+        <button type="button" class="link" id="pixel-to-chat" disabled>선택 위치를 LLM에 전달</button>
+      </div>    <div class="jog">
+      <div class="jog-title">팔 직접 움직이기</div>
+      <div class="jog-grid">
+        <span></span>
+        <button class="btn jog-btn" data-jog="forward">앞 ▲<small>멀리</small></button>
+        <span></span>
+        <button class="btn jog-btn" data-jog="left">◀ 왼쪽</button>
+        <select id="jog-step" aria-label="이동 거리">
+          <option value="5">5mm</option>
+          <option value="10" selected>10mm</option>
+          <option value="20">20mm</option>
+        </select>
+        <button class="btn jog-btn" data-jog="right">오른쪽 ▶</button>
+        <button class="btn jog-btn" data-jog="up">높이 ▲</button>
+        <button class="btn jog-btn" data-jog="back">뒤 ▼<small>가까이</small></button>
+        <button class="btn jog-btn" data-jog="down">높이 ▼</button>
+      </div>
+      <div class="cell-row" hidden>
+        <label for="cell-x">칸</label>
+        <input id="cell-x" type="number" step="1" inputmode="numeric" aria-label="칸 x (화면 오른쪽 +)" placeholder="x">
+        <input id="cell-y" type="number" step="1" inputmode="numeric" aria-label="칸 y (로봇에서 먼 쪽 +)" placeholder="y">
+        <button id="go-cell" class="btn">이 칸 위로 이동</button>
+      </div>
+      <button id="manual-home" class="btn manual-home-btn">home으로 복귀</button>
+    </div>
+    <div class="gripper">
+      <div class="jog-title">그리퍼</div>
+      <div class="gripper-row">
+        <button class="btn" id="observe-now">장면 관찰</button>
+        <button class="btn" id="collection-status">수집 현황</button>
+      </div>
+      <p id="manual-observation-result" role="status" hidden></p>
+      <div class="gripper-row">
+        <button class="btn" id="roll-ccw">↺ 돌리기</button>
+        <select id="roll-step" aria-label="회전 각도">
+          <option value="15">15°</option>
+          <option value="45" selected>45°</option>
+          <option value="90">90°</option>
+        </select>
+        <button class="btn" id="roll-cw">돌리기 ↻</button>
+      </div>
+      <div class="gripper-row">
+        <button class="btn btn-primary" id="pick-here">여기서 집기</button>
+        <button class="btn" id="place-here">여기 내려놓기</button>
+        <button class="btn" id="open-gripper">그리퍼 열기</button>
+      </div>
+    </div>
+</div>  <section class="chat-panel" id="command-chat" hidden>
+    <div id="chat" class="chat" aria-live="polite"></div>
+    <form id="composer" class="composer">
+      <button type="button" id="mic" class="btn btn-mic" title="음성 입력" aria-label="음성 입력" hidden>🎤</button>
+      <input id="input" autocomplete="off" placeholder="예: 노란 블록을 적재 구역 좌상단으로 옮겨줘">
+      <button type="submit" id="send" class="btn btn-primary">보내기</button>
+    </form>
+    <div class="composer-options">
+      <div class="voice-option" hidden>
+        <label><input type="checkbox" id="voice-autosend" checked> 음성 인식 끝나면 자동 전송</label>
+        <span id="voice-status" role="status" aria-live="polite">🎤 준비</span>
+      </div>
+      <button type="button" id="reset" class="link">대화 초기화</button>
+    </div>
+  </section></aside>
+  <section class="panel diagnostics-panel">
+    <div id="fk-summary" class="fk-summary">FK 측정 대기</div>
+    <div class="workspace-tabs diagnostic-tabs" role="tablist" aria-label="진단 정보">
+<button role="tab" aria-selected="true" data-diagnostic-tab="joints">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history">실행 기록</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open>
+      <summary>로봇 상태 · 모터 / FK / 보정</summary>
+      <p id="telemetry-status" role="status">측정 대기</p>
+      <div id="telemetry-body"></div>
+    </details>
+
+    <div id="diagnostic-detections" hidden></div>
+    <div id="diagnostic-history" hidden><p class="hint">실행 기록이 없습니다.</p></div>
+  </section>
+</main>
+
+
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+<div id="lock" class="lock" hidden>
+  <div class="lock-card">
+    <h2>제어 서버에 다시 연결하는 중입니다</h2>
+    <p>연결이 복구되면 모든 원격 사용자가 같은 제어 화면을 공유합니다. 비상정지 버튼은 계속 사용할 수 있습니다.</p>
+    <button id="lock-retry" class="btn">다시 시도</button>
+  </div>
+</div>
+
+<script src="/overlay-renderer.js?v=__RENDERER_VERSION__"></script>
+<script src="/camera-overlay.js?v=__OVERLAY_JS_VERSION__"></script>
+<script src="/app.js?v=__APP_JS_VERSION__"></script>
+</body>
+</html>
