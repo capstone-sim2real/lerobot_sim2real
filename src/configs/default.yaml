@@ -630,6 +630,7 @@ agent:
 yoloe:
   model: models/yoloe-26s-seg.pt
   engine: models/yoloe-26s-block-vp-seg-fp16.engine
+  worker_python: .venv-trt/bin/python
   prompts: [wooden block, toy block, cube]
   device: cpu
   imgsz: 640
@@ -639,5 +640,6 @@ yoloe:
   cpu_threads: 4
   max_detections: 20
   trt_warmup_runs: 5
+  web_analysis_fps: 2.0
   snapshot_url: http://127.0.0.1:8090/snapshot/shoulder.jpg
   http_timeout_s: 10.0

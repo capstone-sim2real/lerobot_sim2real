@@ -1067,6 +1067,7 @@ class YoloeConfig:
     """Offline vision experiment; defaults are candidates, not measured gates."""
     model: str = "models/yoloe-26s-seg.pt"
     engine: str = "models/yoloe-26s-block-vp-seg-fp16.engine"
+    worker_python: str = ".venv-trt/bin/python"
     prompts: list[str] = field(default_factory=lambda: ["wooden block", "toy block", "cube"])
     device: str = "cpu"
     imgsz: int = 640
@@ -1076,6 +1077,7 @@ class YoloeConfig:
     cpu_threads: int = 4
     max_detections: int = 20
     trt_warmup_runs: int = 5
+    web_analysis_fps: float = 2.0
     snapshot_url: str = "http://127.0.0.1:8090/snapshot/shoulder.jpg"
     http_timeout_s: float = 10.0
 
@@ -1142,8 +1144,21 @@ def load_config(
     validate_task2(cfg)
     validate_task3(cfg)
     validate_agent(cfg)
+    validate_yoloe(cfg)
     return cfg
 
+
+
+def validate_yoloe(cfg: AppConfig) -> None:
+    yoloe = cfg.yoloe
+    if yoloe.imgsz != 640:
+        raise ValueError("yoloe.imgsz must be 640 for the fixed TensorRT engine")
+    if not 0.0 <= yoloe.trt_confidence <= 1.0:
+        raise ValueError("yoloe.trt_confidence must be in [0, 1]")
+    if yoloe.max_detections <= 0 or yoloe.trt_warmup_runs < 0:
+        raise ValueError("invalid YOLOE TensorRT limits")
+    if not math.isfinite(yoloe.web_analysis_fps) or yoloe.web_analysis_fps <= 0:
+        raise ValueError("yoloe.web_analysis_fps must be finite and positive")
 
 def validate_perception_colors(cfg: "PerceptionConfig") -> None:
     """Every gated colour must have a prototype to be identified by.

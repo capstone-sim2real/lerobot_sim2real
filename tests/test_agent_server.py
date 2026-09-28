@@ -49,4 +49,7 @@ def test_lease_is_shared_stop_is_open_and_commands_need_the_shared_token():
         assert client.post("/api/jog", json={"left_mm": 10}, headers={"X-Operator-Token": token}).status_code == 428
         config = client.get("/api/config").json()
         assert config["mjpeg_path"] == "/video/shoulder.mjpg" and config["provider"] == "fake"
+        assert config["perception_backends"]["cv"]["available"] is True
+        assert config["perception_backends"]["control_backend"] == "cv"
+        assert config["perception_backends"]["yoloe"]["display_only"] is True
         assert client.post("/api/lease/force-release").status_code in (200, 403)

@@ -97,7 +97,7 @@ Ultralytics 8.4.157, torch 2.11.0+cu128, torchvision 0.26.0+cu128.
 
 공식 API: https://docs.ultralytics.com/models/yoloe/
 
-검증: 전체 테스트 `113 passed, 6 skipped`. 하이브리드 단위 테스트는 연결된 빨간
+검증: 통합 브랜치 전체 테스트 `125 passed, 6 skipped`. 하이브리드 단위 테스트는 연결된 빨간
 테이프 분리, 해상도 거부, 탈락 컨투어 JSON 직렬화를 포함한다.
 로봇 이동/파지 검증은 수행하지 않았다.
 
@@ -152,3 +152,22 @@ fresh frame에서는 PyTorch와 TensorRT 모두 빨강·초록·나무색을 찾
 실행 전후 `/health`에서 camera.server는 `ok=true`, 30 fps였으며 서버를 재시작하거나
 카메라 장치를 직접 열지 않았다. 로봇 동작은 수행하지 않았다. 엔진은 해당 Orin의
 TensorRT/CUDA 조합에 묶인 로컬 빌드 산출물이며 다른 JetPack/장치로 복사하지 않는다.
+
+## 에이전트 웹의 CV / YOLOE 선택
+
+통합 브랜치의 카메라 카드에는 `검출` 선택기가 있다.
+
+- `CV`: camera.server가 기존 색상+형상 검출을 분석해 보내는 SSE를 표시한다.
+- `YOLOE · TensorRT`: agent 서버가 별도 Python 3.10 worker를 한 번 띄우고, 최신
+  HTTP snapshot을 TensorRT+하이브리드 검출한 뒤 별도 SSE로 표시한다.
+
+YOLOE worker는 길이 prefix가 붙은 stdin/stdout 프로토콜을 쓰므로 매 프레임 모델을
+다시 로드하지 않는다. agent의 Python 환경에는 TensorRT를 import하지 않으며,
+`yoloe.worker_python`과 `yoloe.engine`이 둘 다 있을 때만 UI 옵션을 활성화한다.
+worker는 camera.server의 snapshot만 읽고 카메라 장치를 열거나 서버를 재시작하지 않는다.
+기본 표시 분석률은 `yoloe.web_analysis_fps=2.0`이다.
+
+현재 선택은 **브라우저 오버레이와 진단 결과에만 적용**된다. YOLOE 좌표는 물리 파지
+검증 전이라 `display_only=true`이며, LLM/FSM의 로봇 동작 판단은 계속 기존 CV를 쓴다.
+화면에도 `표시·진단 전용 · 로봇 제어는 CV`를 표시한다. 이 경계를 바꾸려면 먼저
+YOLOE 좌표로 dry-run IK와 실제 파지 성공률을 별도로 검증해야 한다.

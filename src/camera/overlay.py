@@ -220,6 +220,10 @@ class DetectionStabilizer:
         angle_deg = math.degrees(
             math.atan2(float(np.sin(angles).mean()), float(np.cos(angles).mean()))
         ) / 4.0 % 90.0
+        # Floating-point roundoff can represent the square-equivalent zero as
+        # 89.99999999999999. Keep the public [0, 90) contract canonical.
+        if math.isclose(angle_deg, 90.0, abs_tol=1e-9):
+            angle_deg = 0.0
 
         lengths = []
         for item in items:

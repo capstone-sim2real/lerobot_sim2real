@@ -150,7 +150,12 @@ def test_frame_bytes_match_observation_and_downscale(monkeypatch):
 
 def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypatch):
     sk, world, _ = fixture()
-    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
+    monkeypatch.setattr(
+        ContactMonitor, "check",
+        lambda self: ContactReading(
+            True, loads={joint: 0.0 for joint in sk.cfg.sensing.contact_joints}
+        ),
+    )
     lift_commands = []
     move_relative = sk.move_relative
 
@@ -186,7 +191,12 @@ def test_block_transfer_stops_before_transport_when_grasp_fails(monkeypatch):
 
 def test_unverified_transfer_at_source_is_recoverable(monkeypatch):
     sk, world, _ = fixture()
-    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
+    monkeypatch.setattr(
+        ContactMonitor, "check",
+        lambda self: ContactReading(
+            True, loads={joint: 0.0 for joint in sk.cfg.sensing.contact_joints}
+        ),
+    )
     home = sk.return_to_home
     source = world.blocks["yellow"]
 

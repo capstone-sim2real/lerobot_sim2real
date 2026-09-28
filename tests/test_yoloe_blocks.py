@@ -122,3 +122,30 @@ def test_tensorrt_nms_removes_overlapping_lower_score():
     boxes = np.array([[0, 0, 20, 20], [1, 1, 21, 21], [50, 50, 60, 60]], np.float32)
     scores = np.array([.9, .8, .7], np.float32)
     assert nms_indices(boxes, scores, .5, 20).tolist() == [0, 2]
+
+
+def test_yoloe_web_status_requires_worker_and_engine(tmp_path):
+    from agent.yoloe_overlay import yoloe_web_status
+    from config import AppConfig
+    cfg = AppConfig()
+    cfg.yoloe.worker_python = "runtime/python"
+    cfg.yoloe.engine = "models/block.engine"
+    assert yoloe_web_status(cfg, tmp_path)["available"] is False
+    (tmp_path / "runtime").mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / cfg.yoloe.worker_python).write_text("")
+    (tmp_path / cfg.yoloe.engine).write_bytes(b"engine")
+    status = yoloe_web_status(cfg, tmp_path)
+    assert status == {"available": True, "display_only": True, "missing": []}
+
+
+def test_web_ui_exposes_cv_yoloe_selector():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "src/agent/web/index.html").read_text()
+    script = (root / "src/agent/web/camera-overlay.js").read_text()
+    assert 'id="perception-backend"' in html
+    assert '<option value="cv">CV</option>' in html
+    assert '<option value="yoloe">YOLOE · TensorRT</option>' in html
+    assert "/api/perception/events?backend=yoloe" in script
+    assert "표시·진단 전용 · 로봇 제어는 CV" in html

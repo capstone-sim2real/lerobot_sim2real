@@ -929,12 +929,14 @@ class PrimitiveSkills(Skills):
                 actual = self.s.arm_position_mm()
                 if (self._target[0] != "object" and actual[2] > self.s.grasp_z_mm
                         + self.cfg.agent.calibration_clearance.obstacle_height_mm):
-                    if contact_source == "load":
+                    if contact_source == "load" and all(
+                        joint in reading.loads for joint in self.cfg.sensing.contact_joints
+                    ):
                         # The arm's gravity load can jump at intermediate poses.
-                        # Above the block-height band, load alone is not evidence
-                        # of an obstacle; keep the reference local and continue.
-                        if all(joint in reading.loads for joint in self.cfg.sensing.contact_joints):
-                            monitor.rebase(reading.loads)
+                        # Ignore it only when complete samples let us move the
+                        # baseline locally. An incomplete high-contact reading
+                        # cannot be distinguished from an obstacle, so fail safe.
+                        monitor.rebase(reading.loads)
                         continue
                     threshold = self.cfg.sensing.contact_load_delta
                     triggered = [joint for joint, delta in reading.deltas.items() if delta >= threshold]

@@ -199,8 +199,10 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
     from agent.camera_proxy import camera_router
+    from agent.yoloe_overlay import YoloeOverlayClient, yoloe_web_status
 
     state: dict[str, Any] = {}
+    yoloe_overlay = YoloeOverlayClient(cfg, REPO_ROOT)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -221,6 +223,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             task.cancel()
             hub.close()
             await asyncio.to_thread(service.shutdown)
+            await asyncio.to_thread(yoloe_overlay.close)
 
     app = FastAPI(title="SO-101 Agent", lifespan=lifespan)
 
@@ -299,6 +302,11 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             "manual_tools": sorted(svc().MANUAL_TOOLS),
             "provider": svc().provider.name,
             "model": svc().provider.model,
+            "perception_backends": {
+                "cv": {"available": True, "display_only": True},
+                "yoloe": yoloe_web_status(cfg, REPO_ROOT),
+                "control_backend": "cv",
+            },
         }
 
     @app.get("/api/pixel-target")
@@ -313,6 +321,29 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             return {"target": target, "note": "블록 1개 윗면 기준 · 실행 시 IK 재검사"}
         except (ValueError, OSError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.get("/api/perception/events")
+    async def perception_events(request: Request, backend: str = "yoloe"):
+        if backend != "yoloe":
+            return JSONResponse({"error": "지원하지 않는 검출 backend입니다."}, status_code=404)
+        status = yoloe_web_status(cfg, REPO_ROOT)
+        if not status["available"]:
+            return JSONResponse({"error": "YOLOE runtime을 사용할 수 없습니다.", **status}, status_code=503)
+
+        async def stream():
+            interval = 1.0 / cfg.yoloe.web_analysis_fps
+            while not await request.is_disconnected():
+                started = time.monotonic()
+                try:
+                    packet = await asyncio.to_thread(yoloe_overlay.analyse_latest)
+                except Exception as exc:  # display-only diagnostics must not stop the agent
+                    packet = {"ready": False, "backend": "yoloe", "display_only": True,
+                              "error": f"{type(exc).__name__}: {exc}"}
+                yield f"data: {json.dumps(packet, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(max(0.0, interval - (time.monotonic() - started)))
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/api/telemetry")
     async def telemetry():

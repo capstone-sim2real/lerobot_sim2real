@@ -217,7 +217,7 @@ body[data-diagnostic-tab=calibration] #telemetry-body > p:nth-child(-n+4) {displ
 .robot-diagnostics tr.joint-out-of-range {background:#fff7ed;color:#9a3412;}
 .camera-heading {display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
 .camera-heading > label {font-size:14px;font-weight:650;}
-#camera-select {font:inherit;font-size:14px;padding:7px 30px 7px 10px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);}
+#camera-select, #perception-backend {font:inherit;font-size:14px;padding:7px 30px 7px 10px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);}
 body[data-camera=wrist] #camera-tools,body[data-camera=wrist] .perception-controls {display:none;}
 
 .command-panel, .chat-panel {position:static;top:auto;}
@@ -258,3 +258,6 @@ body[data-camera=wrist] #pixel-target-overlay, body[data-camera=wrist] #pixel-re
 
 .pixel-hover-ring[data-state=pending] {background:#737373;}
 .pixel-hover-ring[data-state=invalid] {background:#dc2626;}
+
+#perception-backend-note {font-size:12px;margin:0;color:var(--muted);}
+#perception-status {font-size:12px;margin:0;}

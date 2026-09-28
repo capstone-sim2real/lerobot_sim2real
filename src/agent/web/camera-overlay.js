@@ -4,7 +4,7 @@
   const KEY = "so101-camera-layers-v1";
   let staleMs, pollMs, retryMs;
   const defaults = {master: true, places: true, boxes: true, centers: true, axes: true,
-    candidates: false, rejects: false, fk: false, details: false, color: ""};
+    candidates: false, rejects: false, fk: false, details: false, color: "", backend: "cv"};
   let flags = {...defaults};
   try {
     const stored = JSON.parse(localStorage.getItem(KEY));
@@ -27,8 +27,10 @@
   function syncEvents() {
     if (!ready || disposed || document.hidden || !needsDetections()) { closeEvents(); return; }
     if (source) return;
-    source = new EventSource("/api/camera/events");
-    message = "검출 연결 중…";
+    const eventUrl = flags.backend === "yoloe"
+      ? "/api/perception/events?backend=yoloe" : "/api/camera/events";
+    source = new EventSource(eventUrl);
+    message = (flags.backend === "yoloe" ? "YOLOE" : "CV") + " 검출 연결 중…";
     source.onmessage = event => {
       try {
         const next = JSON.parse(event.data);
@@ -42,7 +44,7 @@
         if (next.frame_seq !== packet?.frame_seq || next.captured_at !== packet?.captured_at) {
           lastFresh = performance.now();
         }
-        packet = next; message = "검출 정상";
+        packet = next; message = (flags.backend === "yoloe" ? "YOLOE" : "CV") + " 검출 정상";
       } catch (_) { packet = null; lastFresh = 0; message = "검출 데이터 오류"; }
       render();
     };
@@ -92,6 +94,7 @@
   function render() {
     if (!config) return;
     const canvas = $("perception-overlay"), ctx = canvas.getContext("2d");
+    $("perception-status").textContent = message;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const img = $("camera");
     const imageCompatible = !img.naturalWidth ||
@@ -161,6 +164,19 @@
     $("detection-color").addEventListener("change", event => {
       flags.color = event.target.value; save(); render();
     });
+    const backendSelect = $("perception-backend");
+    const backendStatus = uiConfig.perception_backends || {};
+    const yoloeOption = backendSelect.querySelector('option[value="yoloe"]');
+    yoloeOption.disabled = !backendStatus.yoloe?.available;
+    if (flags.backend === "yoloe" && yoloeOption.disabled) flags.backend = "cv";
+    backendSelect.value = flags.backend;
+    backendSelect.addEventListener("change", event => {
+      flags.backend = event.target.value;
+      generation++; closeEvents(); save(); syncEvents(); render();
+    });
+    $("perception-backend-note").textContent = yoloeOption.disabled
+      ? "YOLOE runtime 없음 · CV만 사용 가능"
+      : "표시·진단 전용 · 로봇 제어는 CV";
     syncUI();
     fallbackSize = uiConfig.places?.image_size || [1280, 720];
     config = {image_size: fallbackSize};
