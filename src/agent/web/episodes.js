@@ -20,7 +20,7 @@ function renderEpisodes() {
   $("episode-count").textContent=`(${episodes.length})`;
   const list=$("episode-list");list.replaceChildren();
   if(!episodes.length){list.append(label("저장된 에피소드가 없습니다. 폐기된 시도는 데이터셋에 포함되지 않습니다.","episode-empty"));$("episode-title").textContent="에피소드 없음";$("episode-detail").textContent="";$("episode-videos").replaceChildren();return;}
-  for(const episode of episodes){const button=document.createElement("button");button.type="button";button.className="episode-item";button.textContent=`#${episode.index} · ${episode.duration_s}초 · ${episode.frames} 프레임`;button.addEventListener("click",()=>{list.querySelectorAll("button").forEach(item=>item.removeAttribute("aria-current"));button.setAttribute("aria-current","true");showEpisode(episode);});list.append(button);}
+  for(const episode of episodes){const button=document.createElement("button");button.type="button";button.className="episode-item border bg-background text-foreground hover:bg-accent hover:text-accent-foreground";button.dataset.slot="button";button.dataset.variant="outline";button.textContent=`#${episode.index} · ${episode.duration_s}초 · ${episode.frames} 프레임`;button.addEventListener("click",()=>{list.querySelectorAll("button").forEach(item=>item.removeAttribute("aria-current"));button.setAttribute("aria-current","true");showEpisode(episode);});list.append(button);}
   list.firstChild.click();
 }
 async function selectRun() {

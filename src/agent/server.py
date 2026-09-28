@@ -290,6 +290,11 @@ def create_app(
         return FileResponse(WEB_DIR / "episodes.html", media_type="text/html",
                             headers={"Cache-Control": "no-store"})
 
+    @app.get("/episodes.css")
+    async def episodes_css():
+        return FileResponse(WEB_DIR / "episodes.css", media_type="text/css",
+                            headers={"Cache-Control": "no-store"})
+
     @app.get("/episodes.js")
     async def episodes_js():
         return FileResponse(WEB_DIR / "episodes.js", media_type="application/javascript",
