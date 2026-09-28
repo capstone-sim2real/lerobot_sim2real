@@ -15,6 +15,7 @@
 })();
 </script>
 <link rel="stylesheet" href="/app.css?v=__APP_CSS_VERSION__">
+<link rel="stylesheet" href="/episodes.css?v=__EPISODES_CSS_VERSION__">
 </head>
 <body>
 <header class="topbar">
@@ -24,7 +25,6 @@
     <span id="camera-badge" class="badge badge-muted">카메라 ?</span>
     <span id="model-badge" class="badge badge-muted"></span>
   </div>
-<a href="/episodes">에피소드 보기</a>
 <button type="button" id="theme-toggle" class="btn" aria-label="다크 모드 전환" aria-pressed="false">다크 모드</button>
 <button id="stop" class="stop" title="비상정지 (Esc)">STOP <small>Esc</small></button></header>
 
@@ -174,7 +174,7 @@
   <section class="panel diagnostics-panel">
     <div id="fk-summary" class="fk-summary">FK 측정 대기</div>
     <div class="workspace-tabs diagnostic-tabs" role="tablist" aria-label="진단 정보">
-<button role="tab" aria-selected="true" data-diagnostic-tab="joints">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history">실행 기록</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open>
+<button role="tab" aria-selected="true" data-diagnostic-tab="joints">관절</button><button role="tab" aria-selected="false" data-diagnostic-tab="motors">모터 상태</button><button role="tab" aria-selected="false" data-diagnostic-tab="detections">검출</button><button role="tab" aria-selected="false" data-diagnostic-tab="calibration">보정</button><button role="tab" aria-selected="false" data-diagnostic-tab="history">실행 기록</button><button role="tab" aria-selected="false" data-diagnostic-tab="episodes">에피소드</button></div>    <details id="robot-diagnostics" class="robot-diagnostics" open>
       <summary>로봇 상태 · 모터 / FK / 보정</summary>
       <p id="telemetry-status" role="status">측정 대기</p>
       <div id="telemetry-body"></div>
@@ -182,6 +182,17 @@
 
     <div id="diagnostic-detections" hidden></div>
     <div id="diagnostic-history" hidden><p class="hint">실행 기록이 없습니다.</p></div>
+    <div id="diagnostic-episodes" hidden>
+      <div class="episode-toolbar">
+        <div><h2>수집 에피소드</h2><p class="hint">저장된 시연을 에피소드별로 확인합니다.</p></div>
+        <button id="refresh" type="button" class="btn">새로고침</button>
+      </div>
+      <div class="episode-layout">
+        <section class="episode-section"><label for="run-select">데이터셋</label><select id="run-select" class="episode-select"></select><div id="run-detail" class="episode-detail"></div></section>
+        <section class="episode-section"><h3>에피소드 <span id="episode-count"></span></h3><div id="episode-list" class="episode-list"></div></section>
+        <section class="episode-section"><h3 id="episode-title">에피소드를 선택하세요</h3><p id="episode-detail" class="episode-detail"></p><div id="episode-videos" class="episode-video-row"></div></section>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -199,5 +210,6 @@
 <script src="/overlay-renderer.js?v=__RENDERER_VERSION__"></script>
 <script src="/camera-overlay.js?v=__OVERLAY_JS_VERSION__"></script>
 <script src="/app.js?v=__APP_JS_VERSION__"></script>
+<script src="/episodes.js?v=__EPISODES_JS_VERSION__"></script>
 </body>
 </html>

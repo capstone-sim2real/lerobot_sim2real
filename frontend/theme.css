@@ -3,7 +3,6 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @source "./components";
 @source "../src/agent/web/index.html";
-@source "../src/agent/web/episodes.html";
 @theme inline {
  --color-background:var(--background); --color-foreground:var(--foreground);
  --color-card:var(--card); --color-card-foreground:var(--foreground);

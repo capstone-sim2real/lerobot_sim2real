@@ -202,7 +202,7 @@ def create_app(
     cfg: AppConfig, service_builder, hub: EventHub, *, perception_backend=None
 ):
     from fastapi import FastAPI, Request
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 
     from agent.camera_proxy import camera_router
     from agent.yoloe_overlay import PerceptionBackendController
@@ -251,6 +251,8 @@ def create_app(
         html = html.replace("__SHADCN_CSS_VERSION__", str((WEB_DIR / "shadcn.css").stat().st_mtime_ns))
         html = html.replace("__APP_JS_VERSION__", str((WEB_DIR / "app.js").stat().st_mtime_ns))
         html = html.replace("__APP_CSS_VERSION__", str((WEB_DIR / "app.css").stat().st_mtime_ns))
+        html = html.replace("__EPISODES_CSS_VERSION__", str((WEB_DIR / "episodes.css").stat().st_mtime_ns))
+        html = html.replace("__EPISODES_JS_VERSION__", str((WEB_DIR / "episodes.js").stat().st_mtime_ns))
         html = html.replace("__OVERLAY_JS_VERSION__", str((WEB_DIR / "camera-overlay.js").stat().st_mtime_ns))
         html = html.replace("__RENDERER_VERSION__", str((WEB_DIR.parent.parent / "camera" / "overlay_renderer.js").stat().st_mtime_ns))
         return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
@@ -287,8 +289,7 @@ def create_app(
 
     @app.get("/episodes")
     async def episodes_page():
-        return FileResponse(WEB_DIR / "episodes.html", media_type="text/html",
-                            headers={"Cache-Control": "no-store"})
+        return RedirectResponse("/?tab=episodes", status_code=307)
 
     @app.get("/episodes.css")
     async def episodes_css():
