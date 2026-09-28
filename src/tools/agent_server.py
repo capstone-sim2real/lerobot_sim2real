@@ -149,6 +149,8 @@ def main():
         parser.error(f"cannot initialize provider {provider_name}: {exc}")
     logging.info("agent server provider=%s model=%s", provider.name, provider.model)
     hub=EventHub()
+    from agent.yoloe_overlay import PerceptionBackendController
+    perception_backend=PerceptionBackendController(cfg,root)
     def service_builder(publish):
         raw_publish = publish
         publish = lambda event: raw_publish({**event, "emitted_monotonic_ns": time.monotonic_ns()})
@@ -159,13 +161,16 @@ def main():
             assert isinstance(session.robot,CancellableRobotIO)
             session.robot._inner=CalibrationJointLimitIO(session.robot._inner,cfg.agent.calibration_clearance)
             return CalibrationSkills(session,output)
-        skills_factory=make_skills_factory(cfg,cancel,sim=False,skills_builder=build_calibration)
+        skills_factory=make_skills_factory(
+            cfg,cancel,sim=False,skills_builder=build_calibration,
+            perception_backend=perception_backend,
+        )
         service=AgentService(cfg,provider=provider,
                              skills_factory=skills_factory,cancel=cancel,publish=publish,
                              transcript_dir=str(output/"transcripts"))
         configure_manual_tools(service, cfg)
         return service
-    app=create_app(cfg,service_builder,hub)
+    app=create_app(cfg,service_builder,hub,perception_backend=perception_backend)
     import uvicorn
     server=uvicorn.Server(uvicorn.Config(
         app,host="0.0.0.0",port=args.port,timeout_graceful_shutdown=5,access_log=False,

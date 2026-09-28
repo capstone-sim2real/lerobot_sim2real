@@ -168,15 +168,30 @@
     const backendStatus = uiConfig.perception_backends || {};
     const yoloeOption = backendSelect.querySelector('option[value="yoloe"]');
     yoloeOption.disabled = !backendStatus.yoloe?.available;
+    flags.backend = backendStatus.selected || "cv";
     if (flags.backend === "yoloe" && yoloeOption.disabled) flags.backend = "cv";
     backendSelect.value = flags.backend;
-    backendSelect.addEventListener("change", event => {
-      flags.backend = event.target.value;
+    backendSelect.addEventListener("change", async event => {
+      const previous = flags.backend, requested = event.target.value;
+      backendSelect.disabled = true;
+      const result = await api("/api/perception/backend", {backend: requested});
+      if (result.status !== 200) {
+        backendSelect.value = previous;
+        showToast(result.data.error || "검출기를 바꾸지 못했습니다.", "bad");
+      } else {
+        flags.backend = result.data.backend;
+        generation++; closeEvents(); save(); syncEvents(); render();
+      }
+      backendSelect.disabled = control.state !== "idle" || !isOperator;
+    });
+    document.addEventListener("perception-backend-change", event => {
+      if (!event.detail || event.detail === flags.backend) return;
+      flags.backend = event.detail; backendSelect.value = flags.backend;
       generation++; closeEvents(); save(); syncEvents(); render();
     });
     $("perception-backend-note").textContent = yoloeOption.disabled
       ? "YOLOE runtime 없음 · CV만 사용 가능"
-      : "표시·진단 전용 · 로봇 제어는 CV";
+      : "선택한 검출을 관찰·PICK에 사용 · 기존 안전 게이트 유지";
     syncUI();
     fallbackSize = uiConfig.places?.image_size || [1280, 720];
     config = {image_size: fallbackSize};

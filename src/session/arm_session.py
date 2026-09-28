@@ -99,6 +99,7 @@ class ArmSession:
         ik: TopDownIK | None = None,
         snapshot_fn: Callable[[], CameraSnapshot] | None = None,
         scene_fn: Callable[[], Scene] | None = None,
+        perception_backend=None,
         lock: RobotBusLock | None = None,
         clock: Callable[[], float] = time.time,
     ):
@@ -124,6 +125,7 @@ class ArmSession:
             lambda: fetch_snapshot_with_metadata(self.cfg.perception.snapshot_url)
         )
         self._scene_fn = scene_fn
+        self._perception_backend = perception_backend
         self._lock = lock
         self._clock = clock
         self._closed = False
@@ -304,6 +306,17 @@ class ArmSession:
             scene = self._scene_fn()
             self.last_scene = scene
             return scene
+        if self._perception_backend is not None and self._perception_backend.backend == "yoloe":
+            try:
+                scene, snapshot = self._perception_backend.observe_scene(
+                    self.calib, self.slot_centres, after=after,
+                    cancel=self.cancel, clock=self._clock,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise CameraError(f"YOLOE observation failed: {exc}") from exc
+            self.last_snapshot = snapshot
+            self.last_scene = scene
+            return scene
         deadline = time.monotonic() + self.cfg.agent.camera_fresh_timeout_s
         while True:
             self.cancel.raise_if_set()
@@ -339,10 +352,21 @@ class ArmSession:
 
     def task1_perceive(self):
         """The ``perceive`` the Task 1/2 FSM polls: real camera, or the injected scene."""
-        if self._scene_fn is None:
+        if self._scene_fn is None and self._perception_backend is None:
             from session.factories import make_task1_perceive
 
             return make_task1_perceive(self.calib, self.cfg)
+        if self._scene_fn is None:
+            from fsm.task1 import Task1Perception
+
+            def perceive_selected() -> Task1Perception:
+                scene = self.observe()
+                return Task1Perception(
+                    [block.detection for block in scene.outside.values()],
+                    scene.frame_seq, scene.captured_at,
+                )
+
+            return perceive_selected
         from fsm.task1 import Task1Perception
 
         counter = {"seq": 0}

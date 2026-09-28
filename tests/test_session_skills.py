@@ -56,3 +56,33 @@ def test_recover_and_home_drops_a_held_block_and_closes_the_gripper():
 def _far_cell(skills):
     """An addressable cell far from home, to prove the jog cap does not apply."""
     return max(skills.cells, key=lambda key: math.dist(skills.cells[key], skills.s.arm_position_mm()[:2]))
+
+
+def test_selected_perception_backend_supplies_agent_observation():
+    import numpy as np
+    from camera.client import CameraSnapshot
+
+    skills, world, _robot = make_skills({"yellow": (180.0, 120.0)})
+    expected = world.scene(
+        skills.s.calib, skills.s.slot_centres, skills.cfg.agent.slot_snap_radius_mm
+    )
+
+    class SelectedBackend:
+        backend = "yoloe"
+        calls = 0
+
+        def observe_scene(self, calib, slot_xy, *, after, cancel, clock):
+            self.calls += 1
+            return expected, CameraSnapshot(
+                np.zeros((500, 700, 3), np.uint8), expected.frame_seq, clock()
+            )
+
+    backend = SelectedBackend()
+    skills.s._scene_fn = None
+    skills.s._perception_backend = backend
+    result = skills.observe_scene()
+
+    assert result.ok
+    assert backend.calls == 1
+    assert [item["color"] for item in result.data["blocks_outside"]] == ["yellow"]
+    assert skills.s.last_snapshot is not None

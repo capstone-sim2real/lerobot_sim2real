@@ -6,6 +6,7 @@ const TOKEN_KEY = "so101_operator_token";
 const CONTROL_UI_VERSION = "cell-grid-v1";
 const TOOL_NAMES = {
   get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 확인",
+  move_block_to_slot: "블록 슬롯 배치", stack_next_block: "블록 한 층 적층",
   move_to_target: "목표 접근", move_relative: "상대 이동", align_gripper: "블록 방향 정렬",
   close_gripper: "닫기·파지 확인", descend_until_contact: "접촉 하강", open_gripper: "그리퍼 열기",
   return_to_home: "home 복귀", recover_and_home: "그리퍼 열기·home 복귀",
@@ -237,7 +238,7 @@ function toolResult(event) {
   if (!chip) { toolCall({ id: event.id, name: event.name, arguments: {} }); chip = toolChips.get(event.id); }
   const result = event.result || {};
   const holding = result.state?.holding ?? result.holding;
-  const needsHeldRecovery = result.action === "move_block_to_slot" && holding != null;
+  const needsHeldRecovery = ["move_block_to_slot", "stack_next_block"].includes(result.action) && holding != null;
   const severity = result.ok ? "ok" : result.severity === "error" || needsHeldRecovery ? "fail" : "warning";
   chip.classList.add(severity);
   const elapsed = typeof chip._startedAt === "number"
@@ -297,6 +298,9 @@ function handleEvent(event) {
     case "turn_end": streamingBubble = null; break;
     case "stop_pressed": if (event.effective) addMessage("system", "비상정지 요청됨"); break;
     case "keyboard_jog_end": showToast(event.message,"bad"); break;
+    case "perception_backend":
+      document.dispatchEvent(new CustomEvent("perception-backend-change", {detail:event.backend}));
+      break;
     case "error": addMessage("error", event.message); break;
     default: break;
   }
@@ -314,7 +318,7 @@ function applyControl(snapshot) {
   const manualControls = [
     $("input"), $("send"), $("mic"), $("reset"), $("jog-step"), $("manual-home"),
     $("observe-now"), $("pick-here"), $("collection-status"), $("open-gripper"),
-    $("cell-x"), $("cell-y"), $("go-cell"),
+    $("cell-x"), $("cell-y"), $("go-cell"), $("perception-backend"),
     ...document.querySelectorAll(".jog-btn"),
   ];
   for (const el of manualControls) {

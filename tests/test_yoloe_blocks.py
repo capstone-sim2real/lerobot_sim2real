@@ -136,7 +136,7 @@ def test_yoloe_web_status_requires_worker_and_engine(tmp_path):
     (tmp_path / cfg.yoloe.worker_python).write_text("")
     (tmp_path / cfg.yoloe.engine).write_bytes(b"engine")
     status = yoloe_web_status(cfg, tmp_path)
-    assert status == {"available": True, "display_only": True, "missing": []}
+    assert status == {"available": True, "missing": []}
 
 
 def test_web_ui_exposes_cv_yoloe_selector():
@@ -148,4 +148,4 @@ def test_web_ui_exposes_cv_yoloe_selector():
     assert '<option value="cv">CV</option>' in html
     assert '<option value="yoloe">YOLOE · TensorRT</option>' in html
     assert "/api/perception/events?backend=yoloe" in script
-    assert "표시·진단 전용 · 로봇 제어는 CV" in html
+    assert "선택한 검출을 관찰·PICK에 사용" in html

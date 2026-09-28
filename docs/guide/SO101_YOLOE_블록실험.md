@@ -7,7 +7,8 @@ Orin 전용 worktree `~/lerobot_sim2real/worktrees/yoloe-block-segmentation`,
 ## 실행
 
 로봇 연결 없이 기존 camera.server HTTP snapshot만 읽는다. 모델 학습은 하지 않는다.
-기존 미션/CV 검출 경로는 그대로이며 이 실험을 운영 검출기로 연결하지 않았다.
+기본 backend는 기존 CV다. 에이전트 웹에서 YOLOE를 명시적으로 선택하면
+관찰과 PICK 대상 검출에 연결되며, 다시 CV로 즉시 되돌릴 수 있다.
 
 ```bash
 cd ~/lerobot_sim2real/worktrees/yoloe-block-segmentation
@@ -97,7 +98,7 @@ Ultralytics 8.4.157, torch 2.11.0+cu128, torchvision 0.26.0+cu128.
 
 공식 API: https://docs.ultralytics.com/models/yoloe/
 
-검증: 통합 브랜치 전체 테스트 `125 passed, 6 skipped`. 하이브리드 단위 테스트는 연결된 빨간
+검증: 통합 브랜치 전체 테스트 `134 passed, 6 skipped`. 하이브리드 단위 테스트는 연결된 빨간
 테이프 분리, 해상도 거부, 탈락 컨투어 JSON 직렬화를 포함한다.
 로봇 이동/파지 검증은 수행하지 않았다.
 
@@ -167,7 +168,9 @@ YOLOE worker는 길이 prefix가 붙은 stdin/stdout 프로토콜을 쓰므로 �
 worker는 camera.server의 snapshot만 읽고 카메라 장치를 열거나 서버를 재시작하지 않는다.
 기본 표시 분석률은 `yoloe.web_analysis_fps=2.0`이다.
 
-현재 선택은 **브라우저 오버레이와 진단 결과에만 적용**된다. YOLOE 좌표는 물리 파지
-검증 전이라 `display_only=true`이며, LLM/FSM의 로봇 동작 판단은 계속 기존 CV를 쓴다.
-화면에도 `표시·진단 전용 · 로봇 제어는 CV`를 표시한다. 이 경계를 바꾸려면 먼저
-YOLOE 좌표로 dry-run IK와 실제 파지 성공률을 별도로 검증해야 한다.
+선택한 backend는 브라우저 오버레이뿐 아니라 `ArmSession.observe()`와 agent의
+Task 1 perception에도 적용된다. 따라서 YOLOE를 선택한 뒤 웹에서 관찰/PICK 명령을
+실행하면 YOLOE+색상·형상 결과가 기존 workspace gate, IK gate, 재시도, VERIFY를
+그대로 통과한다. 전환은 operator token을 가진 사용자가 로봇 IDLE 상태일 때만 가능하다.
+실행 중에는 backend를 바꿀 수 없다. 선택 자체는 팔을 움직이지 않으며 실제 동작은
+별도의 웹 명령으로 시작한다. YOLOE의 물리 파지 성공률은 아직 미측정이다.

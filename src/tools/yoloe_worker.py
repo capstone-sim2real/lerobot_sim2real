@@ -106,8 +106,18 @@ def main() -> None:
                         frame, item["mask"], calib, cfg.perception, context=context
                     )
                     if hybrid.get("accepted"):
-                        metadata = detection_metadata(_block(hybrid), calib, cfg)
-                        metadata.update(confidence=item["confidence"], detector="yoloe")
+                        block = _block(hybrid)
+                        metadata = detection_metadata(block, calib, cfg)
+                        metadata.update(
+                            confidence=item["confidence"], detector="yoloe",
+                            detection={
+                                "color": block.color, "center_mm": list(block.center_mm),
+                                "area_mm2": block.area_mm2, "aspect": block.aspect,
+                                "solidity": block.solidity, "fill": block.fill,
+                                "box_mm": [list(point) for point in block.box_mm],
+                                "angle_deg": block.angle_deg, "hue_sat": list(block.hue_sat),
+                            },
+                        )
                         accepted.append(metadata)
                     else:
                         candidate = _reject(hybrid)
@@ -116,13 +126,13 @@ def main() -> None:
                             metadata.update(confidence=item["confidence"], detector="yoloe")
                             rejected.append(metadata)
                 _write({
-                    "ready": True, "backend": "yoloe", "display_only": True,
+                    "ready": True, "backend": "yoloe", "control_capable": True,
                     "image_size": list(calib.image_size), "detections": accepted,
                     "rejects": rejected, "gpu_and_transfer_ms": round(gpu_ms, 2),
                     "analysis_ms": round((time.perf_counter() - started) * 1000, 2),
                 })
             except Exception as exc:  # keep the worker available after one bad frame
-                _write({"ready": False, "backend": "yoloe", "display_only": True,
+                _write({"ready": False, "backend": "yoloe", "control_capable": True,
                         "error": f"{type(exc).__name__}: {exc}"})
 
 

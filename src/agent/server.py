@@ -145,7 +145,9 @@ class EventHub:
 # ── wiring ───────────────────────────────────────────────────────────
 
 
-def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool, skills_builder=None):
+def make_skills_factory(
+    cfg: AppConfig, cancel, *, sim: bool, skills_builder=None, perception_backend=None
+):
     """Runs on the robot thread: open the session (and IK) there."""
 
     def factory():
@@ -156,6 +158,8 @@ def make_skills_factory(cfg: AppConfig, cancel, *, sim: bool, skills_builder=Non
 
         ik = TopDownIK(cfg.ik, project_root=".")
         kwargs: dict[str, Any] = {"cancel": cancel, "ik": ik}
+        if perception_backend is not None:
+            kwargs["perception_backend"] = perception_backend
         if sim:
             from perception.homography import PlaneCalibration
             from session.factories import calibration_grasp_z_mm
@@ -194,15 +198,17 @@ def check_jog_window(cfg: AppConfig, grasp_z_mm: float) -> None:
         )
 
 
-def create_app(cfg: AppConfig, service_builder, hub: EventHub):
+def create_app(
+    cfg: AppConfig, service_builder, hub: EventHub, *, perception_backend=None
+):
     from fastapi import FastAPI, Request
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
     from agent.camera_proxy import camera_router
-    from agent.yoloe_overlay import YoloeOverlayClient, yoloe_web_status
+    from agent.yoloe_overlay import PerceptionBackendController
 
     state: dict[str, Any] = {}
-    yoloe_overlay = YoloeOverlayClient(cfg, REPO_ROOT)
+    perception_backend = perception_backend or PerceptionBackendController(cfg, REPO_ROOT)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -223,7 +229,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             task.cancel()
             hub.close()
             await asyncio.to_thread(service.shutdown)
-            await asyncio.to_thread(yoloe_overlay.close)
+            await asyncio.to_thread(perception_backend.close)
 
     app = FastAPI(title="SO-101 Agent", lifespan=lifespan)
 
@@ -302,11 +308,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             "manual_tools": sorted(svc().MANUAL_TOOLS),
             "provider": svc().provider.name,
             "model": svc().provider.model,
-            "perception_backends": {
-                "cv": {"available": True, "display_only": True},
-                "yoloe": yoloe_web_status(cfg, REPO_ROOT),
-                "control_backend": "cv",
-            },
+            "perception_backends": perception_backend.status(),
         }
 
     @app.get("/api/pixel-target")
@@ -326,7 +328,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
     async def perception_events(request: Request, backend: str = "yoloe"):
         if backend != "yoloe":
             return JSONResponse({"error": "지원하지 않는 검출 backend입니다."}, status_code=404)
-        status = yoloe_web_status(cfg, REPO_ROOT)
+        status = perception_backend.status()["yoloe"]
         if not status["available"]:
             return JSONResponse({"error": "YOLOE runtime을 사용할 수 없습니다.", **status}, status_code=503)
 
@@ -335,7 +337,7 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
             while not await request.is_disconnected():
                 started = time.monotonic()
                 try:
-                    packet = await asyncio.to_thread(yoloe_overlay.analyse_latest)
+                    packet = await asyncio.to_thread(perception_backend.analyse_latest)
                 except Exception as exc:  # display-only diagnostics must not stop the agent
                     packet = {"ready": False, "backend": "yoloe", "display_only": True,
                               "error": f"{type(exc).__name__}: {exc}"}
@@ -344,6 +346,23 @@ def create_app(cfg: AppConfig, service_builder, hub: EventHub):
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.post("/api/perception/backend")
+    async def set_perception_backend(request: Request):
+        service = svc()
+        if not service.gate.check(token_of(request)):
+            return JSONResponse({"error": "조작 권한이 필요합니다."}, status_code=403)
+        if service.gate.snapshot()["state"] != "idle":
+            return JSONResponse({"error": "로봇이 IDLE일 때만 검출기를 바꿀 수 있습니다."}, status_code=409)
+        body = await request.json()
+        try:
+            selected = perception_backend.set_backend(str(body.get("backend", "")))
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        except RuntimeError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=503)
+        hub.publish({"type": "perception_backend", "backend": selected})
+        return {"backend": selected, "control_backend": selected}
 
     @app.get("/api/telemetry")
     async def telemetry():
@@ -668,18 +687,22 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     hub = EventHub()
+    from agent.yoloe_overlay import PerceptionBackendController
+    perception_backend = PerceptionBackendController(cfg, REPO_ROOT)
 
     def service_builder(publish):
         cancel = CancelToken()
         return AgentService(
             cfg,
             provider=provider,
-            skills_factory=make_skills_factory(cfg, cancel, sim=args.sim),
+            skills_factory=make_skills_factory(
+                cfg, cancel, sim=args.sim, perception_backend=perception_backend
+            ),
             cancel=cancel,
             publish=publish,
         )
 
-    app = create_app(cfg, service_builder, hub)
+    app = create_app(cfg, service_builder, hub, perception_backend=perception_backend)
     host = args.host or cfg.agent.host
     port = args.port or cfg.agent.port
     fallback_label = (
