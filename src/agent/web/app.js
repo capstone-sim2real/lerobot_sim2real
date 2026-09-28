@@ -831,14 +831,15 @@ pollHealth();
   document.querySelectorAll('[data-diagnostic-tab]').forEach(button => button.addEventListener('click', () => {
     const tab=button.dataset.diagnosticTab;document.body.dataset.diagnosticTab=tab;
     document.querySelectorAll('[data-diagnostic-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));
-    $('robot-diagnostics').hidden=['detections','history'].includes(tab);
-    $('diagnostic-detections').hidden=tab!=='detections';$('diagnostic-history').hidden=tab!=='history';
+    $('robot-diagnostics').hidden=['detections','history','episodes'].includes(tab);
+    $('diagnostic-detections').hidden=tab!=='detections';$('diagnostic-history').hidden=tab!=='history';$('diagnostic-episodes').hidden=tab!=='episodes';
     if(tab==='detections') {
       const detail=document.querySelector('[data-camera-layer="details"]');
       if(detail.getAttribute('aria-pressed')!=='true')detail.click();
     }
   }));
   document.body.dataset.diagnosticTab='joints';
+  if(new URLSearchParams(location.search).get('tab')==='episodes') document.querySelector('[data-diagnostic-tab=episodes]').click();
   const history=$('diagnostic-history');
   new MutationObserver(() => {
     const tools=[...$('chat').querySelectorAll('.tool,.msg-error')];

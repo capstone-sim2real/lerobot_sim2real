@@ -202,7 +202,7 @@ def create_app(
     cfg: AppConfig, service_builder, hub: EventHub, *, perception_backend=None
 ):
     from fastapi import FastAPI, Request
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 
     from agent.camera_proxy import camera_router
     from agent.yoloe_overlay import PerceptionBackendController
@@ -251,6 +251,8 @@ def create_app(
         html = html.replace("__SHADCN_CSS_VERSION__", str((WEB_DIR / "shadcn.css").stat().st_mtime_ns))
         html = html.replace("__APP_JS_VERSION__", str((WEB_DIR / "app.js").stat().st_mtime_ns))
         html = html.replace("__APP_CSS_VERSION__", str((WEB_DIR / "app.css").stat().st_mtime_ns))
+        html = html.replace("__EPISODES_CSS_VERSION__", str((WEB_DIR / "episodes.css").stat().st_mtime_ns))
+        html = html.replace("__EPISODES_JS_VERSION__", str((WEB_DIR / "episodes.js").stat().st_mtime_ns))
         html = html.replace("__OVERLAY_JS_VERSION__", str((WEB_DIR / "camera-overlay.js").stat().st_mtime_ns))
         html = html.replace("__RENDERER_VERSION__", str((WEB_DIR.parent.parent / "camera" / "overlay_renderer.js").stat().st_mtime_ns))
         return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
@@ -284,6 +286,45 @@ def create_app(
     async def overlay_renderer_js():
         return FileResponse(WEB_DIR.parent.parent / "camera" / "overlay_renderer.js",
                             media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
+    @app.get("/episodes")
+    async def episodes_page():
+        return RedirectResponse("/?tab=episodes", status_code=307)
+
+    @app.get("/episodes.css")
+    async def episodes_css():
+        return FileResponse(WEB_DIR / "episodes.css", media_type="text/css",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/episodes.js")
+    async def episodes_js():
+        return FileResponse(WEB_DIR / "episodes.js", media_type="application/javascript",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/episodes")
+    async def episode_runs():
+        from agent.episodes import list_runs
+        return {"runs": list_runs((REPO_ROOT / cfg.agent.collection.root).resolve())}
+
+    @app.get("/api/episodes/{run_id}")
+    async def episode_list(run_id: str):
+        from fastapi import HTTPException
+        from agent.episodes import list_episodes
+        try:
+            episodes = await asyncio.to_thread(list_episodes, (REPO_ROOT / cfg.agent.collection.root).resolve(), run_id)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, "Dataset unavailable") from None
+        return {"episodes": episodes}
+
+    @app.get("/api/episodes/{run_id}/{episode_index}/video/{key}")
+    async def episode_video(run_id: str, episode_index: int, key: str):
+        from fastapi import HTTPException
+        from agent.episodes import video_file
+        try:
+            path = await asyncio.to_thread(video_file, (REPO_ROOT / cfg.agent.collection.root).resolve(), run_id, episode_index, key)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, "Episode video unavailable") from None
+        return FileResponse(path, media_type="video/mp4")
 
     @app.get("/api/config")
     async def ui_config():
