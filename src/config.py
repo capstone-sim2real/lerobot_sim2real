@@ -497,7 +497,10 @@ class Task1Config:
     # placement keeps its original far-reach-only tilt ramp.
     pick_tilt_base_deg: float = 3.0
     pick_tilt_max_deg: float = 30.0
-    place_tilt_max_deg: float = 5.0
+    place_tilt_max_deg: float = 0.0
+    # Model-FK tolerance for a held block's level placement approach.
+    place_level_tolerance_deg: float = 3.0
+    place_yaw_tolerance_deg: float = 5.0
     tilted_pick_hover_clearance_mm: float = 35.0
     # Assumption pending hardware measurement: release just above the
     # calibrated pick plane instead of driving the held block into the table.
@@ -515,10 +518,9 @@ class Task2Config:
     """
 
     # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
-    # zone edge nearest the base. The top-down envelope collapses with reach
-    # (measured: ~90mm of lift at 195mm against ~50mm at 285mm), so every
-    # millimetre pulled in buys tower height.
-    stack_uv: list[float] = field(default_factory=lambda: [0.50, 0.86])
+    # zone edge nearest the base. Fix level 1 at the centre of Task 1's
+    # bottom row (v=0.76); all higher levels use the same xy.
+    stack_uv: list[float] = field(default_factory=lambda: [0.50, 0.76])
     # Task 1's measured command under-reach. Needed here not for accuracy --
     # a tower only needs consistency -- but so the block physically lands
     # inside zone_polygon_mm, which is what makes the detector ignore it.
@@ -1064,7 +1066,7 @@ class AgentConfig:
 
 @dataclass
 class YoloeConfig:
-    """Offline vision experiment; defaults are candidates, not measured gates."""
+    """Optional YOLOE backend; thresholds remain experimental candidates."""
     model: str = "models/yoloe-26s-seg.pt"
     engine: str = "models/yoloe-26s-block-vp-seg-fp16.engine"
     worker_python: str = ".venv-trt/bin/python"
@@ -1254,6 +1256,10 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
     if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError("task1.place_tilt_max_deg must be within the placement IK tilt gate")
+    if not 0 < cfg.task1.place_level_tolerance_deg <= cfg.ik.max_tilt_error_deg:
+        raise ValueError("task1.place_level_tolerance_deg must be within the IK tilt gate")
+    if not 0 < cfg.task1.place_yaw_tolerance_deg <= 45.0:
+        raise ValueError("task1.place_yaw_tolerance_deg must be in (0, 45]")
 
 
 def validate_task2(cfg: AppConfig) -> None:

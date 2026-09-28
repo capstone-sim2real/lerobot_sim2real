@@ -223,3 +223,84 @@ def test_failed_transfer_while_holding_is_error_not_warning():
                           data={"holding": None}, state={"holding": None})
     assert blocked.to_envelope()["severity"] == "error"
     assert skipped.to_envelope()["severity"] == "warning"
+
+
+def test_task2_one_tool_per_block_uses_level_height_and_contact(monkeypatch):
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    first = sk.stack_next_block("yellow")
+    assert first.ok and first.data["level"] == 1
+    assert first.data["stack_verified"] is False
+    assert first.data["next_level"] == 2
+
+    def contact_near_second_level(monitor):
+        z = monitor._robot.read_joints()["elbow_flex"]
+        return ContactReading(z <= sk.s.stack.levels[1].place_z_mm)
+
+    monkeypatch.setattr(ContactMonitor, "check", contact_near_second_level)
+    second = sk.stack_next_block("red")
+    assert second.ok and second.data["level"] == 2
+    assert second.data["expected_place_z_mm"] > first.data["expected_place_z_mm"]
+    assert second.data["stack_verified"] is False
+    assert world.held is None
+    assert sk.s.arm_at_home()
+
+
+def test_task2_no_contact_puts_block_down_after_bounded_retry(monkeypatch):
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(False))
+    result = sk.stack_next_block("red")
+    assert not result.ok and result.data["failed_stage"] == "contact"
+    assert result.data["fallback_released"] is True
+    assert len(result.data["attempts"]) == 2
+    assert result.to_envelope()["severity"] == "warning"
+    assert sk.s.held is None and world.held is None
+    assert sk._task2_next_level == 2
+
+
+def test_task2_high_contact_uses_table_fallback_not_tower_release(monkeypatch):
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
+    result = sk.stack_next_block("yellow")
+    assert not result.ok and result.reason == "grasp_blocked"
+    assert result.data["failed_stage"] == "contact"
+    assert result.data["fallback_released"] is True
+    assert sk.s.held is None and world.held is None
+    assert world.blocks["yellow"] != sk.s.stack.stack_xy_mm
+    assert sk._task2_next_level == 1
+
+
+def test_task2_retries_after_verified_table_setdown(monkeypatch):
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    recovery = sk._put_held_block_on_table
+    allow_contact = {"value": False}
+
+    def put_back_then_allow_contact(color):
+        result = recovery(color)
+        allow_contact["value"] = result.ok
+        return result
+
+    def contact_on_retry(monitor):
+        z = monitor._robot.read_joints()["elbow_flex"]
+        return ContactReading(allow_contact["value"] and z <= sk.s.stack.levels[1].place_z_mm)
+
+    monkeypatch.setattr(sk, "_put_held_block_on_table", put_back_then_allow_contact)
+    monkeypatch.setattr(ContactMonitor, "check", contact_on_retry)
+    result = sk.stack_next_block("red")
+    assert result.ok and result.data["level"] == 2
+    assert len(result.data["attempts"]) == 2
+    assert result.data["attempts"][0]["fallback_verified"] is True
+    assert world.held is None and sk.s.arm_at_home()

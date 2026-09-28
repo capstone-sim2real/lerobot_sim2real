@@ -95,6 +95,17 @@ def _planner(cfg: AppConfig | None = None, ik=None) -> Task2StackPlanner:
 # --------------------------------------------------------------------------
 
 
+def test_task2_tower_starts_at_bottom_center_of_task1_row():
+    cfg = load_config(DEFAULT_YAML)
+    planner = _planner(cfg)
+    left, right = zone_slot_centres(_calibration(), cfg.task1.slot_uv)[-2:]
+    expected = ((left[0] + right[0]) / 2, (left[1] + right[1]) / 2)
+
+    assert planner.raw_xy_mm == pytest.approx(expected)
+    assert all(level.xy_mm == pytest.approx(planner.stack_xy_mm)
+               for level in planner.levels)
+
+
 def test_an_unreachable_hover_alone_blocks_a_level():
     """Isolates the hover re-gate from the floor gate.
 

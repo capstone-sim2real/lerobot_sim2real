@@ -245,6 +245,13 @@ class TopDownIK:
         x, y, z = (k.forward_kinematics(q)[:3, 3] * 1000.0).tolist()
         return float(x), float(y), float(z)
 
+    def forward_yaw_deg(self, joints: dict[str, float]) -> float:
+        """Measured joint FK yaw of the jaw plane in robot-base XY degrees."""
+        k = self._load_kinematics()
+        q = np.array([float(joints[name]) for name in ARM_JOINTS], dtype=np.float64)
+        T = k.forward_kinematics(q)
+        return float(np.degrees(np.arctan2(-T[0, 0], T[1, 0])))
+
     def neutral_yaw_deg(self, x_mm: float, y_mm: float, z_mm: float) -> float:
         """The yaw that leaves ``wrist_roll`` near 0 at this position.
 

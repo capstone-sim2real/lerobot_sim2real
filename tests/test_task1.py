@@ -147,7 +147,7 @@ def test_far_pick_tilts_to_thirty_without_changing_placement():
     assert far_reach_tilt_deg((280.0, 0.0), (0.0, 0.0), cfg) == -3.0
     assert far_reach_tilt_deg((300.0, 0.0), (0.0, 0.0), cfg) == -16.5
     assert far_reach_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == -30.0
-    assert place_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == -5.0
+    assert place_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == 0.0
     tilted = IkResult({}, 0.2, 30.0)
     assert not over_ik_gate(tilted, cfg, target_tilt_deg=-30.0)
     assert over_ik_gate(tilted, cfg)

@@ -7,7 +7,7 @@ from session.primitives import PrimitiveSkills
 from session.results import SkillResult
 
 
-def setup(tmp_path):
+def make_calibration_skills(tmp_path):
     base, world, robot = make_skills({"green": (180., 0.)})
     base.cfg.agent.primitives.calibrated_pick = True
     base.cfg.agent.collection.root = str(tmp_path)
@@ -29,7 +29,7 @@ def approach(sk):
 
 
 def test_shared_calibration_without_second_io_or_hidden_close(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert sk.s is cal.s and sk.s.robot is cal.s.robot
     sk.s.motion.open_gripper = Mock(side_effect=AssertionError("pregrasp must not open jaws"))
     assert approach(sk).ok
@@ -45,7 +45,7 @@ def test_shared_calibration_without_second_io_or_hidden_close(tmp_path):
 
 
 def test_hover_shortfall_runs_existing_bounded_correction(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     original = cal.calibration_prepare
     def shortfall(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -61,7 +61,7 @@ def test_hover_shortfall_runs_existing_bounded_correction(tmp_path):
 
 
 def test_geometry_rejection_prevents_motion_and_close(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     cal._clearance_gate = lambda *a: {"clear": False, "reason": "neighbour_clearance"}
     before = len(robot.sent_actions)
     result = approach(sk)
@@ -71,7 +71,7 @@ def test_geometry_rejection_prevents_motion_and_close(tmp_path):
 
 
 def test_load_stop_during_calibrated_descent_cannot_close(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     count = [0]
     def loads():
@@ -84,14 +84,14 @@ def test_load_stop_during_calibrated_descent_cannot_close(tmp_path):
 
 
 def test_observe_invalidates_prepared_descent(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.observe_scene().ok
     assert cal.attempt is None and not sk._pick_ready
 
 
 def test_partial_descent_does_not_authorize_early_close(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     result = sk.descend_step(2)
     assert result.ok and not result.data['depth_ready']
@@ -100,7 +100,7 @@ def test_partial_descent_does_not_authorize_early_close(tmp_path):
 
 
 def test_held_motion_keeps_calibrated_pick_tilt(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     cal.plan.radial_tilt_deg = -3.0
@@ -115,7 +115,7 @@ def test_held_motion_keeps_calibrated_pick_tilt(tmp_path):
 
 
 def test_loaded_transit_skips_empty_arm_tracking_correction(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
@@ -159,7 +159,7 @@ def test_magnitude_contact_uses_local_free_motion_baseline():
 def test_preplace_reuses_task1_far_slot_tilt_and_gate(tmp_path):
     from control.task1_transport import place_tilt_deg
 
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
@@ -171,9 +171,11 @@ def test_preplace_reuses_task1_far_slot_tilt_and_gate(tmp_path):
     expected = place_tilt_deg(sk.s.slot_centres[0], sk.s.base_xy, sk.cfg)
     assert sk._move.call_args.kwargs["radial_tilt_deg"] == expected
     assert sk._move.call_args.kwargs["max_ik_error_mm"] == sk.cfg.ik.max_position_error_mm
+    assert sk._move.call_args.kwargs["max_tilt_error_deg"] == sk.cfg.task1.place_level_tolerance_deg
+    assert sk._move.call_args.kwargs["level_during_carry"]
 
 def test_preplace_backs_off_correction_only_after_preflight_ik_failure(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
@@ -192,7 +194,7 @@ def test_preplace_backs_off_correction_only_after_preflight_ik_failure(tmp_path)
 
 def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
     from control.sensing import ContactReading
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
@@ -204,7 +206,7 @@ def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
     assert not sk.open_gripper().ok
 
 def test_tilted_held_pick_reverses_approach_before_lift(tmp_path):
-    sk, cal, robot = setup(tmp_path)
+    sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     grasp = cal.attempt
@@ -233,3 +235,40 @@ def test_tilted_held_pick_reverses_approach_before_lift(tmp_path):
     assert result.data["lateral_clearance_ready"]
     assert sk.s.arm_position_mm() == (160.0, 0.0, 60.0)
     assert sk.s.held is not None
+
+
+def test_preplace_rejects_ik_that_keeps_pick_tilt(tmp_path):
+    from control.ik import IkResult
+
+    sk, cal, robot = make_calibration_skills(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    robot.joints.update(sk.s.ik.solve(180., 0., sk.s.grasp_z_mm + 35.).joints)
+    sk.s.ik.solve = Mock(return_value=IkResult(
+        dict(robot.joints), position_error_mm=0.0, tilt_error_deg=20.0))
+    before = len(robot.sent_actions)
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+    assert not result.ok and result.reason == "ik_gate"
+    assert len(robot.sent_actions) == before
+
+
+def test_preplace_rotates_held_block_toward_zone_axis(tmp_path):
+    from control.task1_transport import square_angle_error_deg, zone_axis_yaw_deg
+
+    sk, cal, robot = make_calibration_skills(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    # The block was picked at an angle; the grasp-to-block yaw offset must
+    # be preserved while the carried jaw turns toward the zone axis.
+    sk._held_block_angle_deg = 30.0
+    pick_yaw = sk._held_pick_yaw_deg
+    robot.joints["elbow_flex"] = sk.s.grasp_z_mm + 35.0
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+    assert result.ok
+    actual_jaw_yaw = sk.s.ik.forward_yaw_deg(robot.joints)
+    predicted_block_yaw = 30.0 + actual_jaw_yaw - pick_yaw
+    assert abs(square_angle_error_deg(
+        predicted_block_yaw, zone_axis_yaw_deg(sk.s.calib.zone_polygon_mm))) < 1.0
+    assert result.data["zone_aligned_yaw_deg"] == round(sk._place_yaw_deg, 1)

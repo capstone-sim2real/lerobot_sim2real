@@ -120,6 +120,38 @@ def place_tilt_deg(
     return -maximum * fraction
 
 
+def zone_axis_yaw_deg(polygon_mm: list[tuple[float, float]]) -> float:
+    """Long-edge direction of the placement zone, modulo square symmetry."""
+    if len(polygon_mm) < 2:
+        raise ValueError("Placement zone has no measurable edge")
+    a, b = max(
+        ((polygon_mm[i], polygon_mm[(i + 1) % len(polygon_mm)])
+         for i in range(len(polygon_mm))),
+        key=lambda pair: math.dist(*pair),
+    )
+    return math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180.0
+
+
+def angle_error_deg(actual: float, target: float) -> float:
+    return (actual - target + 180.0) % 360.0 - 180.0
+
+
+def square_angle_error_deg(actual: float, target: float) -> float:
+    """Smallest signed face-angle difference for a square block."""
+    return (actual - target + 45.0) % 90.0 - 45.0
+
+
+def carry_level_tilt_deg(
+    xy_mm: tuple[float, float], base_xy_mm: tuple[float, float], cfg: AppConfig
+) -> float:
+    """Gradually level a far tilted grasp as it moves inside the pick reach band."""
+    radius = math.dist(xy_mm, base_xy_mm)
+    start = cfg.task1.pick_tilt_start_radius_mm
+    end = cfg.task1.pick_tilt_max_radius_mm
+    fraction = min(1.0, max(0.0, (radius - start) / (end - start)))
+    return -cfg.task1.pick_tilt_max_deg * fraction
+
+
 def solve_place_point(
     ik: TopDownIK,
     cfg: AppConfig,
@@ -145,7 +177,10 @@ def solve_place_point(
     )
     hover = ik.solve(*xy_mm, hover_z, radial_tilt_deg=radial_tilt)
     drop = ik.solve(*xy_mm, drop_z_mm, radial_tilt_deg=radial_tilt)
-    if over_ik_gate(hover, cfg) or over_ik_gate(drop, cfg):
+    if (over_ik_gate(hover, cfg, target_tilt_deg=radial_tilt)
+            or over_ik_gate(drop, cfg, target_tilt_deg=radial_tilt)
+            or any(abs(result.tilt_error_deg - abs(radial_tilt))
+                   > cfg.task1.place_level_tolerance_deg for result in (hover, drop))):
         name = label if label is not None else f"Task-1 slot {index}"
         raise ValueError(
             f"{name} is outside the IK gate: "

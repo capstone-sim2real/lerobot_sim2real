@@ -350,7 +350,10 @@ uv run --extra dev pytest tests -q
    고르고 `move_block_to_slot`을 호출한다. 이 도구는 기존 calibrated primitive를
    같은 로봇 스레드에서 하나씩 실행하며, 매 단계의 파지·간섭·높이·접촉 결과를
    확인한 뒤에만 다음 단계로 간다. 실패·STOP에서 즉시 멈추고 상태를 LLM에
-   돌려준다. 개별 primitive는 수동 보정·Task 2에 남기되 `run_task1/2/3`는
+   돌려준다. Task 2도 `stack_next_block`이 블록 한 개를 층별 높이와 접촉 게이트로
+   순차 처리한다. 잡은 채 배치가 실패하면 관찰·IK를 통과한 빈 테이블에 놓고
+   한 번만 재시도하며, STOP·로봇 고장에는 자동 복구 동작을 하지 않는다.
+   개별 primitive는 수동 보정에 남기되 `run_task1/2/3`는
    도구로 노출하지 않는다. 데이터 수집은 `begin_episode` → 개별 primitive들 →
    홈·재관찰 → `save_episode` 조합을 유지한다. 성공 플래그는 LLM에서 받지
    않는다. 실패·STOP·시간축 불량은 recorder 버퍼 폐기와 사유 기록으로 처리하며
@@ -370,6 +373,10 @@ uv run --extra dev pytest tests -q
 10. **가정값은 가정값이라고 쓴다**(§14.3). `agent.relative.*` 한도, `agent.table_regions.*`,
    `agent.place_clear_radius_mm`는 실측 전 가정값이다. 시연 전 `so101-agent --dry-run`
    으로 확인하고 실측 후 교체한다.
+11. **웹 검출 backend 전환은 명시적 실험 모드다.** 기본값은 CV다. operator가
+   IDLE에서 YOLOE를 선택하면 `ArmSession.observe()`와 agent Task 1 perception이 같은
+   `Scene` 계약으로 YOLOE+색상·형상 결과를 사용한다. 선택 중에도 workspace/IK/VERIFY와
+   재시도 게이트를 우회하지 않는다. backend 전환 자체는 팔을 움직이지 않는다.
 
 11. **LLM 대기 중 녹화도 로봇 소유 스레드에서 한다.** `RobotWorker`의 idle tick은
     활성 에피소드에서만 기존 `RecordingRobotIO`로 마지막 명령을 유지·기록한다.

@@ -35,7 +35,8 @@ class FakeIk:
         error = 0.2 if math.hypot(x_mm, y_mm) <= self.reach_mm else 80.0
         joints = {"shoulder_pan": float(x_mm), "shoulder_lift": float(y_mm), "elbow_flex": float(z_mm),
                   "wrist_flex": 0.0, "wrist_roll": float(yaw_deg or 0.0)}
-        return IkResult(joints, error, 0.1)
+        # The fake solver reaches the requested tilt, including upper tower levels.
+        return IkResult(joints, error, abs(radial_tilt_deg) + 0.1)
 
     def neutral_yaw_deg(self, x_mm, y_mm, z_mm):
         return 0.0
@@ -51,6 +52,9 @@ class FakeIk:
 
     def forward_position_mm(self, joints):
         return float(joints["shoulder_pan"]), float(joints["shoulder_lift"]), float(joints["elbow_flex"])
+
+    def forward_yaw_deg(self, joints):
+        return float(joints["wrist_roll"])
 
 
 def calibration() -> PlaneCalibration:

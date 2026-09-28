@@ -224,13 +224,17 @@ task1:
   pick_near_boost_max_radius_mm: 175.0
   pick_near_boost_mm: 0.0
   # 파지는 280~320mm 구간에서 3→30도로 점진적으로 기울인다.
-  # 배치는 별도 최대 5도로 유지한다. 30도 파지는 실기 검증 전 실험값이다.
+  # 배치는 운반 중 수평(0도)으로 정렬한다. 30도 파지는 실기 검증 전 실험값이다.
   # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
   pick_tilt_start_radius_mm: 280.0
   pick_tilt_max_radius_mm: 320.0
   pick_tilt_base_deg: 3.0
   pick_tilt_max_deg: 30.0
-  place_tilt_max_deg: 5.0
+  place_tilt_max_deg: 0.0
+  # 배치 시 모델 FK 수평 오차 한도. 실제 블록 수평은 관찰로 확인해야 한다.
+  place_level_tolerance_deg: 3.0
+  # 영역 긴 변에 대한 블록 평면 회전의 모델 FK 허용 오차.
+  place_yaw_tolerance_deg: 5.0
   tilted_pick_hover_clearance_mm: 35.0
   # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
   release_clearance_mm: 5.0
@@ -239,9 +243,8 @@ task1:
 # task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).
 task2:
   # 타워 지점. task1.slot_uv 와 같은 [u, v] 규약이고 v→1 이 베이스에 가까운 변이다.
-  # 탑다운 리프트는 리치에 강하게 반비례하므로(실측 195mm에서 ~90mm, 285mm에서
-  # ~50mm) 안쪽으로 당긴 1mm가 곧 타워 높이다.
-  stack_uv: [0.50, 0.86]
+  # 1층은 Task 1 아래쪽 행(v=0.76)의 정중앙에 고정한다. 윗층도 같은 XY에 쌓는다.
+  stack_uv: [0.50, 0.76]
   # Task 1과 같은 실기 under-reach 보정. 정확도가 아니라 zone_polygon_mm 안쪽에
   # 착지시키기 위해 필요하다 — 그게 검출기가 놓인 블록을 무시하는 근거다.
   stack_radial_offset_mm: 0.0

@@ -1,4 +1,4 @@
-"""Guarded robot primitives and the deterministic Task 1 block transfer."""
+"""Guarded robot primitives and deterministic one-block mission transfers."""
 from .provider.types import ToolSpec
 from .tools import ToolDef, _obj, _mm, _cell_span
 
@@ -16,6 +16,15 @@ def build_primitive_tools(cfg):
         {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)},
          "slot": {"type": "string", "enum": list(cfg.agent.zone_slots.labels)}},
         ["color", "slot"])
+    add("stack_next_block",
+        "Task 2: transfer one outside-zone block to the next tower level. The server "
+        "selects the level-specific hover height, checks grasp and carry IK, descends "
+        "only within a bounded contact window, and reobserves. If a held placement "
+        "fails, it finds a free table point, puts the block down, and retries once; "
+        "STOP and robot faults never trigger automatic recovery. A successful call "
+        "does not prove tower height or five-second stability.",
+        {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)}},
+        ["color"])
     object_fields = {
         "object_id": {"type": "string", "enum": [f"{c}_1" for c in sorted(cfg.perception.color_prototypes)]},
         "observation_id": {"type": "integer", "minimum": 1},
