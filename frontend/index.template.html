@@ -24,6 +24,7 @@
     <span id="camera-badge" class="badge badge-muted">카메라 ?</span>
     <span id="model-badge" class="badge badge-muted"></span>
   </div>
+<a href="/episodes">에피소드 보기</a>
 <button type="button" id="theme-toggle" class="btn" aria-label="다크 모드 전환" aria-pressed="false">다크 모드</button>
 <button id="stop" class="stop" title="비상정지 (Esc)">STOP <small>Esc</small></button></header>
 
@@ -40,11 +41,16 @@
     <div class="camera-heading">
       <label for="camera-select">카메라</label>
       <select id="camera-select" aria-label="카메라 선택"><option value="shoulder">헤드캠</option><option value="wrist">손목캠</option></select>
+      <label for="perception-backend">검출</label>
+      <select id="perception-backend" aria-label="검출 방식 선택"><option value="cv">CV</option><option value="yoloe">YOLOE · TensorRT</option></select>
+      <span id="perception-backend-note" class="hint">선택한 검출을 관찰·PICK에 사용 · 기존 안전 게이트 유지</span>
+      <span id="perception-status" class="hint" role="status">CV 검출 연결 중…</span>
     </div>
     <div class="camera-wrap" id="camera-wrap">
       <img id="camera" alt="카메라 영상">
       <canvas id="perception-overlay" aria-label="블록 검출 오버레이"></canvas>
       <svg id="overlay" preserveAspectRatio="none"></svg>
+      <svg id="pixel-reach-overlay" preserveAspectRatio="none" aria-label="대략적인 파지 사거리"></svg>
       <svg id="pixel-target-overlay" preserveAspectRatio="none" aria-label="선택한 픽셀 위치"></svg>
       <div id="camera-missing" class="camera-missing" hidden>카메라 영상을 불러올 수 없습니다 (so101-camera 실행 확인)</div>
     </div>

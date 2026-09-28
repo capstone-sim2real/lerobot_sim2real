@@ -1,6 +1,6 @@
 # Agent UI build
 
-`npm ci && npm run build` renders shadcn/ui Button, Card, Badge and Input
+`npm ci && npm run build` renders shadcn/ui Button, Card, Badge, Input, native Select and native Checkbox
 components into `src/agent/web/index.html` and compiles `shadcn.css`.
 Edit `frontend/index.template.html`, not the generated index.html.
 Existing app.js owns all robot interactions; no React hydration or CDN runs
