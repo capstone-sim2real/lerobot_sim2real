@@ -1048,7 +1048,26 @@ class AgentConfig:
 
 
 @dataclass
+class YoloeConfig:
+    """Offline vision experiment; defaults are candidates, not measured gates."""
+    model: str = "models/yoloe-26s-seg.pt"
+    engine: str = "models/yoloe-26s-block-vp-seg-fp16.engine"
+    prompts: list[str] = field(default_factory=lambda: ["wooden block", "toy block", "cube"])
+    device: str = "cpu"
+    imgsz: int = 640
+    confidence: float = 0.1
+    trt_confidence: float = 0.04
+    iou: float = 0.5
+    cpu_threads: int = 4
+    max_detections: int = 20
+    trt_warmup_runs: int = 5
+    snapshot_url: str = "http://127.0.0.1:8090/snapshot/shoulder.jpg"
+    http_timeout_s: float = 10.0
+
+
+@dataclass
 class AppConfig:
+    yoloe: YoloeConfig = field(default_factory=YoloeConfig)
     robot: RobotIOConfig = field(default_factory=RobotIOConfig)
     perception: PerceptionConfig = field(default_factory=PerceptionConfig)
     select: SelectConfig = field(default_factory=SelectConfig)
