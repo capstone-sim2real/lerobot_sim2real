@@ -992,6 +992,7 @@ class PrimitiveConfig:
     approach_clearance_mm: float = 35.0
     lateral_clearance_mm: float = 35.0
     lateral_clearance_tolerance_mm: float = 1.0  # FK/encoder settling near the lift threshold
+    zone_release_floor_margin_mm: float = 2.0  # calibrated top plane to minimum release FK
     max_lift_attempts: int = 4
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
@@ -1423,7 +1424,7 @@ def validate_agent(cfg: AppConfig) -> None:
             raise ValueError(f"agent.collection.{name} must be finite and positive")
     primitive = agent.primitives
     for name in ("target_max_age_s", "approach_clearance_mm", "lateral_clearance_mm",
-                 "lateral_clearance_tolerance_mm",
+                 "lateral_clearance_tolerance_mm", "zone_release_floor_margin_mm",
                  "alignment_tolerance_mm", "arrival_error_mm", "cartesian_step_mm",
                  "contact_step_mm", "contact_max_descent_mm", "contact_timeout_s",
                  "contact_backoff_mm", "wrist_roll_limit_deg"):
@@ -1432,6 +1433,8 @@ def validate_agent(cfg: AppConfig) -> None:
             raise ValueError(f"agent.primitives.{name} must be finite and positive")
     if primitive.lateral_clearance_tolerance_mm >= primitive.lateral_clearance_mm:
         raise ValueError("primitive lateral clearance tolerance must be smaller than clearance")
+    if primitive.zone_release_floor_margin_mm >= cfg.task1.release_clearance_mm:
+        raise ValueError("primitive release floor margin must be below Task 1 drop clearance")
     if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
         raise ValueError("primitive approach clearance must cover lateral clearance")
     if type(primitive.max_lift_attempts) is not int or not 1 <= primitive.max_lift_attempts <= 4:

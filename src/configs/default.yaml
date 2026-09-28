@@ -459,6 +459,7 @@ agent:
     approach_clearance_mm: 35.0
     lateral_clearance_mm: 35.0
     lateral_clearance_tolerance_mm: 1.0
+    zone_release_floor_margin_mm: 2.0
     max_lift_attempts: 4
     alignment_tolerance_mm: 25.0
     arrival_error_mm: 15.0

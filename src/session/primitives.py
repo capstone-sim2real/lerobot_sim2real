@@ -1492,16 +1492,59 @@ class PrimitiveSkills(Skills):
             tol=self.cfg.motion.arrival_tol,
         )
         actual = self.s.arm_position_mm()
-        if (math.dist(actual[:2], start[:2]) > self.limits.alignment_tolerance_mm
-                or not self.s.grasp_z_mm + 3 <= actual[2] <= drop_z + 10):
-            return self._fail(action, "Measured FK missed the zone release window",
-                              "motion_timeout")
+        first_release_fk = actual
+        # The joint tolerance can accept several degrees of loaded shoulder
+        # sag. If that consumes over half the intended drop clearance, make
+        # one measured upward correction before opening the gripper.
+        if (actual[2] < self.s.grasp_z_mm + self.cfg.task1.release_clearance_mm / 2
+                and math.dist(actual[:2], start[:2]) <= self.limits.alignment_tolerance_mm):
+            correction_z = min(start[2], drop_z + max(0.0, drop_z - actual[2]))
+            try:
+                correction = self._solve(
+                    (*start[:2], correction_z), radial_tilt_deg=tilt,
+                    max_position_error_mm=self.cfg.ik.max_position_error_mm,
+                    max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
+                    yaw_deg=self._place_yaw_deg,
+                    max_yaw_error_deg=self.cfg.task1.place_yaw_tolerance_deg,
+                )
+                joints = self.s.robot.read_joints()
+                trace = [self.s.ik.forward_position_mm({**joints, **step})
+                         for step in interpolate(joints, correction.joints,
+                                                 self.cfg.motion.descent_step_per_tick)]
+                if (not trace or min(point[2] for point in trace) < actual[2] - 1
+                        or any(math.dist(point[:2], start[:2]) > self.limits.alignment_tolerance_mm
+                               for point in trace)):
+                    raise ValueError("upward correction path leaves release column")
+            except ValueError:
+                pass  # still allow a bounded release if the measured pose is safe
+            else:
+                self.s.player.move_to(
+                    correction.joints, max_step=self.cfg.motion.descent_step_per_tick,
+                    tol=self.cfg.motion.arrival_tol,
+                )
+                actual = self.s.arm_position_mm()
+        def in_release_window(pose):
+            return (math.dist(pose[:2], start[:2]) <= self.limits.alignment_tolerance_mm
+                    and self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm
+                    <= pose[2] <= drop_z + 10)
+
+        if not in_release_window(actual):
+            time.sleep(self.cfg.motion.descent_settle_s)
+            actual = self.s.arm_position_mm()
+        if not in_release_window(actual):
+            # The motor command finished; only the release pose is unverified.
+            # Keep holding so a later recovery can lift or set down the block.
+            return self._result(False, action, "grasp_blocked",
+                                "Measured FK missed the zone release window",
+                                retry_advice="retry_ok", release_target_z_mm=drop_z,
+                                measured_fk_mm=list(actual))
         if not self._held_check():
             return self._fail(action, "Grasp verification failed", "grasp_empty")
         self._zone_drop_xy = tuple(start[:2])
         self._zone_drop_ready = True
         return self._result(True, action, "ok", release_mode="height_drop",
-                            release_fk_mm=list(actual), drop_z_mm=drop_z)
+                            release_fk_mm=list(actual), drop_z_mm=drop_z,
+                            first_release_fk_mm=list(first_release_fk))
 
     def descend_until_contact(self, max_descent_mm):
         action = "descend_until_contact"
@@ -1687,7 +1730,7 @@ class PrimitiveSkills(Skills):
             actual = self.s.arm_position_mm()
             if (self._zone_drop_target_xy() is None or self._zone_drop_xy is None
                     or math.dist(actual[:2], self._zone_drop_xy) > self.limits.alignment_tolerance_mm
-                    or not self.s.grasp_z_mm + 3 <= actual[2] <= self.s.drop_z_mm + 10):
+                    or not self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm <= actual[2] <= self.s.drop_z_mm + 10):
                 self._zone_drop_ready = False
                 return self._fail("open_gripper", "Arm left the verified zone drop pose")
         if (self.s.held is not None and self._place_yaw_deg is not None
