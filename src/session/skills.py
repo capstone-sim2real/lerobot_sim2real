@@ -1094,35 +1094,34 @@ class Skills:
                             t0=t0, lifted_first=lifted or None, arm_at_home=at_home)
 
     def recover_and_home(self) -> SkillResult:
-        """STOP/fault recovery: drop whatever is held, home, then close the jaws.
+        """STOP/fault recovery: open the jaws, then return home with them open.
 
-        Unlike ``return_to_home`` (a normal LLM tool that keeps a held block
-        held), this always opens the gripper first -- the arena's blocks and
-        arm are small enough, and the zone is not reachable by students, that
-        a dropped block is a non-issue and simplicity wins. Clears the STOP
-        flag first so the recovery motion itself is not immediately cancelled.
+        The service clears cancellation before queuing this skill. A new STOP
+        during recovery must remain effective at the next robot bus write.
         """
         t0, s = time.monotonic(), self.s
-        s.cancel.clear()
         released = s.held.color if s.held else None
+        open_error = None
         try:
             s.motion.open_gripper()
         except Exception as exc:  # noqa: BLE001 - still try to get home
+            open_error = str(exc)
             logger.warning("recover_and_home: open_gripper failed: %s", exc)
-        s.held = None
-        if released is not None:
-            s.last_block_color = released
+        else:
+            s.held = None
+            if released is not None:
+                s.last_block_color = released
         lifted, at_home = s.return_home_safely()
-        if at_home:
-            try:
-                s.motion.close_gripper()
-            except Exception as exc:  # noqa: BLE001 - homing already succeeded
-                logger.warning("recover_and_home: close_gripper failed: %s", exc)
-        detail = "그리퍼를 열어" + (f" {released} 블록을 내려놓고" if released else "") + \
-            (" home으로 복귀하고 그리퍼를 닫았습니다." if at_home else " home으로 복귀를 시도했지만 도달하지 못했습니다.")
+        ok = at_home and open_error is None
+        detail = (
+            "그리퍼를 열고 home으로 복귀했습니다." if ok else
+            "그리퍼 열기 또는 home 복귀를 완료하지 못했습니다."
+        )
         return self._result(
-            at_home, "recover_and_home", "ok" if at_home else "motion_timeout", detail,
-            t0=t0, released=released, lifted_first=lifted or None, arm_at_home=at_home,
+            ok, "recover_and_home", "ok" if ok else "motion_timeout", detail,
+            t0=t0, released=released if open_error is None else None,
+            lifted_first=lifted or None, arm_at_home=at_home, gripper_open=open_error is None,
+            open_error=open_error,
         )
 
     def open_gripper(self) -> SkillResult:

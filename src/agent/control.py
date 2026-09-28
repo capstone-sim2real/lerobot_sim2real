@@ -5,10 +5,10 @@ States::
     IDLE --chat/jog--> BUSY --turn ends--> IDLE
     BUSY --STOP--> STOPPING --turn thread unwound--> STOPPED
     BUSY --robot fault--> STOPPED
-    STOPPED --[home]--> HOMING --home verified--> IDLE
+    STOPPED --[home or explicit STOP recovery]--> HOMING --home verified--> IDLE
     HOMING --not home / STOP--> STOPPED
 
-Only IDLE accepts a new command. STOPPED accepts only the home request. The
+Only IDLE accepts a new command. STOPPED accepts home recovery or another STOP. The
 web UI greys buttons out from the broadcast state, but this class is what
 actually refuses.
 
@@ -194,7 +194,14 @@ class ControlGate:
 
     def request_stop(self) -> bool:
         with self._lock:
-            return self._request_stop_locked("비상정지 버튼이 눌렸습니다.")
+            if self.state is ControlState.IDLE:
+                self.state = ControlState.STOPPED
+                self.message = "정지 버튼이 눌렸습니다. 그리퍼를 열고 home으로 복귀합니다."
+                self._changed()
+                return True
+            if self.state is ControlState.STOPPED:
+                return True  # retry a previously failed recovery
+            return self._request_stop_locked("정지 버튼이 눌렸습니다.")
 
     def _request_stop_locked(self, message: str) -> bool:
         if self.state not in (ControlState.BUSY, ControlState.HOMING):
