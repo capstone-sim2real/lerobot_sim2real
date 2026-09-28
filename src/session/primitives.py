@@ -50,6 +50,10 @@ class PrimitiveSkills(Skills):
         session.player = TrajectoryPlayer(session.robot, self.cfg.motion)
         session.motion = MotionController(session.robot, session.poses, self.cfg.motion, self.cfg.sensing)
 
+    def _lateral_clearance_ready(self, z_mm: float) -> bool:
+        required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+        return z_mm + self.limits.lateral_clearance_tolerance_mm >= required_z
+
     def _calibration(self):
         if self._pick_calibration is None:
             from pathlib import Path
@@ -385,7 +389,7 @@ class PrimitiveSkills(Skills):
             correction_mm = 0.0
             for _ in range(self.limits.max_lift_attempts):
                 x, y, actual_z = self.s.arm_position_mm()
-                if actual_z >= required_z:
+                if self._lateral_clearance_ready(actual_z):
                     return None
                 # The selected tilted pick already preflighted a reverse path.
                 # Use it before trying fixed-XY vertical IK at the far reach.
@@ -432,7 +436,7 @@ class PrimitiveSkills(Skills):
                 error_limit = (self.limits.loaded_arrival_error_mm if self.s.held is not None
                                else self.limits.arrival_error_mm)
                 correction_mm = min(max(0.0, target_z - actual_z), error_limit)
-            if self.s.arm_position_mm()[2] >= required_z:
+            if self._lateral_clearance_ready(self.s.arm_position_mm()[2]):
                 return None
             return self._result(
                 False, action, "limit_exceeded", "Arm did not reach lateral clearance.",
@@ -574,7 +578,7 @@ class PrimitiveSkills(Skills):
         self._contact = False
         self._stack_drop_ready = False
         required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
-        if xyz[2] < required_z:
+        if not self._lateral_clearance_ready(xyz[2]):
             # After a failed lift the block may still be right above its
             # source. Set it down there without a lateral sweep if that point
             # is clear. A blocked/inside-zone point needs a guarded lift.
@@ -603,7 +607,7 @@ class PrimitiveSkills(Skills):
                                     target_xy_mm=list(xyz[:2]), mode="vertical_put_back")
             lift = self.move_relative(up_mm=min(required_z - xyz[2],
                                                 self.cfg.agent.relative.max_jog_mm))
-            if not lift.ok or self.s.arm_position_mm()[2] < required_z:
+            if not lift.ok or not self._lateral_clearance_ready(self.s.arm_position_mm()[2]):
                 return self._result(False, action, "limit_exceeded",
                                     "No safe nearby set-down: current point is blocked and lift failed",
                                     retry_advice="ask_operator", lift_reason=lift.reason,
@@ -725,7 +729,7 @@ class PrimitiveSkills(Skills):
             correction_mm = 0.0
             for _ in range(self.limits.max_lift_attempts):
                 x, y, actual_z = self.s.arm_position_mm()
-                if actual_z >= required_z:
+                if self._lateral_clearance_ready(actual_z):
                     return None
                 held = self.s.held
                 if (held is not None and abs(self._held_radial_tilt_deg) >= 5.0
@@ -752,7 +756,7 @@ class PrimitiveSkills(Skills):
                 error_limit = (self.limits.loaded_arrival_error_mm if self.s.held
                                else self.limits.arrival_error_mm)
                 correction_mm = min(max(0.0, target_z - actual_z), error_limit)
-            if self.s.arm_position_mm()[2] >= required_z:
+            if self._lateral_clearance_ready(self.s.arm_position_mm()[2]):
                 return None
             return self._result(False, action, "limit_exceeded",
                                 "Arm did not reach lateral clearance",
@@ -1020,7 +1024,7 @@ class PrimitiveSkills(Skills):
         start = self.s.arm_position_mm()
         lateral = math.dist(start[:2], xyz[:2]) > 1e-6
         clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
-        if lateral and min(start[2], xyz[2]) < clear_z:
+        if lateral and not self._lateral_clearance_ready(min(start[2], xyz[2])):
             return self._fail(action, "Lift vertically above clearance before lateral movement")
         if not self._held_check() and (lateral or xyz[2] < start[2]):
             return self._fail(action, "Grasp verification failed; open/retry or lift vertically")
@@ -1357,7 +1361,7 @@ class PrimitiveSkills(Skills):
         if self.s.held is not None and up_mm > 0:
             measured_z = self.s.arm_position_mm()[2]
             required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
-            ready = measured_z >= required_z
+            ready = self._lateral_clearance_ready(measured_z)
             result.data["required_lateral_clearance_z_mm"] = round(required_z, 1)
             result.data["lateral_clearance_ready"] = ready
             result.data["next_required_action"] = (
@@ -1381,7 +1385,7 @@ class PrimitiveSkills(Skills):
                                     alignment_already_applied=True)
             return self._fail("align_gripper", "Approach the calibrated object first")
         xyz = self.s.arm_position_mm()
-        if xyz[2] < self.s.grasp_z_mm + self.limits.lateral_clearance_mm:
+        if not self._lateral_clearance_ready(xyz[2]):
             return self._fail("align_gripper", "Lift before alignment")
         yaw, _ = self.s.ik.grasp_yaw_and_rotation_deg(*xyz, block.angle_deg)
         plan = self.s.ik.solve(*xyz, yaw_deg=yaw)
