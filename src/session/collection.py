@@ -117,6 +117,8 @@ class Collection:
 
     def _reset_evidence(self):
         self.color = None
+        self.sequence_mode = False
+        self.stationary_pauses = []
         self.grasped = False
         self.delivered = False
         self.destination_in_zone = False
@@ -140,14 +142,16 @@ class Collection:
             "saved_by_color": dict(recorder.saved_by_color) if recorder else {},
             "discard_reasons": dict(recorder.discard_reasons) if recorder else {},
             "record_fps": self.cfg.task3.record_fps,
-            "color": self.color, "grasp_verified": self.grasped,
+            "color": self.color, "sequence_mode": self.sequence_mode,
+            "stationary_pauses": list(self.stationary_pauses),
+            "grasp_verified": self.grasped,
             "delivered": self.delivered, "returned_home": self.home,
             "placement_observed": self.verified_at is not None,
             "last_error": self.last_error,
             "training_started": False, "finalizing": self.finalizing,
         }
 
-    def begin(self, color):
+    def begin(self, color, *, task_text=None, sequence_mode=False):
         if self.finalizing:
             raise ValueError("Dataset finalization is unresolved; retry finish_dataset before new recording")
         if self.recorder and self.recorder.is_open:
@@ -160,7 +164,8 @@ class Collection:
         self._reset_evidence()
         self.last_error = None
         self.color = color
-        self.recorder.begin_episode(color)
+        self.sequence_mode = sequence_mode
+        self.recorder.begin_episode(color, task_text=task_text)
         self.writer = RecordingRobotIO(self.io.inner, self.recorder,
                                         record_fps=self.cfg.task3.record_fps,
                                         stop_event=self.s.cancel.event)
@@ -175,10 +180,22 @@ class Collection:
         now = self.clock()
         if self.last_tick is not None:
             gap = now - self.last_tick
-            self.intervals.append(gap)
             if gap > self.cfg.agent.collection.max_tick_gap_s:
-                self.discard("timing_gap")
-                raise ValueError("Recording gap exceeded limit; episode discarded")
+                if not self.sequence_mode or self.writer is None or self.writer.last_measured is None:
+                    self.discard("timing_gap")
+                    raise ValueError("Recording gap exceeded limit; episode discarded")
+                current = self.io.inner.read_joints()
+                previous = self.writer.last_measured
+                drift = max(abs(current[joint] - value) for joint, value in previous.items())
+                if drift > self.cfg.agent.collection.max_stationary_drift:
+                    self.discard("moving_timing_gap")
+                    raise ValueError("Arm moved during an unrecorded interval; episode discarded")
+                self.stationary_pauses.append({"duration_s": round(gap, 3),
+                                               "max_joint_drift": round(drift, 3)})
+                self.recorder.reset_tick_interval()
+                self.last_tick = now
+                return
+            self.intervals.append(gap)
         self.last_tick = now
 
     def idle_tick(self):
@@ -207,6 +224,10 @@ class Collection:
         if not recorder or not recorder.is_open:
             return
         self.events.append({"t": self.clock(), "action": action, "ok": result.ok, "reason": result.reason})
+        if self.sequence_mode:
+            if not result.ok:
+                self.discard(result.reason)
+            return
         if self.home and action in {"close_gripper", "move_relative", "move_to_target", "align_gripper", "descend_until_contact", "open_gripper"}:
             self.discard("motion_after_episode_end")
             return
@@ -257,6 +278,25 @@ class Collection:
         if self.intervals:
             relative_error = abs(sum(self.intervals)/len(self.intervals)*self.cfg.task3.record_fps - 1)
             if relative_error > self.cfg.agent.collection.max_mean_period_error:
+                self.discard("timing_drift")
+                return False
+        saved = self.recorder.finish_episode(success=True)
+        self._pause()
+        self._summary()
+        return saved
+
+    def save_sequence(self):
+        """Save a completed preplanned tool run, without zone-specific assumptions."""
+        if not self.sequence_mode or not self.recorder or not self.recorder.is_open:
+            raise ValueError("No open tool-sequence episode")
+        if self.s.cancel.is_set() or self.s.held is not None or not self.s.arm_at_home():
+            self.discard("incomplete_sequence")
+            raise ValueError("Recorded sequence must finish empty-handed at home")
+        # Include measured settled home as the final observation/action pair.
+        self.io.send_joints(dict(self.io.last_command or self.s.robot.read_joints()))
+        if self.intervals:
+            mean = sum(self.intervals) / len(self.intervals)
+            if abs(mean * self.cfg.task3.record_fps - 1) > self.cfg.agent.collection.max_mean_period_error:
                 self.discard("timing_drift")
                 return False
         saved = self.recorder.finish_episode(success=True)

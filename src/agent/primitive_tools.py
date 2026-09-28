@@ -3,6 +3,15 @@ from .provider.types import ToolSpec
 from .tools import ToolDef, _obj, _mm, _cell_span
 
 
+RECORDABLE_TOOLS = (
+    "observe_scene", "get_state", "inspect_motion", "correct_hover",
+    "descend_step", "move_to_target", "move_relative", "align_gripper",
+    "close_gripper", "drop_at_zone_target", "descend_until_contact",
+    "open_gripper", "return_to_home", "move_block_to_slot",
+    "stack_block_to_floor",
+)
+
+
 def build_primitive_tools(cfg):
     tools = []
     def add(name, description, properties=None, required=None, moves=True):
@@ -62,9 +71,21 @@ def build_primitive_tools(cfg):
                            "maximum": cfg.agent.primitives.contact_max_descent_mm}}, ["max_descent_mm"])
     add("open_gripper", "Open in place. A held block requires confirmed placement contact or a verified zone/stack drop pose. Release does not prove stacking success.")
     add("return_to_home", "Return empty gripper home. Refuses while holding.")
-    add("record_task1", "Run the Task 1 CV+IK gathering loop with recording enabled. "
-        "Each home-to-home block transfer is one episode; failed grasps are discarded. "
-        "Call once per arrangement, then rearrange blocks before another run.")
+    add("record_tool_sequence",
+        "Execute a preplanned list of existing safe tools on the robot worker while recording "
+        "one episode. The LLM supplies the whole list before motion; the server stops on the "
+        "first failure and returns every step result. Start empty-handed at home and include "
+        "a home return in the plan. Only a completed home-to-home run is saved; physical task "
+        "success beyond the tool results is not inferred.",
+        {"task": {"type": "string", "description": "Dataset task sentence matching the requested behavior"},
+         "color": {"type": "string", "enum": sorted(cfg.task3.task_templates)},
+         "steps": {"type": "array", "minItems": 1,
+                   "maxItems": cfg.agent.collection.max_steps,
+                   "items": {"type": "object", "properties": {
+                       "name": {"type": "string", "enum": list(RECORDABLE_TOOLS)},
+                       "arguments": {"type": "object"}},
+                       "required": ["name", "arguments"], "additionalProperties": False}}},
+        ["task", "color", "steps"])
     add("begin_episode", "Begin a home-to-home demonstration for an observed outside-zone block. Uses configured local dataset and camera streams. Does not pick or run a task.", object_fields, list(object_fields), moves=False)
     add("save_episode", "Save only after verified grasp, zone delivery, home return and fresh observed placement. Backend checks evidence, frame count and timing; no success argument.", moves=False)
     add("discard_episode", "Discard the current demonstration buffer, preserving saved episodes and recording the reason.", {

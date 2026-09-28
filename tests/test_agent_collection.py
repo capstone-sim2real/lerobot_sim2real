@@ -137,3 +137,58 @@ def test_failed_finalization_blocks_new_recording_until_retry(rig):
     assert rig.sk.collection.finalizing
     rig.finish.side_effect = None
     assert rig.call("finish_dataset")["ok"]
+
+
+def test_preplanned_tool_sequence_records_and_returns_each_result(rig):
+    plan = [
+        {"name": "open_gripper", "arguments": {}},
+        {"name": "return_to_home", "arguments": {}},
+    ]
+    result = rig.call("record_tool_sequence", task="Move the yellow block as requested.",
+                      color="yellow", steps=plan)
+    assert result["ok"], result
+    assert [item["tool"] for item in result["step_results"]] == ["open_gripper", "return_to_home"]
+    assert result["collection"]["episodes_saved"] == 1
+    assert rig.sink.save_count == 1
+    assert rig.sink.saved[0][0]["task"] == "Move the yellow block as requested."
+
+
+def test_invalid_sequence_is_rejected_before_recording(rig):
+    result = rig.call("record_tool_sequence", task="Unsafe plan", color="yellow",
+                      steps=[{"name": "move_relative", "arguments": {"up_mm": 9999}}])
+    assert not result["ok"]
+    assert result["reason"] == "invalid_arguments"
+    assert rig.sk.collection.resources is None
+
+
+def test_recorded_sequence_stops_and_discards_on_first_failed_step(rig):
+    result = rig.call("record_tool_sequence", task="Pick up the yellow block.", color="yellow",
+                      steps=[
+                          {"name": "move_to_target", "arguments": {
+                              "target_type": "object", "phase": "pregrasp",
+                              "object_id": "yellow_1", "observation_id": 999}},
+                          {"name": "open_gripper", "arguments": {}},
+                      ])
+    assert not result["ok"]
+    assert [item["tool"] for item in result["step_results"]] == ["move_to_target"]
+    assert rig.sink.save_count == 0
+    assert not rig.sk.collection.recording
+
+
+def test_sequence_compresses_only_measured_stationary_pause(rig):
+    rig.sk.collection.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    rig.mono[0] += 1.0
+    rig.sk.collection.check_tick()
+    assert rig.sk.collection.recording
+    assert len(rig.sk.collection.stationary_pauses) == 1
+    assert not rig.sk.collection.intervals or max(rig.sk.collection.intervals) < 0.1
+    rig.sk.collection.discard("operator_requested")
+
+
+def test_sequence_discards_pause_with_unrecorded_motion(rig):
+    rig.sk.collection.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    rig.robot.joints["shoulder_pan"] += 5.0
+    rig.mono[0] += 1.0
+    with pytest.raises(ValueError, match="Arm moved"):
+        rig.sk.collection.check_tick()
+    assert rig.sk.collection.recorder.discard_reasons["moving_timing_gap"] == 1

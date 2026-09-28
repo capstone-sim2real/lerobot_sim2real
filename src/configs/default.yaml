@@ -445,8 +445,11 @@ agent:
 
   collection:
     root: datasets/agent
+    max_steps: 24
+    max_task_text_chars: 240
     # Assumed quality gates; timing failures discard rather than compress time.
     max_tick_gap_s: 0.1
+    max_stationary_drift: 1.0
     max_mean_period_error: 0.1
     idle_poll_s: 0.005
   primitives:

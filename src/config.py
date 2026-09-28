@@ -1011,7 +1011,10 @@ class PrimitiveConfig:
 class AgentCollectionConfig:
     """Assumed recording quality gates; validate timing on hardware."""
     root: str = "datasets/agent"
+    max_steps: int = 24
+    max_task_text_chars: int = 240
     max_tick_gap_s: float = 0.1
+    max_stationary_drift: float = 1.0  # degrees, or normalized gripper percent
     max_mean_period_error: float = 0.1
     idle_poll_s: float = 0.005
 
@@ -1411,7 +1414,9 @@ def validate_agent(cfg: AppConfig) -> None:
     agent = cfg.agent
     if not agent.collection.root.strip():
         raise ValueError("agent.collection.root must be set")
-    for name in ("max_tick_gap_s", "max_mean_period_error", "idle_poll_s"):
+    if agent.collection.max_steps < 1 or agent.collection.max_task_text_chars < 1:
+        raise ValueError("agent.collection sequence limits must be positive")
+    for name in ("max_tick_gap_s", "max_stationary_drift", "max_mean_period_error", "idle_poll_s"):
         value = getattr(agent.collection, name)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"agent.collection.{name} must be finite and positive")

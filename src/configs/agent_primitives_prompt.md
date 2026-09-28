@@ -85,13 +85,12 @@ Task 2 — 블록 적층 후 5초 유지
 없이 시간 내 완료를 주장하지 않는다. STOP·로봇 고장·도구 왕복 한도에 도달하면
 진행 상황과 남은 항목을 보고하고, 새 동작으로 제한을 우회하지 않는다.
 
-For dataset collection, call record_task1 once per arrangement. It runs the
-existing Task 1 CV+IK FSM and records each home-to-home block transfer with
-RecordingRobotIO at the configured rate. The LLM does not select motion or
-save frames between blocks. Report episodes_saved and discard_reasons from the
-result; only saved episodes count. When the round ends, ask the operator to
-rearrange blocks before the next call. Do not stack, train or upload during
-collection. STOP and robot faults end the run; never claim an unverified episode.
-
-The server closes each episode and finalizes the dataset before record_task1 returns.
-An interrupted episode is discarded; saved episodes are retained.
+데이터셋 수집은 먼저 observe_scene으로 현재 장면을 확인하고, 사용자 요청에 맞는
+기존 도구들과 인자를 블록 한 개의 완결된 동작으로 미리 정한다. 그 전체 목록을
+record_tool_sequence(task, color, steps)에 한 번에 넘긴다. 서버가 녹화를 켜고 같은
+로봇 스레드에서 순서대로 실행하므로 도구 사이에 LLM 응답 대기가 없다. 파지·배치·
+홈 복귀까지 포함하고, 다음 블록은 결과를 받은 뒤 새 계획으로 실행한다.
+실패하면 그 에피소드는 버리고 step_results와 holding 상태로 다시 계획한다.
+도구가 모두 성공하고 빈손으로 홈에 돌아와 저장됐다는 결과만 데이터셋 수집
+성공으로 센다. 평면 카메라가 실제 적층 층수나 안정성을 증명하지는 않는다.
+작업을 마친 뒤 finish_dataset으로 영상 저장을 마무리한다.

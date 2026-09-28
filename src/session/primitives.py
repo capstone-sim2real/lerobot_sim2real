@@ -152,6 +152,65 @@ class PrimitiveSkills(Skills):
         finally:
             super().close()
 
+    def record_tool_sequence(self, task, color, steps):
+        """Run a model-planned tool program without model waits between steps."""
+        from agent.primitive_tools import RECORDABLE_TOOLS
+        from agent.tools import build_tools, result_from_exception, validate_arguments
+
+        action, t0 = "record_tool_sequence", time.monotonic()
+        allowed = set(RECORDABLE_TOOLS)
+        if (not isinstance(task, str) or not task.strip() or len(task) > self.cfg.agent.collection.max_task_text_chars
+                or not isinstance(color, str) or color not in self.cfg.task3.task_templates
+                or not isinstance(steps, list)
+                or not 1 <= len(steps) <= self.cfg.agent.collection.max_steps):
+            return self._fail(action, "A task sentence, known color and bounded steps are required",
+                              "invalid_arguments")
+        definitions = {tool.spec.name: tool for tool in build_tools(self.cfg)}
+        planned = []
+        for index, step in enumerate(steps):
+            if not isinstance(step, dict) or set(step) != {"name", "arguments"}:
+                return self._fail(action, f"Invalid step {index + 1}", "invalid_arguments")
+            name, args = step["name"], step["arguments"]
+            if not isinstance(name, str) or name not in allowed or name not in definitions:
+                return self._fail(action, f"Tool {name!r} is not recordable", "invalid_arguments")
+            error = validate_arguments(definitions[name].spec.input_schema, args)
+            if error is not None:
+                return self._fail(action, f"Step {index + 1}: {error}", "invalid_arguments")
+            planned.append((name, dict(args), definitions[name]))
+
+        try:
+            self.collection.begin(color, task_text=task.strip(), sequence_mode=True)
+        except ImportError as exc:
+            return self._fail(action, f"Dataset dependencies missing: {exc}", "disabled")
+        except ValueError as exc:
+            return self._fail(action, str(exc))
+
+        results = []
+        try:
+            for index, (name, args, definition) in enumerate(planned, 1):
+                try:
+                    result = definition.run(self, args)
+                except Exception as exc:  # return the failed step, then stop the program
+                    result = result_from_exception(name, exc)
+                self.collection.note(name, result)
+                results.append({"step": index, "tool": name, **result.to_envelope()})
+                if not result.ok or not self.collection.recording:
+                    return self._result(False, action, result.reason if not result.ok else "task_incomplete",
+                                        f"Step {index} ({name}) stopped: {result.detail}",
+                                        t0=t0, step_results=results,
+                                        collection=self.collection.status())
+            try:
+                saved = self.collection.save_sequence()
+            except ValueError as exc:
+                return self._result(False, action, "task_incomplete", str(exc), t0=t0,
+                                    step_results=results, collection=self.collection.status())
+            return self._result(saved, action, "ok" if saved else "task_incomplete",
+                                "Recorded tool sequence saved." if saved else "Recorded take was discarded.",
+                                t0=t0, step_results=results, collection=self.collection.status())
+        finally:
+            if self.collection.recorder and self.collection.recorder.is_open:
+                self.collection.discard("sequence_interrupted")
+
     def begin_episode(self, object_id, observation_id):
         try:
             block = self._object(object_id, observation_id)
