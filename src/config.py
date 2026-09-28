@@ -502,9 +502,9 @@ class Task1Config:
     place_level_tolerance_deg: float = 3.0
     place_yaw_tolerance_deg: float = 5.0
     tilted_pick_hover_clearance_mm: float = 35.0
-    # Assumption pending hardware measurement: release just above the
-    # calibrated pick plane instead of driving the held block into the table.
-    release_clearance_mm: float = 5.0
+    # Assumption pending hardware measurement: release 15mm above the
+    # calibrated block-top plane, without seeking table contact.
+    release_clearance_mm: float = 15.0
 
 
 @dataclass
@@ -513,8 +513,7 @@ class Task2Config:
 
     SELECT/PICK/VERIFY and the pick corrections are read from ``task1`` --
     Task 2 *is* Task 1's gather pipeline with a single destination
-    (AGENTS.md §3 §4). Only the tower geometry and the contact descent live
-    here.
+    (AGENTS.md §3 §4). Tower geometry and release clearance live here.
     """
 
     # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
@@ -533,6 +532,15 @@ class Task2Config:
     # Assumption pending hardware measurement: smaller than task1's 5.0mm,
     # because a drop that a table absorbs will topple a tower.
     release_clearance_mm: float = 2.0
+    # Assumption pending physical trials: primitive stack drops this far
+    # above the nominal release plane instead of trusting load-based contact.
+    drop_clearance_mm: float = 15.0
+    # Assumed near-edge staging distance outside the tape, pending physical validation.
+    route_standoff_mm: float = 35.0
+    # Fifth-floor clearance posture; model-only assumptions until hardware trial.
+    upper_entry_level: int = 5
+    upper_entry_clearance_mm: float = 30.0
+    upper_entry_radial_tilt_deg: float = -15.0
     # Task 2 does not use contact-seeking descent. Every level goes straight
     # to the solved release height and opens. Keep this compatibility field
     # fixed at zero so older CLI/config plumbing fails loudly if it tries to
@@ -1273,12 +1281,20 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError("task2.block_height_mm must be positive")
     if cfg.task2.max_levels < 1:
         raise ValueError("task2.max_levels must be at least one")
+    if cfg.task2.upper_entry_level < 1 or cfg.task2.upper_entry_clearance_mm <= 0:
+        raise ValueError("task2 upper entry level/clearance must be positive")
+    if not -45 <= cfg.task2.upper_entry_radial_tilt_deg <= 0:
+        raise ValueError("task2.upper_entry_radial_tilt_deg must be -45..0")
+    if cfg.task2.route_standoff_mm <= 0:
+        raise ValueError("task2.route_standoff_mm must be positive")
     if cfg.task2.contact_descent_levels != 0:
         raise ValueError(
             "task2.contact_descent_levels must be 0; Task 2 contact descent is disabled"
         )
     if cfg.task2.release_clearance_mm < 0:
         raise ValueError("task2.release_clearance_mm must be non-negative")
+    if not 0 < cfg.task2.drop_clearance_mm <= cfg.task2.block_height_mm:
+        raise ValueError("task2.drop_clearance_mm must be above zero and at most one block height")
     if cfg.task2.place_overshoot_mm <= cfg.task2.release_clearance_mm:
         raise ValueError(
             "task2.place_overshoot_mm must exceed release_clearance_mm so the "

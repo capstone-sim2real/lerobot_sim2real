@@ -152,9 +152,7 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
     sk, world, _ = fixture()
     monkeypatch.setattr(
         ContactMonitor, "check",
-        lambda self: ContactReading(
-            True, loads={joint: 0.0 for joint in sk.cfg.sensing.contact_joints}
-        ),
+        lambda self: (_ for _ in ()).throw(AssertionError("zone placement must not seek contact")),
     )
     lift_commands = []
     move_relative = sk.move_relative
@@ -172,6 +170,19 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
     assert result.data["miss_mm"] < sk.cfg.agent.slot_snap_radius_mm
     assert world.held is None
     assert sk.s.arm_at_home()
+
+
+def test_zone_drop_requires_verified_height_before_release():
+    sk, world, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    assert sk.move_to_target("slot", "preplace", slot="top-left").ok
+    assert not sk.open_gripper().ok
+    dropped = sk.drop_at_zone_target()
+    assert dropped.ok and dropped.data["release_mode"] == "height_drop"
+    assert dropped.data["drop_z_mm"] == sk.s.drop_z_mm
+    assert sk.open_gripper().ok
+    assert world.held is None
 
 
 def test_block_transfer_stops_before_transport_when_grasp_fails(monkeypatch):
@@ -225,27 +236,36 @@ def test_failed_transfer_while_holding_is_error_not_warning():
     assert skipped.to_envelope()["severity"] == "warning"
 
 
-def test_task2_one_tool_per_block_uses_level_height_and_contact(monkeypatch):
+def test_task2_explicit_floors_use_requested_height_without_contact(monkeypatch):
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
     base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
     sk = PrimitiveSkills(base.s)
-    first = sk.stack_next_block("yellow")
-    assert first.ok and first.data["level"] == 1
-    assert first.data["stack_verified"] is False
-    assert first.data["next_level"] == 2
 
-    def contact_near_second_level(monitor):
-        z = monitor._robot.read_joints()["elbow_flex"]
-        return ContactReading(z <= sk.s.stack.levels[1].place_z_mm)
+    def contact_must_not_run(_monitor):
+        raise AssertionError("height drop must not read contact")
 
-    monkeypatch.setattr(ContactMonitor, "check", contact_near_second_level)
-    second = sk.stack_next_block("red")
-    assert second.ok and second.data["level"] == 2
-    assert second.data["expected_place_z_mm"] > first.data["expected_place_z_mm"]
-    assert second.data["stack_verified"] is False
+    monkeypatch.setattr(ContactMonitor, "check", contact_must_not_run)
+    first = sk.stack_block_to_floor("yellow", 0)
+    second = sk.stack_block_to_floor("red", 1)
+    assert first.ok and second.ok
+    assert (first.data["floor"], second.data["floor"]) == (0, 1)
+    assert second.data["expected_place_z_mm"] - first.data["expected_place_z_mm"] == cfg.task2.block_height_mm
+    assert first.data["release_mode"] == second.data["release_mode"] == "height_drop"
+    assert first.data["contact_confirmed"] is second.data["contact_confirmed"] is False
+    assert sk._task2_placed_floors == {0: "yellow", 1: "red"}
     assert world.held is None
-    assert sk.s.arm_at_home()
+
+
+def test_task2_explicit_floor_uses_visible_support_without_prior_history():
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    world.blocks["wood"] = sk.s.stack.stack_xy_mm
+    result = sk.stack_block_to_floor("red", 2)
+    assert result.ok and result.data["floor"] == 2
+    assert result.data["support_evidence"] == "visible_near_tower_height_unverified"
 
 
 def test_task2_uses_prior_confirmed_support_when_arm_occludes_it(monkeypatch):
@@ -255,131 +275,56 @@ def test_task2_uses_prior_confirmed_support_when_arm_occludes_it(monkeypatch):
     cfg.agent.relative.frame = "base"
     base, _, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
     sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
+    assert sk.stack_block_to_floor("yellow", 0).ok
     assert sk.move_relative(up_mm=40).ok
     assert not sk.s.arm_at_home()
 
     observe = sk.observe_scene
-    calls = {"count": 0}
-
     def occluded_once():
         result = observe()
-        calls["count"] += 1
-        if calls["count"] == 1:
-            scene = sk._observed_scene
-            sk._observed_scene = replace(scene, inside={
-                color: block for color, block in scene.inside.items()
-                if color != "yellow"
-            })
+        scene = sk._observed_scene
+        sk._observed_scene = replace(scene, inside={
+            color: block for color, block in scene.inside.items()
+            if color != "yellow"
+        })
         return result
 
     monkeypatch.setattr(sk, "observe_scene", occluded_once)
-
-    def contact_near_second_level(monitor):
-        z = monitor._robot.read_joints()["elbow_flex"]
-        return ContactReading(z <= sk.s.stack.levels[1].place_z_mm)
-
-    monkeypatch.setattr(ContactMonitor, "check", contact_near_second_level)
-    result = sk.stack_next_block("red")
+    result = sk.stack_block_to_floor("red", 1)
     assert result.ok
-    assert result.data["level"] == 2
-    assert result.data["support_evidence"] == "prior_verified_release_arm_not_home"
+    assert result.data["support_evidence"] == "prior_release_unseen_height_unverified"
 
 
-def test_task2_starts_from_level_one_after_clearing_the_tower():
+def test_task2_floor_zero_can_be_reused_after_block_moves_outside():
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
     base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
     sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
+    assert sk.stack_block_to_floor("yellow", 0).ok
     world.blocks["yellow"] = (120., 110.)
-    assert sk.move_relative(up_mm=40).ok
-    result = sk.stack_next_block("red")
-    assert result.ok and result.data["level"] == 1
-    assert sk._task2_stacked_colors == ["red"]
-    assert sk._task2_next_level == 2
+    result = sk.stack_block_to_floor("red", 0)
+    assert result.ok and result.data["floor"] == 0
+    assert sk._task2_placed_floors == {0: "red"}
 
 
-def test_task2_displaced_support_does_not_reset_while_tower_occupied():
+def test_task2_retries_requested_floor_without_visible_support():
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
-    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    base, world, _ = make_skills({"red": (140., -120.)}, cfg=cfg)
     sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
-    world.blocks["yellow"] = (120., 110.)
-    world.blocks["wood"] = sk.s.stack.stack_xy_mm
-    result = sk.stack_next_block("red")
-    assert not result.ok and result.reason == "scene_incomplete"
-    assert sk._task2_next_level == 2
-    assert sk.s.held is None
+    result = sk.stack_block_to_floor("red", 1)
+    assert result.ok and result.data["floor"] == 1
+    assert result.data["support_evidence"] == "requested_floor_unverified"
+    assert world.held is None
+    assert sk.stack_block_to_floor("red", -1).reason == "invalid_arguments"
 
 
-def test_task2_missing_support_at_home_still_stops():
-    cfg = fast_cfg()
-    cfg.agent.relative.frame = "base"
-    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
-    sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
-    del world.blocks["yellow"]
-    result = sk.stack_next_block("red")
-    assert not result.ok and result.reason == "scene_incomplete"
-    assert result.data["failed_stage"] == "select"
-    assert sk.s.held is None
-
-
-def test_task2_no_contact_puts_block_down_after_bounded_retry(monkeypatch):
-    cfg = fast_cfg()
-    cfg.agent.relative.frame = "base"
-    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
-    sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
-    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(False))
-    result = sk.stack_next_block("red")
-    assert not result.ok and result.data["failed_stage"] == "contact"
-    assert result.data["fallback_released"] is True
-    assert len(result.data["attempts"]) == 2
-    assert result.to_envelope()["severity"] == "warning"
-    assert sk.s.held is None and world.held is None
-    assert sk._task2_next_level == 2
-
-
-def test_task2_high_contact_uses_table_fallback_not_tower_release(monkeypatch):
+def test_task2_can_repick_fallen_block_inside_zone():
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
     base, world, _ = make_skills({"yellow": (160., 40.)}, cfg=cfg)
     sk = PrimitiveSkills(base.s)
-    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
-    result = sk.stack_next_block("yellow")
-    assert not result.ok and result.reason == "grasp_blocked"
-    assert result.data["failed_stage"] == "contact"
-    assert result.data["fallback_released"] is True
-    assert sk.s.held is None and world.held is None
-    assert world.blocks["yellow"] != sk.s.stack.stack_xy_mm
-    assert sk._task2_next_level == 1
-
-
-def test_task2_retries_after_verified_table_setdown(monkeypatch):
-    cfg = fast_cfg()
-    cfg.agent.relative.frame = "base"
-    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
-    sk = PrimitiveSkills(base.s)
-    assert sk.stack_next_block("yellow").ok
-    recovery = sk._put_held_block_on_table
-    allow_contact = {"value": False}
-
-    def put_back_then_allow_contact(color):
-        result = recovery(color)
-        allow_contact["value"] = result.ok
-        return result
-
-    def contact_on_retry(monitor):
-        z = monitor._robot.read_joints()["elbow_flex"]
-        return ContactReading(allow_contact["value"] and z <= sk.s.stack.levels[1].place_z_mm)
-
-    monkeypatch.setattr(sk, "_put_held_block_on_table", put_back_then_allow_contact)
-    monkeypatch.setattr(ContactMonitor, "check", contact_on_retry)
-    result = sk.stack_next_block("red")
-    assert result.ok and result.data["level"] == 2
-    assert len(result.data["attempts"]) == 2
-    assert result.data["attempts"][0]["fallback_verified"] is True
-    assert world.held is None and sk.s.arm_at_home()
+    world.blocks["yellow"] = sk.s.stack.stack_xy_mm
+    result = sk.stack_block_to_floor("yellow", 0)
+    assert result.ok and result.data["floor"] == 0
+    assert world.held is None

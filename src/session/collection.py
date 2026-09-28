@@ -221,8 +221,11 @@ class Collection:
             # The skill supplies this fact from its resolved target, not tool arguments.
             self.destination_in_zone = bool(result.data.get("collection_zone_destination"))
             self.contacted = False
-        elif action == "descend_until_contact":
-            self.contacted = bool(result.ok and result.data.get("contact", {}).get("contact"))
+        elif action in {"descend_until_contact", "drop_at_zone_target"}:
+            self.contacted = bool(result.ok and (
+                result.data.get("contact", {}).get("contact")
+                or result.data.get("release_mode") == "height_drop"
+            ))
         elif action == "move_relative":
             self.contacted = False
         elif action == "open_gripper" and self.grasped:

@@ -47,10 +47,27 @@ def test_polling_has_at_most_one_queued_read():
     pending=Future()
     calls=[]
     service=NS(_telemetry_future=None,_telemetry_cache={},cfg=AppConfig(),
-               _worker=NS(submit=lambda fn:(calls.append(fn) or pending)),gate=NS(snapshot=lambda:{'state':'busy'}))
+               _worker=NS(resource=NS(collection=NS(recording=False)),
+                          submit=lambda fn:(calls.append(fn) or pending)),
+               gate=NS(snapshot=lambda:{'state':'busy'}))
     for _ in range(20):
         assert AgentService.telemetry(service)['pending']
     assert len(calls)==1
     pending.set_exception(OSError('disconnected'))
     d=AgentService.telemetry(service)
     assert d['error']=='OSError'
+
+
+def test_recording_does_not_queue_diagnostics_or_read_bus():
+    bus = Bus()
+    skills = NS(s=NS(_inner_robot=NS(robot=NS(bus=bus))), collection=NS(recording=True))
+    assert collect(skills)["recording"] is True
+    assert bus.threads == []
+    calls = []
+    service = NS(_telemetry_future=None, _telemetry_cache={}, cfg=AppConfig(),
+                 _worker=NS(resource=skills, submit=lambda fn: calls.append(fn)),
+                 gate=NS(snapshot=lambda: {"state": "busy"}))
+    result = AgentService.telemetry(service)
+    assert result["recording"] is True
+    assert result["pending"] is False
+    assert calls == []

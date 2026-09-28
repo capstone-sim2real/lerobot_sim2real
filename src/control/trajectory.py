@@ -9,6 +9,7 @@ jump even if the policy stopped slightly off-pose (AGENTS.md §11).
 
 from __future__ import annotations
 
+import math
 import time
 
 from config import MotionConfig
@@ -238,6 +239,7 @@ class TrajectoryPlayer:
         measured gripper position.
         """
         current = self._robot.read_joints()["gripper"]
+        opening = position > current
         stalled = 0
         for step in interpolate({"gripper": current}, {"gripper": position}, self._cfg.max_step_per_tick):
             self._robot.send_joints(step)
@@ -248,5 +250,14 @@ class TrajectoryPlayer:
             if stalled >= stall_ticks:
                 break  # jaws are against something (or at a hard stop)
         if self._cfg.gripper_action_wait_s > 0:
-            time.sleep(self._cfg.gripper_action_wait_s)
+            if opening and self._cfg.fps > 0:
+                # Keep the opening jaw on regular control ticks until it
+                # settles. Cap the hold rate at 30 Hz: collection raises
+                # motion.fps to 300 while its recorder paces actual ticks.
+                ticks = max(1, math.ceil(self._cfg.gripper_action_wait_s * min(self._cfg.fps, 30.0)))
+                for _ in range(ticks):
+                    self._robot.send_joints({"gripper": position})
+                    self._tick_sleep()
+            else:
+                time.sleep(self._cfg.gripper_action_wait_s)
         return self._robot.read_joints()["gripper"]

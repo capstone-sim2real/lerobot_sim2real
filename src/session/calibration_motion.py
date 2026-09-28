@@ -243,7 +243,8 @@ class CalibrationMotion(Skills):
         result.action="calibration_prepare_visible"
         return result
 
-    def calibration_prepare(self, color, _scene=None, *, _open_gripper=True):
+    def calibration_prepare(self, color, _scene=None, *, _open_gripper=True,
+                            route_guard=None):
         self.descent_ready = False
         self.attempt = None
         self.baseline = None
@@ -341,6 +342,10 @@ class CalibrationMotion(Skills):
             if not candidate.reachable or not self.s.in_workspace(candidate.xy_mm):
                 continue
             clearance=self._clearance_gate(scene,color,candidate)
+            if (clearance["clear"] and route_guard is not None
+                    and not route_guard(self.s.robot.read_joints(),
+                                        (candidate.hover.joints,))):
+                clearance = {"clear": False, "reason": "limit_exceeded"}
             considered.append(dict(label=candidate.label,**clearance))
             if clearance["clear"]:
                 a=candidate

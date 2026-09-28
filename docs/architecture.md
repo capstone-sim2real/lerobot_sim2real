@@ -66,44 +66,19 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE
 - 타워는 zone 안에 선다. 검출기가 zone 안 검출을 버리므로 쌓인 블록이 SELECT에
   보이지 않고, 덕분에 Task 1의 "바깥이 5초간 비면 완료" 판정이 수정 없이 산다.
   `Task2SelectState`의 반경 가드는 그 위의 2차 안전망이다.
-- **착지 방식은 층마다 다르다 (`task2.contact_descent_levels`, 기본 1).**
-  1층은 테이블에 접촉으로 내려놓는다 — 눌러도 안전하고, 그 착지가 위 층들이
-  세어 올라갈 기준 높이를 확정한다. 2층부터는 **하강하지 않는다**: 계산된
-  릴리스 높이로 바로 가서 턱을 연다. 타워 위에서 접촉을 더듬는 건 재려는
-  대상을 밀어 넘어뜨리는 일이고, 임계값도 미실측이기 때문이다.
+- **현재 Task 2의 두 실행 경로는 모두 접촉 탐색을 쓰지 않는다.**
+  `so101-run --task 2` FSM은 운반 후 hover 자세에서 그리퍼를 연다.
+  웹 에이전트의 `stack_block_to_floor(color, floor)`는 요청한 0..4층에
+  대해 hover에서 층별 높이 근처로
+  내려간 뒤 놓는다. 따라서 같은 적층 목표를 쓰지만 릴리스 높이는 다르다.
 
-  **이건 `AGENTS.md §5`가 주 제어로 금지한 `z_release(n)` dead reckoning이다.**
-  의도적 예외이며, `contact_descent_levels`를 `max_levels`로 두면 전 층
-  contact-first로 돌아간다. hover는 없앨 수 없다 — 릴리스 높이로 옆에서 들어오면
-  든 블록이 타워 윗블록을 친다. 경로는 `apex → 타워 위 hover → 릴리스 높이 → 열기`.
-
-- **1층의 하강 정지는 측정된 자세로 판정한다.** 목표는 명목 착지면보다
-  `task2.place_overshoot_mm` 아래로 주므로, **덜 내려간 것이 곧 접촉이다**:
-  남은 관절 거리가 `task2.contact_shortfall`을 넘으면 착지로 본다.
-  `ContactMonitor` 부하 스파이크가 2차 신호다.
-
-  `TrajectoryPlayer.descend()`의 `blocked`는 쓰지 않는다 —
-  `jammed or shortfall > descent_blocked_tol(4.0)`이라 블록을 든 팔의 정상상태
-  오프셋만으로 매번 참이 된다. `last_descent_jammed`도 단독으로는 안 쓴다:
-  잼은 명령이 팔보다 `descent_max_lag` 앞선 상태에서 스트림을 끊으므로 항상
-  그만큼의 shortfall을 남기고, `contact_shortfall < descent_max_lag`가 강제되어
-  있어 **잼은 shortfall 판정에 이미 포함된다.** 역은 성립하지 않는다(스트림을
-  끝까지 돌고도 덜 내려간 부드러운 착지). 그래서 shortfall 하나만 본다.
-
-- **1층에 한해, 세 값의 순서가 지켜져야 착지가 감지된다:**
-
-  ```
-  적재 시 정상상태 오프셋 < contact_shortfall < descent_max_lag < place_overshoot_mm
-  ```
-
-  타워에 닿은 블록은 명령 목표보다 `place_overshoot_mm` 위에서 멈춘다. 그 간격이
-  접촉 임계값보다 작으면 **완벽한 적층이 매번 "접촉 없음"으로 기록된다** — 멈추는
-  위치는 같아서 결과물은 멀쩡하지만, 턱을 벌리기 전 서보 압력을 푸는 백오프가
-  돌지 않고 로그가 거짓말을 한다. overshoot은 mm이고 나머지는 관절 action
-  단위라 순서 확인은 실기에서만 가능하다. 첫 런에서 `stack_contacts`의
-  `shortfall`/`jammed`를 읽고 맞춘다.
-- 접촉이 없으면 경고 후 그래도 놓는다 (AGENTS.md §5). 블록을 계속 물고 있으면
-  런이 멈춘다.
+- **현재 primitive 적층은 접촉을 판정하지 않는다.** `stack_block_to_floor`는
+  층별 명목 높이보다 `task2.drop_clearance_mm` 위의 자세로 이동해 그리퍼를
+  열고, home에서 카메라로 블록 위치를 다시 본다. 이 여유는 실기 조정 전
+  가정값이다. 부하 스파이크 오탐 때문에 블록을 든 채 멈추는 문제를 피한다.
+  위치 재관찰만으로 5초 안정성이나 실제 타워 높이가 확인되는 것은 아니다.
+  무너진 블록이 구역 안에 있어도 다시 집으며, 받침 검출/이전 층 기록은
+  지정된 floor 동작의 사전 거부 조건이 아니다.
 
 `--dry-run --task 2`가 층별 도달 가능 여부를 실제 IK로 뽑는다. 탑다운 리프트는
 리치에 강하게 반비례하므로 **층수는 설계 입력이 아니라 이 명령의 출력**이다.

@@ -90,6 +90,42 @@ def _planner(cfg: AppConfig | None = None, ik=None) -> Task2StackPlanner:
     return Task2StackPlanner(_calibration(), cfg, ik or _AlwaysReachableIk())
 
 
+def test_task2_stage_is_outside_target_zone():
+    planner = _planner()
+    level = planner.levels[0]
+    # Fake IK encodes z only; separately check the computed XY with a spy.
+    requested = []
+
+    class RecordingIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            requested.append((x_mm, y_mm, z_mm))
+            return super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+
+    planner._ik = RecordingIk()
+    planner.outside_stage(level)
+    assert not point_in_zone(requested[-1][:2], _calibration())
+    assert requested[-1][2] == level.hover_z_mm
+
+
+def test_task2_upper_entry_is_above_nominal_hover_with_folded_arm():
+    cfg = AppConfig()
+    planner = _planner(cfg)
+    level = planner.levels[4]
+    requested = []
+
+    class RecordingIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            requested.append((z_mm, radial_tilt_deg))
+            return super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+
+    planner._ik = RecordingIk()
+    planner.entry_pose(level)
+    assert requested[-1] == (
+        level.place_z_mm + cfg.task2.upper_entry_clearance_mm,
+        cfg.task2.upper_entry_radial_tilt_deg,
+    )
+
+
 # --------------------------------------------------------------------------
 # ladder geometry
 # --------------------------------------------------------------------------

@@ -83,7 +83,7 @@ SELECT → PICK → VERIFY → TRANSPORT → PLACE → (블록 남음 && 시간 
 PLACE의 목표 경계는 `PlaceStrategy` 인터페이스다. 현재 공통 handler에는
 `SlotPlaceStrategy`와 `StackPlaceStrategy`가 있고, production Task 1은 동적 IK
 슬롯용 `Task1PlaceState`를 사용한다. Task 2는 PICK/VERIFY/TRANSPORT를 복제하지
-말고 이 PLACE seam에 접촉 기반 적층을 주입한다. 나중에 정책 기반 정렬로
+말고 이 PLACE seam에 적층 전략을 주입한다. 나중에 정책 기반 정렬로
 교체하더라도 같은 경계를 사용한다.
 
 **PICK도 같은 방식으로 교체 가능하다.** `fsm/act_handler.py`의 `ActPickState`는 `PickClient`
@@ -91,13 +91,24 @@ Protocol(`ping()`, `run_pick(retreat_pose)`)에만 의존한다. CV+IK 경로는
 `fsm/ik_handler.py`의 `CvIkPickState`로 PICK만 교체하고 나머지 상태는
 `handlers.py`에서 import해 재사용한다.
 
-## §5 적층: 접촉 기반 하강
+Task 1 적재구역 배치는 `task1.release_clearance_mm` 높이에서 놓는다.
+웹 primitive의 슬롯/구역 내 칸 배치도 접촉 탐색 없이 같은 높이로 내려간 뒤
+해제한다. 구역 밖 테이블·물체 대상 배치의 접촉 경로는 별개다.
 
-**타워 높이를 블록 수로 추측하지 않는다.** 현재 `StackPlaceStrategy`는 기록된
-`tower_descent_<n>` 관절 키프레임 사다리를 천천히 따라가며 `ContactMonitor`의
-부하 스파이크에서 정지하고 백오프 후 해제한다. 접촉 없이 사다리 바닥에 닿으면
-경고 후 해제한다. Task 2를 완성할 때도 이 contact-first 원칙을 유지하며,
-`z_release(n)` 같은 층수 기반 dead reckoning을 주 제어로 추가하지 않는다.
+## §5 적층: 층별 높이에서 해제
+
+현재 Task 2 CV+IK 경로는 블록 높이 20mm와 층 번호로 목표 높이를 계산하고,
+접촉 감지 없이 그 높이 위에서 그리퍼를 연다. 웹 primitive
+`stack_block_to_floor(color, floor)`는 floor=0..4를 명시적으로 받아
+해당 층을 계획한다. 이 도구는
+접촉 오탐으로 멈추지 않도록 `task2.drop_clearance_mm` 위에서 놓는다.
+이 높이는 실기 조정 전 가정값이다. 무너진 블록은 구역 안에서
+다시 집을 수 있고, 받침 미검출·이전 층 기록은 명시적으로 요청한 층을 막지
+않는다. 파지 확인, IK, 이동 범위와 놓은 뒤 카메라 재관찰은 유지한다. 이 동작만으로 적층 높이와 5초 안정성을
+검증했다고 기록하지 않는다.
+
+`StackPlaceStrategy`의 기록된 키프레임/접촉 기반 경로는 레거시 코드다.
+현재 Task 2 실행 경로의 동작으로 설명하지 않는다.
 
 ## §6 좌표계와 캘리브레이션
 

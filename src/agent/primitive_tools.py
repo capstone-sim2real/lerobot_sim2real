@@ -16,15 +16,19 @@ def build_primitive_tools(cfg):
         {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)},
          "slot": {"type": "string", "enum": list(cfg.agent.zone_slots.labels)}},
         ["color", "slot"])
-    add("stack_next_block",
-        "Task 2: transfer one outside-zone block to the next tower level. The server "
-        "selects the level-specific hover height, checks grasp and carry IK, descends "
-        "only within a bounded contact window, and reobserves. If a held placement "
-        "fails, it finds a free table point, puts the block down, and retries once; "
+    add("stack_block_to_floor",
+        "Task 2: restack any visible block, including one fallen inside the zone, "
+        "at the requested floor (0 is the table, 4 is the fifth block). The caller "
+        "chooses the floor; tower visibility and old floor records never block a retry. "
+        "The server checks grasp and "
+        "carry IK, releases from a bounded height without contact sensing, and reobserves. "
+        "If a held placement fails, it sets the block on free table and retries once; "
         "STOP and robot faults never trigger automatic recovery. A successful call "
-        "does not prove tower height or five-second stability.",
-        {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)}},
-        ["color"])
+        "does not prove physical floor or five-second stability.",
+        {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)},
+         "floor": {"type": "integer", "minimum": 0,
+                   "maximum": min(4, cfg.task2.max_levels - 1)}},
+        ["color", "floor"])
     object_fields = {
         "object_id": {"type": "string", "enum": [f"{c}_1" for c in sorted(cfg.perception.color_prototypes)]},
         "observation_id": {"type": "integer", "minimum": 1},
@@ -48,15 +52,19 @@ def build_primitive_tools(cfg):
         "x": {"type": "integer", "minimum": -span, "maximum": span},
         "y": {"type": "integer", "minimum": -span, "maximum": span},
     }, ["target_type", "phase"])
-    add("move_relative", f"Bounded correction in {cfg.agent.relative.frame} frame. up is robot-base vertical. While holding, downward moves require contact descent. After a calibrated tilted grasp, up first reverses the pick approach and may shift XY inward. A loaded upward result reports lateral_clearance_ready; when true, do not lift again and proceed to the placement target.", {
+    add("move_relative", f"Bounded correction in {cfg.agent.relative.frame} frame. up is robot-base vertical. While holding, downward moves require a guarded placement action. After a calibrated tilted grasp, up first reverses the pick approach and may shift XY inward. A loaded upward result reports lateral_clearance_ready; when true, do not lift again and proceed to the placement target.", {
         key: _mm(key, cfg.agent.relative.max_jog_mm) for key in ("forward_mm", "left_mm", "up_mm")})
     add("align_gripper", "Align to observed block using nearest neutral symmetric yaw at clearance. Empty gripper only.", object_fields, list(object_fields))
     add("close_gripper", "Required immediately after a successful grasp descent with stop_reason=depth_reached: the jaws are intentionally open then. Close in place and verify grasp with position/load sensing. Does not approach, lift or transport.")
-    add("descend_until_contact", "Bounded vertical descent at placement target; load contact stops and backs off. Never releases; failure leaves block held.", {
+    add("drop_at_zone_target", "At a named zone slot or in-zone cell preplace, move to the configured release height without contact sensing. Verify the pose before open_gripper.")
+    add("descend_until_contact", "At a zone slot/cell this uses the configured height drop without contact sensing. Other placement targets use bounded contact descent. Never releases.", {
         "max_descent_mm": {"type": "number", "minimum": 0,
                            "maximum": cfg.agent.primitives.contact_max_descent_mm}}, ["max_descent_mm"])
-    add("open_gripper", "Open in place. A held block requires confirmed contact from the immediately preceding descent. Release does not prove stacking success.")
+    add("open_gripper", "Open in place. A held block requires confirmed placement contact or a verified zone/stack drop pose. Release does not prove stacking success.")
     add("return_to_home", "Return empty gripper home. Refuses while holding.")
+    add("run_task3", "Collect one Task 3 round with the existing Task 1 CV+IK FSM. "
+        "Each successful grasp, zone placement and return home becomes one recorded episode. "
+        "The server handles selection, motion and recording continuously; call once per arrangement.")
     add("begin_episode", "Begin a home-to-home demonstration for an observed outside-zone block. Uses configured local dataset and camera streams. Does not pick or run a task.", object_fields, list(object_fields), moves=False)
     add("save_episode", "Save only after verified grasp, zone delivery, home return and fresh observed placement. Backend checks evidence, frame count and timing; no success argument.", moves=False)
     add("discard_episode", "Discard the current demonstration buffer, preserving saved episodes and recording the reason.", {

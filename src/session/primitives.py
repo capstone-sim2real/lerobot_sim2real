@@ -26,6 +26,9 @@ class PrimitiveSkills(Skills):
         self._objects = {}
         self._target = None
         self._contact = False
+        self._stack_drop_ready = False
+        self._zone_drop_ready = False
+        self._zone_drop_xy = None
         self._grasp_failed = False
         self._pick_calibration = None
         self._pick_ready = False
@@ -35,8 +38,7 @@ class PrimitiveSkills(Skills):
         self._place_yaw_deg = None
         self._observed_scene = None
         self._pending_placement = None
-        self._task2_next_level = 1
-        self._task2_stacked_colors = []
+        self._task2_placed_floors = {}
         self._stack_target = None
         self._recovery_target_xy = None
         from session.collection import Collection
@@ -65,12 +67,12 @@ class PrimitiveSkills(Skills):
             self._pick_calibration.attempt = None
             self._pick_calibration.descent_ready = False
 
-    def _calibrated_target(self, block, phase):
+    def _calibrated_target(self, block, phase, route_guard=None):
         cal = self._calibration()
         self._pick_ready = False
         if phase == "pregrasp":
             result = cal.calibration_prepare(block.color, _scene=self._observed_scene,
-                                             _open_gripper=False)
+                                             _open_gripper=False, route_guard=route_guard)
             if not result.ok and result.data.get("stop_reason") == "hover_not_settled":
                 result = cal.calibration_correct_hover(dry_run=False)
         else:
@@ -408,8 +410,7 @@ class PrimitiveSkills(Skills):
 
         for stage, fn in (
             ("preplace", lambda: self.move_to_target("slot", "preplace", slot=slot)),
-            ("contact", lambda: self.descend_until_contact(
-                self.limits.contact_max_descent_mm)),
+            ("drop_approach", self.drop_at_zone_target),
             ("release", self.open_gripper),
             ("home", self.return_to_home),
         ):
@@ -465,11 +466,11 @@ class PrimitiveSkills(Skills):
             placement_aligned=abs(yaw_error) <= self.cfg.task1.place_yaw_tolerance_deg,
         )
 
-    def stack_next_block(self, color: str):
-        """Try one level, set a held block down safely on failure, then retry once."""
+    def stack_block_to_floor(self, color: str, floor: int):
+        """Try the requested 0-based floor, with one guarded table recovery."""
         attempts = []
         for attempt_number in (1, 2):
-            result = self._stack_next_block_once(color)
+            result = self._stack_block_to_floor_once(color, floor)
             attempts.append({"attempt": attempt_number, "reason": result.reason,
                              "failed_stage": result.data.get("failed_stage")})
             if result.ok:
@@ -512,6 +513,7 @@ class PrimitiveSkills(Skills):
         self._target = None
         self._stack_target = None
         self._contact = False
+        self._stack_drop_ready = False
         required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
         if xyz[2] < required_z:
             # After a failed lift the block may still be right above its
@@ -560,16 +562,38 @@ class PrimitiveSkills(Skills):
                                 retry_advice="ask_operator", placement=placed.data)
         return placed
 
-    def _stack_next_block_once(self, color: str):
-        """Transfer one block to the next planned tower level, with contact gating."""
-        action, t0 = "stack_next_block", time.monotonic()
+    def _task2_path_outside_zone(self, start, waypoints) -> bool:
+        """Model-FK preflight of commanded joint sweeps before tower entry."""
+        from perception.zone import point_in_zone
+        previous = start
+        left_zone = not point_in_zone(
+            self.s.ik.forward_position_mm(previous)[:2], self.s.calib
+        )
+        for goal in waypoints:
+            for command in interpolate(previous, goal, self.cfg.motion.max_step_per_tick):
+                pose = {**previous, **command}
+                inside = point_in_zone(
+                    self.s.ik.forward_position_mm(pose)[:2], self.s.calib
+                )
+                if left_zone and inside:
+                    return False
+                if not inside:
+                    left_zone = True
+            previous = {**previous, **goal}
+        return True
+
+    def _stack_block_to_floor_once(self, color: str, floor: int):
+        """Transfer one block to an explicitly requested tower floor."""
+        action, t0 = "stack_block_to_floor", time.monotonic()
         if color not in self.cfg.perception.color_prototypes:
             return self._fail(action, "Unknown block colour", "invalid_arguments")
         if self.s.held is not None:
             return self._fail(action, "A block is already held", "already_holding")
         if self.collection.status().get("episode_open"):
             return self._fail(action, "Finish the recording episode before stacking")
-        level_number = self._task2_next_level
+        if type(floor) is not int or not 0 <= floor <= 4:
+            return self._fail(action, "floor must be an integer from 0 to 4", "invalid_arguments")
+        level_number = floor + 1
         try:
             planner = self.s.stack
         except ValueError as exc:
@@ -585,7 +609,7 @@ class PrimitiveSkills(Skills):
             failed = self._result(False, action, result.reason, result.detail,
                                   retry_advice=result.retry_advice, t0=t0,
                                   failed_stage=stage, steps=steps, color=color,
-                                  level=level_number,
+                                  floor=floor, level=level_number,
                                   holding=self.s.held.color if self.s.held else None)
             failed.images = result.images
             return failed
@@ -601,65 +625,36 @@ class PrimitiveSkills(Skills):
         scene = self._observed_scene
         assert scene is not None
         radius = self.cfg.agent.place_clear_radius_mm
-        if (self._task2_stacked_colors
-                and all(previous in scene.outside for previous in self._task2_stacked_colors)
-                and not any(math.dist(block.center_mm, planner.stack_xy_mm) < radius
-                            for block in scene.inside.values())):
-            # All previously placed blocks are visibly back outside and the
-            # tower point is empty: this is a new Task 2 run, not level N+1.
-            self._task2_stacked_colors.clear()
-            self._task2_next_level = 1
-            self._stack_target = None
-            self._target = None
-            self._contact = False
-            steps.append({"stage": "tower_reset", "reason": "previous_blocks_outside"})
-        level_number = self._task2_next_level
-        if level_number > len(planner.levels):
-            return self._fail(action, "No further tower level is configured", "limit_exceeded")
-        level = planner.levels[level_number - 1]
+        # A known block moved back outside cannot still occupy its old floor.
+        # This history helps with arm occlusion but never selects the floor.
+        for placed_floor, placed_color in list(self._task2_placed_floors.items()):
+            if placed_color in scene.outside:
+                del self._task2_placed_floors[placed_floor]
+        if floor >= len(planner.levels):
+            return self._fail(action, "Requested floor is not configured", "limit_exceeded")
+        level = planner.levels[floor]
         if not level.reachable:
             return self._result(False, action, "ik_gate",
-                                f"Level {level_number} is outside the IK gate: {level.reason}",
-                                retry_advice="ask_operator", level=level_number)
-        block = scene.outside.get(color)
+                                f"Floor {floor} is outside the IK gate: {level.reason}",
+                                retry_advice="ask_operator", floor=floor, level=level_number)
+        block = scene.find(color)
         if block is None:
-            return self._result(False, action,
-                                "not_in_zone" if color in scene.inside else "not_detected",
-                                f"{color} is not visible outside the zone",
+            return self._result(False, action, "not_detected",
+                                f"{color} is not visible in the current scene",
                                 retry_advice="try_other_target", t0=t0,
                                 failed_stage="select", steps=steps, color=color,
-                                level=level_number)
-        support_evidence = "fresh_observation"
-        if level_number == 1:
-            occupied = [b.color for b in scene.inside.values()
-                        if math.dist(b.center_mm, level.xy_mm) < radius]
-            if occupied:
-                return self._result(False, action, "destination_blocked",
-                                    f"Tower base is occupied by {', '.join(occupied)}",
-                                    retry_advice="ask_operator", t0=t0,
-                                    failed_stage="select", steps=steps, level=level_number)
+                                floor=floor, level=level_number)
+        nearby = [b for b in scene.inside.values()
+                  if math.dist(b.center_mm, level.xy_mm) < radius]
+        if nearby:
+            support_evidence = "visible_near_tower_height_unverified"
+        elif self._task2_placed_floors.get(floor - 1) is not None:
+            support_evidence = "prior_release_unseen_height_unverified"
         else:
-            previous = self._task2_stacked_colors[-1]
-            support = scene.find(previous)
-            if support is not None and math.dist(support.center_mm, level.xy_mm) >= radius:
-                return self._result(False, action, "scene_incomplete",
-                                    f"The preceding {previous} block is visible away from the tower point",
-                                    retry_advice="ask_operator", t0=t0,
-                                    failed_stage="select", steps=steps, level=level_number)
-            if support is None:
-                # The preceding release was already observed at the tower.
-                # An arm away from HOME can hide it from this fresh frame;
-                # absence alone is not evidence that the support moved.
-                obstructed = not self.s.arm_at_home()
-                occupied = any(math.dist(other.center_mm, level.xy_mm) < radius
-                               for other in scene.inside.values())
-                if not obstructed or occupied:
-                    return self._result(False, action, "scene_incomplete",
-                                        f"Cannot confirm the preceding {previous} block near the tower point",
-                                        retry_advice="ask_operator", t0=t0,
-                                        failed_stage="select", steps=steps, level=level_number)
-                support_evidence = "prior_verified_release_arm_not_home"
-                steps.append({"stage": "support", "reason": support_evidence})
+            support_evidence = "requested_floor_unverified"
+        # A fallen block can be in the zone, and a collapsed tower makes
+        # earlier floor records unreliable. These are observations for the
+        # caller, not reasons to refuse the requested bounded attempt.
 
         object_id, observation_id = f"{color}_1", self.observation_id
         failed = run("open", self.open_gripper)
@@ -704,7 +699,7 @@ class PrimitiveSkills(Skills):
                                 "Arm did not reach lateral clearance",
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage=stage, steps=steps, color=color,
-                                level=level_number,
+                                floor=floor, level=level_number,
                                 holding=self.s.held.color if self.s.held else None)
 
         failed = lift_until_clear("lift_empty")
@@ -713,7 +708,9 @@ class PrimitiveSkills(Skills):
         for stage, fn in (
             ("pregrasp", lambda: self.move_to_target(
                 "object", "pregrasp", object_id=object_id,
-                observation_id=observation_id)),
+                observation_id=observation_id,
+                _route_guard=(self._task2_path_outside_zone
+                              if not block.in_zone else None))),
             ("align", lambda: self.align_gripper(object_id, observation_id)),
             ("grasp", lambda: self.move_to_target(
                 "object", "grasp", object_id=object_id,
@@ -728,22 +725,51 @@ class PrimitiveSkills(Skills):
                                 "Grasp identity was not confirmed; do not transport",
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage="close_verify", steps=steps,
-                                color=color, level=level_number)
+                                color=color, floor=floor, level=level_number)
         failed = lift_until_clear("lift_held")
         if failed is not None:
             return failed
 
         from control.task1_transport import over_ik_gate
         transfer = planner.plan(self.s.held.attempt, level_number - 1)
-        if any(over_ik_gate(waypoint, self.cfg) for _, waypoint in transfer.carry):
+        try:
+            entry = planner.entry_pose(level)
+            outside_stage = planner.outside_stage(level)
+        except ValueError as exc:
+            return self._result(False, action, "ik_gate", str(exc),
+                                retry_advice="ask_operator", t0=t0,
+                                failed_stage="transport", holding=color)
+        # The prior apex_place sat inside the zone. Stay outside until the
+        # final stage-to-hover placement entry, and preflight every joint sweep.
+        carry = tuple((name, waypoint) for name, waypoint in transfer.carry
+                      if name != "apex_place")
+        if any(over_ik_gate(waypoint, self.cfg) for _, waypoint in carry):
             return self._result(False, action, "ik_gate",
                                 "Tower carry apex is outside the IK gate; block remains held",
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage="transport", steps=steps,
-                                color=color, level=level_number, holding=color)
+                                color=color, floor=floor, level=level_number, holding=color)
+        current = self.s.robot.read_joints()
+        route = tuple(waypoint.joints for _, waypoint in carry) + (outside_stage.joints,)
+        if not self._task2_path_outside_zone(current, route):
+            # The optional pick apex can curve across the zone even when a
+            # direct joint sweep to the outside stage stays on the near side.
+            if self._task2_path_outside_zone(current, (outside_stage.joints,)):
+                carry = ()
+            else:
+                return self._result(False, action, "limit_exceeded",
+                                    "Task 2 carry would cross the occupied target zone",
+                                    retry_advice="ask_operator", t0=t0,
+                                    failed_stage="transport", holding=color)
+
+
+        entry_z = (level.place_z_mm + self.cfg.task2.upper_entry_clearance_mm
+                   if level.level >= self.cfg.task2.upper_entry_level
+                   else level.hover_z_mm)
 
         def transport():
-            for name, waypoint in (*transfer.carry, ("tower_hover", level.hover)):
+            for name, waypoint in (*carry, ("outside_stage", outside_stage),
+                                   ("tower_hover", entry)):
                 self.s.cancel.raise_if_set()
                 self.s.player.move_to(waypoint.joints,
                                       tol=self.cfg.motion.transit_arrival_tol)
@@ -752,27 +778,74 @@ class PrimitiveSkills(Skills):
                                         f"Grasp verification failed at {name}",
                                         retry_advice="ask_operator")
             actual = self.s.arm_position_mm()
-            if math.dist(actual, (*level.xy_mm, level.hover_z_mm)) > self.limits.loaded_arrival_error_mm:
+            if math.dist(actual, (*level.xy_mm, entry_z)) > self.limits.loaded_arrival_error_mm:
                 raise TimeoutError("Measured FK did not reach tower hover")
             self._stack_target = level
             self._target = ("stack", None, None, None, None, None, "preplace")
             return self._result(True, "transport", "moved",
-                                hover_z_mm=level.hover_z_mm)
+                                hover_z_mm=entry_z)
 
         failed = run("transport", transport)
         if failed is not None:
             return failed
-        contact_evidence = {}
+        def approach_drop():
+            if self.s.held is None or not self._held_check():
+                return self._fail("stack_drop", "Verified held block required", "no_block_held")
+            self._stack_drop_ready = False
+            # No load/contact decision here: the Task 2 primitive releases
+            # above the nominal level. The clearance is an unmeasured tuneable.
+            drop_z = min(entry_z,
+                         level.place_z_mm + self.cfg.task2.drop_clearance_mm)
+            approach_tilt = (self.cfg.task2.upper_entry_radial_tilt_deg
+                             if level.level >= self.cfg.task2.upper_entry_level
+                             else level.radial_tilt_deg)
+            try:
+                pose = self._solve(
+                    (*level.xy_mm, drop_z),
+                    radial_tilt_deg=approach_tilt,
+                    max_position_error_mm=self.cfg.ik.max_position_error_mm,
+                    max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
+                )
+            except ValueError as exc:
+                return self._fail("stack_drop", str(exc), "ik_gate")
+            self.s.player.move_to(
+                pose.joints, max_step=self.cfg.motion.descent_step_per_tick,
+                tol=self.cfg.motion.arrival_tol,
+            )
+            actual = self.s.arm_position_mm()
+            if (math.dist(actual[:2], level.xy_mm) > self.limits.alignment_tolerance_mm
+                    or not level.place_z_mm + 3 <= actual[2]
+                    <= level.place_z_mm + self.cfg.task2.drop_clearance_mm + 10):
+                return self._fail("stack_drop", "Measured FK missed the release window",
+                                  "motion_timeout")
+            if not self._held_check():
+                return self._fail("stack_drop", "Grasp verification failed", "grasp_empty")
+            self._stack_drop_ready = True
+            return self._result(True, "stack_drop", "ok",
+                                release_fk_mm=list(actual), drop_z_mm=drop_z)
 
-        def land():
-            result = self.descend_until_contact(self.limits.contact_max_descent_mm)
-            contact_evidence["source"] = result.data.get("contact_source")
-            contact_evidence["contact_fk_mm"] = result.data.get("contact_fk_mm")
-            return result
+        def retreat_outside():
+            # Rise over the tower before any lateral motion. After crossing
+            # the near edge, no joint-interpolated segment may re-enter it.
+            current = self.s.robot.read_joints()
+            home_joints = {joint: value for joint, value in
+                           self.s.poses.get(self.cfg.motion.home_pose).items()
+                           if joint != "gripper"}
+            if (not self._task2_path_outside_zone(entry.joints, (outside_stage.joints,))
+                    or not self._task2_path_outside_zone(outside_stage.joints,
+                                                         (home_joints,))):
+                return self._fail("stack_retreat", "Retreat re-enters the target zone",
+                                  "limit_exceeded")
+            self.s.player.move_to(entry.joints,
+                                  tol=self.cfg.motion.transit_arrival_tol)
+            self.s.player.move_to(outside_stage.joints,
+                                  tol=self.cfg.motion.transit_arrival_tol)
+            return self._result(True, "stack_retreat", "moved")
 
         for stage, fn in (
-            ("contact", land),
+            ("drop_approach", approach_drop),
             ("release", self.open_gripper),
+            ("retreat_outside", retreat_outside),
             ("home", self.return_to_home),
         ):
             failed = run(stage, fn)
@@ -785,26 +858,23 @@ class PrimitiveSkills(Skills):
                                 "Block was released, but the camera could not reobserve the tower",
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage="observe_after", steps=steps,
-                                color=color, level=level_number)
+                                color=color, floor=floor, level=level_number)
         landed = self._observed_scene.find(color)
         if landed is None or math.dist(landed.center_mm, level.xy_mm) >= radius:
             return self._result(False, action, "task_incomplete",
                                 "Released block was not observed near the tower point",
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage="verify", steps=steps, color=color,
-                                level=level_number, stack_verified=False)
-        self._task2_stacked_colors.append(color)
-        self._task2_next_level += 1
-        contact_confirmed = contact_evidence.get("source") in ("load", "lag")
+                                floor=floor, level=level_number, stack_verified=False)
+        self._task2_placed_floors[floor] = color
         return self._result(True, action, "released",
-                            f"Level {level_number} released near tower point; tower height remains unverified",
-                            t0=t0, color=color, level=level_number,
-                            contact_confirmed=contact_confirmed,
-                            contact_source=contact_evidence.get("source"),
-                            contact_fk_mm=contact_evidence.get("contact_fk_mm"),
+                            f"Floor {floor} released near tower point; tower height remains unverified",
+                            t0=t0, color=color, floor=floor, level=level_number,
+                            contact_confirmed=False,
+                            release_mode="height_drop",
+                            drop_clearance_mm=self.cfg.task2.drop_clearance_mm,
                             placement_observed=True, stack_verified=False,
                             support_evidence=support_evidence,
-                            next_level=self._task2_next_level,
                             expected_place_z_mm=level.place_z_mm,
                             measured_xy_mm=list(landed.center_mm))
 
@@ -819,6 +889,8 @@ class PrimitiveSkills(Skills):
         if self.s.held is not None and not check_grasp(self.s.robot, self.cfg.sensing, settle=False).grasped:
             self._grasp_failed = True
             self._contact = False
+            self._stack_drop_ready = False
+            self._zone_drop_ready = False
             return False
         return not self._grasp_failed
 
@@ -897,21 +969,26 @@ class PrimitiveSkills(Skills):
             return self._fail(action, "Target outside configured vertical window")
         count = max(1, math.ceil(math.dist(start, xyz) / self.limits.cartesian_step_mm))
         points = [tuple(a + (b-a)*i/count for a,b in zip(start,xyz)) for i in range(1,count+1)]
-        if level_during_carry:
+        inward_carry = (
+            level_during_carry
+            and math.dist(start[:2], self.s.base_xy) > math.dist(xyz[:2], self.s.base_xy)
+        )
+        if inward_carry:
             from control.task1_transport import carry_level_tilt_deg
-            # Keep the far-pick tilt until the arm has moved inward. Finish
-            # rotating at the hover point, above the table and obstacles.
+            # A far pick can start tilted. Level it while coming inward.
             tilts = [carry_level_tilt_deg(point[:2], self.s.base_xy, self.cfg)
                      for point in points]
             points.append(xyz)
             tilts.append(radial_tilt_deg)
         else:
+            # On an outward trip, the final placement orientation is reachable
+            # throughout the path. Avoid a same-position tilt flip at the slot.
             tilts = [radial_tilt_deg] * len(points)
         if place_yaw_deg is not None:
             start_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
             delta_yaw = angle_error_deg(place_yaw_deg, start_yaw)
             yaws = [start_yaw + delta_yaw * i / count for i in range(1, count + 1)]
-            if level_during_carry:
+            if inward_carry:
                 yaws.append(place_yaw_deg)
         else:
             yaws = [None] * len(points)
@@ -931,6 +1008,7 @@ class PrimitiveSkills(Skills):
         except ValueError as exc:
             return self._fail(action, str(exc), "ik_gate")
         self._contact = False
+        self._zone_drop_ready = False
         deadline = time.monotonic() + self.cfg.motion.move_timeout_s
         descending_empty = xyz[2] < start[2] and self.s.held is None
         if descending_empty:
@@ -983,9 +1061,14 @@ class PrimitiveSkills(Skills):
                     if (corrected["wrist_roll"] < self.cfg.agent.calibration_clearance.wrist_roll_min_deg
                             or abs(corrected["wrist_roll"]) > self.limits.wrist_roll_limit_deg):
                         raise TimeoutError("Transit correction exceeds wrist limit")
-                    baseline_load = ContactMonitor(self.s.robot, self.cfg.sensing).start()
+                    # Reading all motor loads takes about 0.22 s on this bus.
+                    # This correction gates on joint lag, not load; skip the
+                    # diagnostic read while a 30 Hz episode is being recorded.
+                    recording = self.collection.recording
+                    baseline_load = (None if recording else
+                                     ContactMonitor(self.s.robot, self.cfg.sensing).start())
                     def check_correction():
-                        loads = self.s.robot.read_loads()
+                        loads = None if recording else self.s.robot.read_loads()
                         q = self.s.robot.read_joints()
                         # Loaded upward/transit motion naturally raises holding
                         # torque. A descent's contact delta is not a jam test
@@ -1004,8 +1087,9 @@ class PrimitiveSkills(Skills):
                                          timeout_s=min(self.cfg.motion.grasp_hover_settle_s,max(0.0,deadline-time.monotonic())),
                                          check_progress=check_correction)
                     check_correction()
-                    self._calibration()._record("transit_tracking_corrected", correction_deg=correction,
-                                                nominal=nominal, corrected=corrected, target_mm=list(xyz))
+                    if not recording:
+                        self._calibration()._record("transit_tracking_corrected", correction_deg=correction,
+                                                    nominal=nominal, corrected=corrected, target_mm=list(xyz))
             endpoint_error_mm = math.dist(self.s.arm_position_mm(), xyz)
             endpoint_limit_mm = max(
                 self.limits.arrival_error_mm,
@@ -1027,7 +1111,8 @@ class PrimitiveSkills(Skills):
                             measured_fk_mm=list(self.s.arm_position_mm()),
                             tracking_correction_deg={} if descending_empty else correction)
 
-    def move_to_target(self, target_type, phase, object_id=None, observation_id=None, slot=None, x=None, y=None):
+    def move_to_target(self, target_type, phase, object_id=None, observation_id=None, slot=None, x=None, y=None,
+                       _route_guard=None):
         action = "move_to_target"
         try:
             if target_type == "object":
@@ -1083,7 +1168,7 @@ class PrimitiveSkills(Skills):
         else:
             goal = (*xy, self.s.grasp_z_mm + self.limits.approach_clearance_mm)
         if self.limits.calibrated_pick and phase in ("pregrasp", "grasp"):
-            result = self._calibrated_target(block, phase)
+            result = self._calibrated_target(block, phase, route_guard=_route_guard)
         elif phase == "preplace":
             from control.task1_transport import place_tilt_deg
             from session.relative import offset_xy
@@ -1151,7 +1236,7 @@ class PrimitiveSkills(Skills):
         if not all(math.isfinite(v) for v in (forward_mm,left_mm,up_mm)) or math.sqrt(forward_mm**2+left_mm**2+up_mm**2) > self.cfg.agent.relative.max_jog_mm:
             return self._fail("move_relative", "Relative vector exceeds limit", "invalid_arguments")
         if self.s.held is not None and up_mm < 0:
-            return self._fail("move_relative", "Use descend_until_contact while holding")
+            return self._fail("move_relative", "Use the guarded placement descent while holding")
         if (self.limits.calibrated_pick and self._target and self._target[-1] == "pregrasp"
                 and up_mm == 0 and self._pick_calibration is not None):
             self._pick_ready = False
@@ -1297,10 +1382,70 @@ class PrimitiveSkills(Skills):
             next_required_action="move_relative_up",
         )
 
+    def _zone_drop_target_xy(self):
+        target = self._target
+        if target is None or target[-1] != "preplace":
+            return None
+        if target[0] == "slot":
+            return self.s.slot_centres[list(self.cfg.agent.zone_slots.labels).index(target[3])]
+        if target[0] == "cell":
+            point = self.cells.get((target[4], target[5]))
+            return point if point is not None and self.s.in_zone(point) else None
+        return None
+
+    def drop_at_zone_target(self):
+        """Release-ready descent above a zone slot/cell, without contact sensing."""
+        action = "drop_at_zone_target"
+        if self.s.held is None or not self._held_check():
+            return self._fail(action, "Verified held block required", "no_block_held")
+        if self._zone_drop_target_xy() is None:
+            return self._fail(action, "Approach a zone slot or cell first")
+        if self._place_yaw_deg is None:
+            return self._fail(action, "Placement yaw was not aligned at hover")
+        start = self.s.arm_position_mm()
+        drop_z = self.s.drop_z_mm
+        if start[2] < drop_z:
+            return self._fail(action, "Arm is already below the zone drop height", "grasp_blocked")
+        if start[2] - drop_z > self.limits.contact_max_descent_mm:
+            return self._fail(action, "Zone drop exceeds the bounded descent", "limit_exceeded")
+        from control.task1_transport import place_tilt_deg
+        tilt = place_tilt_deg(start[:2], self.s.base_xy, self.cfg)
+        try:
+            pose = self._solve(
+                (*start[:2], drop_z),
+                radial_tilt_deg=tilt,
+                max_position_error_mm=self.cfg.ik.max_position_error_mm,
+                max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
+                yaw_deg=self._place_yaw_deg,
+                max_yaw_error_deg=self.cfg.task1.place_yaw_tolerance_deg,
+            )
+        except ValueError as exc:
+            return self._fail(action, str(exc), "ik_gate")
+        self._zone_drop_ready = False
+        self.s.player.move_to(
+            pose.joints, max_step=self.cfg.motion.descent_step_per_tick,
+            tol=self.cfg.motion.arrival_tol,
+        )
+        actual = self.s.arm_position_mm()
+        if (math.dist(actual[:2], start[:2]) > self.limits.alignment_tolerance_mm
+                or not self.s.grasp_z_mm + 3 <= actual[2] <= drop_z + 10):
+            return self._fail(action, "Measured FK missed the zone release window",
+                              "motion_timeout")
+        if not self._held_check():
+            return self._fail(action, "Grasp verification failed", "grasp_empty")
+        self._zone_drop_xy = tuple(start[:2])
+        self._zone_drop_ready = True
+        return self._result(True, action, "ok", release_mode="height_drop",
+                            release_fk_mm=list(actual), drop_z_mm=drop_z)
+
     def descend_until_contact(self, max_descent_mm):
         action = "descend_until_contact"
         if not math.isfinite(max_descent_mm) or not 0 < max_descent_mm <= self.limits.contact_max_descent_mm:
             return self._fail(action, "Descent bound invalid", "invalid_arguments")
+        if self._zone_drop_target_xy() is not None:
+            if self.s.arm_position_mm()[2] - self.s.drop_z_mm > max_descent_mm:
+                return self._fail(action, "Zone drop exceeds requested descent bound", "limit_exceeded")
+            return replace(self.drop_at_zone_target(), action=action)
         if self.s.held is None or not self._held_check():
             return self._fail(action, "Verified held block required", "no_block_held")
         if not self._target or self._target[-1] != "preplace":
@@ -1462,15 +1607,31 @@ class PrimitiveSkills(Skills):
         return self._fail(action, "No contact within bound; still holding. Do not release")
 
     def open_gripper(self):
-        if self.s.held is not None and not self._contact:
-            return self._fail("open_gripper", "Held block may only be released after contact")
+        if self.s.held is not None and not (self._contact or self._stack_drop_ready or self._zone_drop_ready):
+            return self._fail("open_gripper", "Held block needs contact or a verified drop pose")
+        if self.s.held is not None and self._stack_drop_ready:
+            level = self._stack_target
+            actual = self.s.arm_position_mm()
+            if (level is None or self._target is None or self._target[0] != "stack"
+                    or math.dist(actual[:2], level.xy_mm) > self.limits.alignment_tolerance_mm
+                    or not level.place_z_mm + 3 <= actual[2]
+                    <= level.place_z_mm + self.cfg.task2.drop_clearance_mm + 10):
+                self._stack_drop_ready = False
+                return self._fail("open_gripper", "Arm left the verified stack drop pose")
+        if self.s.held is not None and self._zone_drop_ready:
+            actual = self.s.arm_position_mm()
+            if (self._zone_drop_target_xy() is None or self._zone_drop_xy is None
+                    or math.dist(actual[:2], self._zone_drop_xy) > self.limits.alignment_tolerance_mm
+                    or not self.s.grasp_z_mm + 3 <= actual[2] <= self.s.drop_z_mm + 10):
+                self._zone_drop_ready = False
+                return self._fail("open_gripper", "Arm left the verified zone drop pose")
         if (self.s.held is not None and self._place_yaw_deg is not None
                 and self._target is not None and self._target[0] in ("slot", "cell", "object")):
             measured_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
             if abs(angle_error_deg(measured_yaw, self._place_yaw_deg)) > self.cfg.task1.place_yaw_tolerance_deg:
                 return self._fail("open_gripper", "Jaw yaw drifted before release; still holding", "grasp_blocked")
         pending = None
-        if self.s.held is not None and self._contact and self._target and self._target[-1] == "preplace":
+        if self.s.held is not None and (self._contact or self._zone_drop_ready) and self._target and self._target[-1] == "preplace":
             if self._target[0] == "slot":
                 target_xy = self.s.slot_centres[list(self.cfg.agent.zone_slots.labels).index(self._target[3])]
                 pending = (self.s.held.color, target_xy,
@@ -1483,6 +1644,9 @@ class PrimitiveSkills(Skills):
         self._pending_placement = pending
         self._grasp_failed = False
         self._contact = False
+        self._stack_drop_ready = False
+        self._zone_drop_ready = False
+        self._zone_drop_xy = None
         self._target = None
         self._stack_target = None
         self._recovery_target_xy = None

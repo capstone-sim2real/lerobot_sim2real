@@ -70,7 +70,7 @@ class SkillResult:
         holding = self.data.get("holding")
         if self.state is not None:
             holding = self.state.get("holding", holding)
-        if self.robot_fault or (self.action in ("move_block_to_slot", "stack_next_block")
+        if self.robot_fault or (self.action in ("move_block_to_slot", "stack_block_to_floor")
                                 and holding is not None):
             return "error"
         return "warning"

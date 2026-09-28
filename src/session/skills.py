@@ -1142,9 +1142,6 @@ class Skills:
         action, t0, s, cfg = f"run_task{task}", time.monotonic(), self.s, self.cfg
         if task not in (1, 2, 3):
             return self._result(False, action, "invalid_arguments", "미션은 1, 2, 3만 있습니다.", t0=t0)
-        if task == 3:
-            return self._result(False, action, "disabled", "데이터 수집은 에피소드 도구와 동작 primitive를 조합하세요.",
-                                retry_advice="do_not_retry", t0=t0)
         if s.held is not None:
             return self._result(False, action, "already_holding",
                                 f"{self._label(s.held.color)} 블록을 들고 있어 미션을 시작할 수 없습니다. 먼저 내려놓으세요.",
@@ -1239,6 +1236,9 @@ class Skills:
             detail += " " + " ".join(warnings)
         return self._result(complete, action, "ok" if complete else "task_incomplete", detail, t0=t0, **data)
 
+    def run_task3(self) -> SkillResult:
+        return self.run_task(3)
+
     def _run_task3(self, t0: float, scene: Scene) -> SkillResult:
         """One Task 3 collection round: gather every outside block while recording.
 
@@ -1269,16 +1269,18 @@ class Skills:
             raise RoundDone()
 
         action, s = "run_task3", self.s
-        if scene.inside:
+        taken = {color: index for index, color in scene.slot_occupancy.items() if color}
+        loose = [block.color for block in scene.inside.values() if block.slot_index is None]
+        if loose or len(taken) + len(scene.outside) > len(self.cfg.task1.slot_uv):
             return self._result(False, action, "precondition",
-                                "데이터 수집은 빈 적재 구역에서 시작해야 합니다.",
+                                "적재 구역의 칸 점유가 불명확하거나 빈 칸이 부족합니다.",
                                 retry_advice="ask_operator", t0=t0)
         cfg3 = copy.deepcopy(self.cfg)
         cfg3.motion.fps = cfg3.task3.motion_fps_override
         cfg3.task3.prompt_on_round_complete = True
         repo_id = resolve_repo_id(cfg3, resume=False)
         root = resolve_dataset_root(cfg3.task3, repo_id)
-        sources = start_frame_sources(cfg3)
+        sources, camera_proc = start_frame_sources(cfg3)
         dataset = None
         recorder = None
         try:
@@ -1299,6 +1301,8 @@ class Skills:
                 recorder=recorder, prompt=end_round, stop_requested=s.cancel.is_set,
             )
             ctx = RunContext(fsm=cfg3.fsm)
+            if taken:
+                ctx.extras["task1_slot_by_color"] = dict(taken)
             run_id = time.strftime("agent_task3_%Y%m%d_%H%M%S")
             csv_path = (Path(cfg3.logging.log_dir) / f"{run_id}_transitions.csv"
                         if cfg3.logging.save_transitions else None)
@@ -1316,11 +1320,15 @@ class Skills:
         finally:
             for source in sources.values():
                 source.stop()
+            if camera_proc is not None:
+                camera_proc.stop()
             if dataset is not None and (recorder is None or recorder.saved_total == 0):
                 remove_empty_dataset(Path(dataset.root))
+        s.last_scene = None
+        saved = recorder.saved_total
         return self._result(
-            True, action, "ok",
-            f"데이터 수집 라운드 완료: 에피소드 {recorder.saved_total}개 저장.",
-            t0=t0, dataset_root=str(dataset.root), episodes_saved=recorder.saved_total,
+            saved > 0, action, "ok" if saved > 0 else "task_incomplete",
+            f"데이터 수집 라운드 완료: 에피소드 {saved}개 저장.",
+            t0=t0, dataset_root=str(dataset.root) if saved else None, episodes_saved=saved,
             episodes_saved_by_color=recorder.saved_by_color, discard_reasons=recorder.discard_reasons,
         )

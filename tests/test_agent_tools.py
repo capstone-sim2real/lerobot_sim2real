@@ -38,12 +38,14 @@ def test_bad_arguments_never_reach_the_robot():
         assert result.is_error and result.content["reason"] == "invalid_arguments"
 
 
-def test_task2_block_tool_is_bounded_to_a_named_color():
+def test_task2_block_tool_requires_color_and_bounded_floor():
     tools = {tool.spec.name: tool.spec for tool in build_tools(AppConfig())}
-    schema = tools["stack_next_block"].input_schema
-    assert schema["required"] == ["color"]
+    schema = tools["stack_block_to_floor"].input_schema
+    assert schema["required"] == ["color", "floor"]
     assert schema["additionalProperties"] is False
     assert "yellow" in schema["properties"]["color"]["enum"]
+    assert schema["properties"]["floor"] == {"type": "integer", "minimum": 0, "maximum": 4}
+    assert "stack_next_block" not in tools
 
 
 def test_agent_core_imports_without_sdks_or_web_framework():

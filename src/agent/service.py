@@ -352,11 +352,15 @@ class AgentService:
             except Exception as exc:
                 self._telemetry_cache = {**self._telemetry_cache, "error": type(exc).__name__}
             self._telemetry_future = None
+        # A bus-wide diagnostics read can block the sole robot worker beyond
+        # the recording tick deadline. Keep the last snapshot while recording.
+        resource = self._worker.resource
+        recording = bool(getattr(getattr(resource, "collection", None), "recording", False))
         age = time.time() - self._telemetry_cache.get("sampled_at", 0)
-        if self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
+        if not recording and self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
             self._telemetry_future = self._worker.submit(collect)
         return {**self._telemetry_cache, "pending": self._telemetry_future is not None,
-                "control": self.gate.snapshot()}
+                "recording": recording, "control": self.gate.snapshot()}
 
     def health(self) -> dict[str, Any]:
         return {
