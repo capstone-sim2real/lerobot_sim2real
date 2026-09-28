@@ -285,6 +285,41 @@ def create_app(
         return FileResponse(WEB_DIR.parent.parent / "camera" / "overlay_renderer.js",
                             media_type="application/javascript", headers={"Cache-Control": "no-store"})
 
+    @app.get("/episodes")
+    async def episodes_page():
+        return FileResponse(WEB_DIR / "episodes.html", media_type="text/html",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/episodes.js")
+    async def episodes_js():
+        return FileResponse(WEB_DIR / "episodes.js", media_type="application/javascript",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/episodes")
+    async def episode_runs():
+        from agent.episodes import list_runs
+        return {"runs": list_runs((REPO_ROOT / cfg.agent.collection.root).resolve())}
+
+    @app.get("/api/episodes/{run_id}")
+    async def episode_list(run_id: str):
+        from fastapi import HTTPException
+        from agent.episodes import list_episodes
+        try:
+            episodes = await asyncio.to_thread(list_episodes, (REPO_ROOT / cfg.agent.collection.root).resolve(), run_id)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, "Dataset unavailable") from None
+        return {"episodes": episodes}
+
+    @app.get("/api/episodes/{run_id}/{episode_index}/video/{key}")
+    async def episode_video(run_id: str, episode_index: int, key: str):
+        from fastapi import HTTPException
+        from agent.episodes import video_file
+        try:
+            path = await asyncio.to_thread(video_file, (REPO_ROOT / cfg.agent.collection.root).resolve(), run_id, episode_index, key)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, "Episode video unavailable") from None
+        return FileResponse(path, media_type="video/mp4")
+
     @app.get("/api/config")
     async def ui_config():
         agent = cfg.agent
