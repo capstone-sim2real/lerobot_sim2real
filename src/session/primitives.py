@@ -616,6 +616,7 @@ class PrimitiveSkills(Skills):
                                 failed_stage="select", steps=steps, color=color,
                                 level=level_number)
         radius = self.cfg.agent.place_clear_radius_mm
+        support_evidence = "fresh_observation"
         if level_number == 1:
             occupied = [b.color for b in scene.inside.values()
                         if math.dist(b.center_mm, level.xy_mm) < radius]
@@ -627,11 +628,25 @@ class PrimitiveSkills(Skills):
         else:
             previous = self._task2_stacked_colors[-1]
             support = scene.find(previous)
-            if support is None or math.dist(support.center_mm, level.xy_mm) >= radius:
+            if support is not None and math.dist(support.center_mm, level.xy_mm) >= radius:
                 return self._result(False, action, "scene_incomplete",
-                                    f"Cannot confirm the preceding {previous} block near the tower point",
+                                    f"The preceding {previous} block is visible away from the tower point",
                                     retry_advice="ask_operator", t0=t0,
                                     failed_stage="select", steps=steps, level=level_number)
+            if support is None:
+                # The preceding release was already observed at the tower.
+                # An arm away from HOME can hide it from this fresh frame;
+                # absence alone is not evidence that the support moved.
+                obstructed = not self.s.arm_at_home()
+                occupied = any(math.dist(other.center_mm, level.xy_mm) < radius
+                               for other in scene.inside.values())
+                if not obstructed or occupied:
+                    return self._result(False, action, "scene_incomplete",
+                                        f"Cannot confirm the preceding {previous} block near the tower point",
+                                        retry_advice="ask_operator", t0=t0,
+                                        failed_stage="select", steps=steps, level=level_number)
+                support_evidence = "prior_verified_release_arm_not_home"
+                steps.append({"stage": "support", "reason": support_evidence})
 
         object_id, observation_id = f"{color}_1", self.observation_id
         failed = run("open", self.open_gripper)
@@ -775,6 +790,7 @@ class PrimitiveSkills(Skills):
                             contact_source=contact_evidence.get("source"),
                             contact_fk_mm=contact_evidence.get("contact_fk_mm"),
                             placement_observed=True, stack_verified=False,
+                            support_evidence=support_evidence,
                             next_level=self._task2_next_level,
                             expected_place_z_mm=level.place_z_mm,
                             measured_xy_mm=list(landed.center_mm))

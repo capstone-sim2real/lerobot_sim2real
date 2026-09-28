@@ -248,6 +248,71 @@ def test_task2_one_tool_per_block_uses_level_height_and_contact(monkeypatch):
     assert sk.s.arm_at_home()
 
 
+def test_task2_uses_prior_confirmed_support_when_arm_occludes_it(monkeypatch):
+    from dataclasses import replace
+
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, _, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    assert sk.move_relative(up_mm=40).ok
+    assert not sk.s.arm_at_home()
+
+    observe = sk.observe_scene
+    calls = {"count": 0}
+
+    def occluded_once():
+        result = observe()
+        calls["count"] += 1
+        if calls["count"] == 1:
+            scene = sk._observed_scene
+            sk._observed_scene = replace(scene, inside={
+                color: block for color, block in scene.inside.items()
+                if color != "yellow"
+            })
+        return result
+
+    monkeypatch.setattr(sk, "observe_scene", occluded_once)
+
+    def contact_near_second_level(monitor):
+        z = monitor._robot.read_joints()["elbow_flex"]
+        return ContactReading(z <= sk.s.stack.levels[1].place_z_mm)
+
+    monkeypatch.setattr(ContactMonitor, "check", contact_near_second_level)
+    result = sk.stack_next_block("red")
+    assert result.ok
+    assert result.data["level"] == 2
+    assert result.data["support_evidence"] == "prior_verified_release_arm_not_home"
+
+
+def test_task2_still_rejects_visible_displaced_support():
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    world.blocks["yellow"] = (120., 110.)
+    assert sk.move_relative(up_mm=40).ok
+    result = sk.stack_next_block("red")
+    assert not result.ok and result.reason == "scene_incomplete"
+    assert result.data["failed_stage"] == "select"
+    assert sk.s.held is None
+
+
+def test_task2_missing_support_at_home_still_stops():
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    del world.blocks["yellow"]
+    result = sk.stack_next_block("red")
+    assert not result.ok and result.reason == "scene_incomplete"
+    assert result.data["failed_stage"] == "select"
+    assert sk.s.held is None
+
+
 def test_task2_no_contact_puts_block_down_after_bounded_retry(monkeypatch):
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
