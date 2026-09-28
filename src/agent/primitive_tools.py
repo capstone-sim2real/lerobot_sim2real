@@ -62,9 +62,9 @@ def build_primitive_tools(cfg):
                            "maximum": cfg.agent.primitives.contact_max_descent_mm}}, ["max_descent_mm"])
     add("open_gripper", "Open in place. A held block requires confirmed placement contact or a verified zone/stack drop pose. Release does not prove stacking success.")
     add("return_to_home", "Return empty gripper home. Refuses while holding.")
-    add("run_task3", "Collect one Task 3 round with the existing Task 1 CV+IK FSM. "
-        "Each successful grasp, zone placement and return home becomes one recorded episode. "
-        "The server handles selection, motion and recording continuously; call once per arrangement.")
+    add("record_task1", "Run the Task 1 CV+IK gathering loop with recording enabled. "
+        "Each home-to-home block transfer is one episode; failed grasps are discarded. "
+        "Call once per arrangement, then rearrange blocks before another run.")
     add("begin_episode", "Begin a home-to-home demonstration for an observed outside-zone block. Uses configured local dataset and camera streams. Does not pick or run a task.", object_fields, list(object_fields), moves=False)
     add("save_episode", "Save only after verified grasp, zone delivery, home return and fresh observed placement. Backend checks evidence, frame count and timing; no success argument.", moves=False)
     add("discard_episode", "Discard the current demonstration buffer, preserving saved episodes and recording the reason.", {

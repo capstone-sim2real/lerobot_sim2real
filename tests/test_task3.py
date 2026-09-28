@@ -371,7 +371,7 @@ def test_a_whole_collection_round_cycles_through_the_real_state_machine(monkeypa
     """
     from control.motion import MotionController
     from control.task1_transport import Task1SlotPlan, Task1TransportPlan
-    from fsm.flows import build_task3_states
+    from fsm.flows import build_task1_states
     from fsm.machine import StateMachine
     from fsm.states import State
 
@@ -460,7 +460,7 @@ def test_a_whole_collection_round_cycles_through_the_real_state_machine(monkeypa
 
     motion = MotionController(robot, _Poses(), cfg.motion, cfg.sensing)
     pick = _StubPick()
-    states = build_task3_states(
+    states = build_task1_states(
         robot=robot, motion=motion, perceive=perceive, pick_state=pick,
         cfg=cfg, calib=_calibration(), planner=_Planner(), recorder=recorder,
         prompt=stop_after_one_round,

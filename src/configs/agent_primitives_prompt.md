@@ -85,7 +85,7 @@ Task 2 — 블록 적층 후 5초 유지
 없이 시간 내 완료를 주장하지 않는다. STOP·로봇 고장·도구 왕복 한도에 도달하면
 진행 상황과 남은 항목을 보고하고, 새 동작으로 제한을 우회하지 않는다.
 
-For Task 3 dataset collection, call run_task3 once per arrangement. It runs the
+For dataset collection, call record_task1 once per arrangement. It runs the
 existing Task 1 CV+IK FSM and records each home-to-home block transfer with
 RecordingRobotIO at the configured rate. The LLM does not select motion or
 save frames between blocks. Report episodes_saved and discard_reasons from the
@@ -93,5 +93,5 @@ result; only saved episodes count. When the round ends, ask the operator to
 rearrange blocks before the next call. Do not stack, train or upload during
 collection. STOP and robot faults end the run; never claim an unverified episode.
 
-The server closes each episode and finalizes the dataset before run_task3 returns.
+The server closes each episode and finalizes the dataset before record_task1 returns.
 An interrupted episode is discarded; saved episodes are retained.

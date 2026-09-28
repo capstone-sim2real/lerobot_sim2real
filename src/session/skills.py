@@ -1140,8 +1140,8 @@ class Skills:
 
     def run_task(self, task: int) -> SkillResult:
         action, t0, s, cfg = f"run_task{task}", time.monotonic(), self.s, self.cfg
-        if task not in (1, 2, 3):
-            return self._result(False, action, "invalid_arguments", "미션은 1, 2, 3만 있습니다.", t0=t0)
+        if task not in (1, 2):
+            return self._result(False, action, "invalid_arguments", "미션은 1, 2만 있습니다.", t0=t0)
         if s.held is not None:
             return self._result(False, action, "already_holding",
                                 f"{self._label(s.held.color)} 블록을 들고 있어 미션을 시작할 수 없습니다. 먼저 내려놓으세요.",
@@ -1149,9 +1149,6 @@ class Skills:
         scene = self._observe_or_fail(action, t0)
         if isinstance(scene, SkillResult):
             return scene
-        if task == 3:
-            return self._run_task3(t0, scene)
-
         from fsm.flows import build_task1_states, build_task2_stack_states
         from fsm.machine import StateMachine, TransitionLogger
 
@@ -1236,15 +1233,19 @@ class Skills:
             detail += " " + " ".join(warnings)
         return self._result(complete, action, "ok" if complete else "task_incomplete", detail, t0=t0, **data)
 
-    def run_task3(self) -> SkillResult:
-        return self.run_task(3)
+    def record_task1(self) -> SkillResult:
+        action, t0, s = "record_task1", time.monotonic(), self.s
+        if s.held is not None:
+            return self._result(False, action, "already_holding",
+                                "블록을 들고 있어 녹화를 시작할 수 없습니다.",
+                                retry_advice="do_not_retry", t0=t0)
+        scene = self._observe_or_fail(action, t0)
+        if isinstance(scene, SkillResult):
+            return scene
+        return self._record_task1(t0, scene)
 
-    def _run_task3(self, t0: float, scene: Scene) -> SkillResult:
-        """One Task 3 collection round: gather every outside block while recording.
-
-        The terminal prompt that starts a new round is replaced by the end of
-        the tool call; the operator rearranges and asks again.
-        """
+    def _record_task1(self, t0: float, scene: Scene) -> SkillResult:
+        """Run Task 1 while recording one home-to-home episode per block."""
         import copy
 
         from data.episode_recorder import (
@@ -1256,7 +1257,7 @@ class Skills:
             remove_empty_dataset,
             resolve_dataset_root,
         )
-        from fsm.flows import build_task3_states
+        from fsm.flows import build_task1_states
         from fsm.machine import StateMachine, TransitionLogger
         from lerobot.datasets import VideoEncodingManager
         from runners.run_task3 import resolve_repo_id, start_frame_sources
@@ -1268,7 +1269,7 @@ class Skills:
         def end_round(_message: str) -> str:
             raise RoundDone()
 
-        action, s = "run_task3", self.s
+        action, s = "record_task1", self.s
         taken = {color: index for index, color in scene.slot_occupancy.items() if color}
         loose = [block.color for block in scene.inside.values() if block.slot_index is None]
         if loose or len(taken) + len(scene.outside) > len(self.cfg.task1.slot_uv):
@@ -1294,7 +1295,7 @@ class Skills:
             pick = make_pick_state("cv_ik", robot=robot, motion=motion, cfg=cfg3, calib=s.calib,
                                    retreat_pose=None, radial_tilt_extra_key=PICK_TILT_KEY,
                                    max_grasp_attempts=cfg3.task3.max_grasp_attempts, ik=s.ik)
-            states = build_task3_states(
+            states = build_task1_states(
                 robot=robot, motion=motion,
                 perceive=guard(s.cancel, make_task1_perceive(s.calib, cfg3)),
                 pick_state=pick, cfg=cfg3, calib=s.calib, planner=s.transport,
@@ -1303,7 +1304,7 @@ class Skills:
             ctx = RunContext(fsm=cfg3.fsm)
             if taken:
                 ctx.extras["task1_slot_by_color"] = dict(taken)
-            run_id = time.strftime("agent_task3_%Y%m%d_%H%M%S")
+            run_id = time.strftime("agent_record_task1_%Y%m%d_%H%M%S")
             csv_path = (Path(cfg3.logging.log_dir) / f"{run_id}_transitions.csv"
                         if cfg3.logging.save_transitions else None)
             with VideoEncodingManager(dataset):
