@@ -574,13 +574,6 @@ class PrimitiveSkills(Skills):
             planner = self.s.stack
         except ValueError as exc:
             return self._fail(action, str(exc), "ik_gate")
-        if level_number > len(planner.levels):
-            return self._fail(action, "No further tower level is configured", "limit_exceeded")
-        level = planner.levels[level_number - 1]
-        if not level.reachable:
-            return self._result(False, action, "ik_gate",
-                                f"Level {level_number} is outside the IK gate: {level.reason}",
-                                retry_advice="ask_operator", level=level_number)
         steps = []
 
         def run(stage, fn):
@@ -607,6 +600,27 @@ class PrimitiveSkills(Skills):
             return failed
         scene = self._observed_scene
         assert scene is not None
+        radius = self.cfg.agent.place_clear_radius_mm
+        if (self._task2_stacked_colors
+                and all(previous in scene.outside for previous in self._task2_stacked_colors)
+                and not any(math.dist(block.center_mm, planner.stack_xy_mm) < radius
+                            for block in scene.inside.values())):
+            # All previously placed blocks are visibly back outside and the
+            # tower point is empty: this is a new Task 2 run, not level N+1.
+            self._task2_stacked_colors.clear()
+            self._task2_next_level = 1
+            self._stack_target = None
+            self._target = None
+            self._contact = False
+            steps.append({"stage": "tower_reset", "reason": "previous_blocks_outside"})
+        level_number = self._task2_next_level
+        if level_number > len(planner.levels):
+            return self._fail(action, "No further tower level is configured", "limit_exceeded")
+        level = planner.levels[level_number - 1]
+        if not level.reachable:
+            return self._result(False, action, "ik_gate",
+                                f"Level {level_number} is outside the IK gate: {level.reason}",
+                                retry_advice="ask_operator", level=level_number)
         block = scene.outside.get(color)
         if block is None:
             return self._result(False, action,
@@ -615,7 +629,6 @@ class PrimitiveSkills(Skills):
                                 retry_advice="try_other_target", t0=t0,
                                 failed_stage="select", steps=steps, color=color,
                                 level=level_number)
-        radius = self.cfg.agent.place_clear_radius_mm
         support_evidence = "fresh_observation"
         if level_number == 1:
             occupied = [b.color for b in scene.inside.values()

@@ -286,7 +286,7 @@ def test_task2_uses_prior_confirmed_support_when_arm_occludes_it(monkeypatch):
     assert result.data["support_evidence"] == "prior_verified_release_arm_not_home"
 
 
-def test_task2_still_rejects_visible_displaced_support():
+def test_task2_starts_from_level_one_after_clearing_the_tower():
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
     base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
@@ -295,8 +295,22 @@ def test_task2_still_rejects_visible_displaced_support():
     world.blocks["yellow"] = (120., 110.)
     assert sk.move_relative(up_mm=40).ok
     result = sk.stack_next_block("red")
+    assert result.ok and result.data["level"] == 1
+    assert sk._task2_stacked_colors == ["red"]
+    assert sk._task2_next_level == 2
+
+
+def test_task2_displaced_support_does_not_reset_while_tower_occupied():
+    cfg = fast_cfg()
+    cfg.agent.relative.frame = "base"
+    base, world, _ = make_skills({"yellow": (160., 40.), "red": (140., -120.)}, cfg=cfg)
+    sk = PrimitiveSkills(base.s)
+    assert sk.stack_next_block("yellow").ok
+    world.blocks["yellow"] = (120., 110.)
+    world.blocks["wood"] = sk.s.stack.stack_xy_mm
+    result = sk.stack_next_block("red")
     assert not result.ok and result.reason == "scene_incomplete"
-    assert result.data["failed_stage"] == "select"
+    assert sk._task2_next_level == 2
     assert sk.s.held is None
 
 
