@@ -85,6 +85,7 @@ class GraspAttempt:
     grasp_z_mm: float = 0.0
     yaw_deg: float | None = None
     hover_xy_mm: tuple[float, float] | None = None
+    radial_tilt_deg: float = 0.0
 
 
 @dataclass
@@ -162,7 +163,8 @@ def highest_reachable_hover(
         # A broad IK gate accepts the calibration error budget.  Hover needs
         # a stricter check: reporting a pose that is 12mm short would make
         # the clearance fictional and can drag a held block.
-        point = (approach_hover_xy((x_mm, y_mm), base_z_mm, z_mm, radial_tilt_deg)
+        point = (approach_hover_xy((x_mm, y_mm), base_z_mm, z_mm, radial_tilt_deg,
+                                    getattr(ik, "pan_origin_xy_mm", (0.0, 0.0)))
                  if axis_aligned else (x_mm, y_mm))
         if _solve_ik(ik, *point, z_mm, yaw_deg, radial_tilt_deg).position_error_mm <= 3.0:
             return z_mm
@@ -173,6 +175,7 @@ def highest_reachable_hover(
 def approach_hover_xy(
     grasp_xy_mm: tuple[float, float], grasp_z_mm: float, hover_z_mm: float,
     radial_tilt_deg: float,
+    pan_origin_xy_mm: tuple[float, float] = (0.0, 0.0),
 ) -> tuple[float, float]:
     """Put a far-reach hover inward so TCP descends along its tilted axis.
 
@@ -182,7 +185,13 @@ def approach_hover_xy(
     if not radial_tilt_deg:
         return grasp_xy_mm
     inward_mm = (hover_z_mm - grasp_z_mm) * math.tan(math.radians(abs(radial_tilt_deg)))
-    return gripper_frame_offset(*grasp_xy_mm, -inward_mm, 0.0)
+    dx = grasp_xy_mm[0] - pan_origin_xy_mm[0]
+    dy = grasp_xy_mm[1] - pan_origin_xy_mm[1]
+    radius = math.hypot(dx, dy)
+    if radius < 1e-6:
+        return grasp_xy_mm
+    return (grasp_xy_mm[0] - inward_mm * dx / radius,
+            grasp_xy_mm[1] - inward_mm * dy / radius)
 
 
 def biased_grasp_xy(
@@ -268,13 +277,17 @@ def _solve_attempt(
     x_mm, y_mm = gripper_frame_offset(
         base_xy[0], base_xy[1], *_in_jaw_frame(cfg.motion, offset[0], offset[1], jaw_rot_deg)
     )
-    hover_xy = approach_hover_xy((x_mm, y_mm), grasp_z, hover_z, radial_tilt_deg)
+    hover_xy = approach_hover_xy((x_mm, y_mm), grasp_z, hover_z, radial_tilt_deg,
+                                  getattr(ik, "pan_origin_xy_mm", (0.0, 0.0)))
     hover = _solve_ik(ik, *hover_xy, hover_z, yaw_deg, radial_tilt_deg)
     grasp = _solve_ik(ik, x_mm, y_mm, grasp_z, yaw_deg, radial_tilt_deg)
-    reachable = all(
-        r.position_error_mm <= cfg.ik.max_position_error_mm
-        and abs(r.tilt_error_deg - abs(radial_tilt_deg)) <= cfg.ik.max_tilt_error_deg
-        for r in (hover, grasp)
+    reachable = (
+        hover.position_error_mm <= min(3.0, cfg.ik.max_position_error_mm)
+        and grasp.position_error_mm <= cfg.ik.max_position_error_mm
+        and all(
+            abs(r.tilt_error_deg - abs(radial_tilt_deg)) <= cfg.ik.max_tilt_error_deg
+            for r in (hover, grasp)
+        )
     )
     return GraspAttempt(
         label=label,
@@ -287,6 +300,7 @@ def _solve_attempt(
         grasp_z_mm=grasp_z,
         yaw_deg=yaw_deg,
         hover_xy_mm=hover_xy,
+        radial_tilt_deg=radial_tilt_deg,
     )
 
 
@@ -422,11 +436,35 @@ def plan_grasp_attempts(
         # Once, outside the scale loop: this costs a probe solve.
         yaw_deg, jaw_rot_deg = ik.grasp_yaw_and_rotation_deg(x_mm, y_mm, grasp_z, block_angle_deg)
 
-    for yaw, rot in [(yaw_deg, jaw_rot_deg)]:
-        plan = None
+    # Requested tilt is an upper bound. A far-side target can be unreachable
+    # at the maximum angle even where a smaller tilt remains feasible.
+    magnitudes = [abs(radial_tilt_deg)]
+    magnitudes += [min(abs(radial_tilt_deg), value)
+                   for value in (*cfg.task1.pick_tilt_fallback_deg, cfg.task1.pick_tilt_base_deg)]
+    tilts = list(dict.fromkeys(math.copysign(value, radial_tilt_deg) for value in magnitudes))
+    plan = None
+    for tilt in tilts:
         for scale in (1.0, 0.5, 0.0):
+            # A failed angle should not run the full hover-height and retry
+            # search at every bias scale. Probe its centre at the minimum
+            # permitted hover first; both poses must pass before planning.
+            probe_xy = biased_grasp_xy(
+                cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
+            probe_gap = (cfg.task1.tilted_pick_hover_clearance_mm
+                         if abs(tilt) >= 5.0 else cfg.motion.hover_min_clearance_mm)
+            probe_hover_xy = approach_hover_xy(
+                probe_xy, grasp_z, grasp_z + probe_gap, tilt,
+                getattr(ik, "pan_origin_xy_mm", (0.0, 0.0)))
+            probe_grasp = _solve_ik(ik, *probe_xy, grasp_z, yaw_deg, tilt)
+            probe_hover = _solve_ik(
+                ik, *probe_hover_xy, grasp_z + probe_gap, yaw_deg, tilt)
+            if (probe_grasp.position_error_mm > cfg.ik.max_position_error_mm
+                    or probe_hover.position_error_mm > min(3.0, cfg.ik.max_position_error_mm)
+                    or any(abs(result.tilt_error_deg - abs(tilt)) > cfg.ik.max_tilt_error_deg
+                           for result in (probe_grasp, probe_hover))):
+                continue
             plan = _plan_at_scale(
-                ik, cfg, x_mm, y_mm, grasp_z, scale, yaw, rot, radial_tilt_deg
+                ik, cfg, x_mm, y_mm, grasp_z, scale, yaw_deg, jaw_rot_deg, tilt
             )
             if plan.attempts[0].reachable:
                 if scale < 1.0 and log is not None:
@@ -434,13 +472,16 @@ def plan_grasp_attempts(
                         f"  radial bias reduced to {scale:.0%}: the full bias put the aim "
                         f"point outside the reachable envelope (the sideways bias is kept)"
                     )
-                if yaw is not None and log is not None:
-                    log(f"  jaws turned to {yaw % 90.0:.0f} deg for the block's faces")
+                if yaw_deg is not None and log is not None:
+                    log(f"  jaws turned to {yaw_deg % 90.0:.0f} deg for the block's faces")
                     if cfg.motion.grasp_offsets_follow_jaw_yaw:
-                        log(f"  grasp offsets rotated {rot:+.0f} deg to follow them")
-                if radial_tilt_deg and log is not None:
-                    log(f"  gripper tipped outward by {abs(radial_tilt_deg):.1f} deg for far reach")
+                        log(f"  grasp offsets rotated {jaw_rot_deg:+.0f} deg to follow them")
+                if tilt and log is not None:
+                    log(f"  gripper tipped outward by {abs(tilt):.1f} deg for far reach")
                 return plan
+    if plan is None:
+        plan = _plan_at_scale(
+            ik, cfg, x_mm, y_mm, grasp_z, 0.0, yaw_deg, jaw_rot_deg, tilts[-1])
     if log is not None:
         log("  displayed grasp yaw is unreachable; refusing a perpendicular fallback")
     return plan

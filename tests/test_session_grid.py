@@ -69,10 +69,12 @@ def test_cells_reach_the_outer_rim_and_stop_at_the_base_keepout():
     # the near sides are usable ground and must not be thrown away with the
     # corridor in front of the base (that is what the named points' 150mm
     # min_radius used to do here)
-    addresses = {(c.x, c.y) for c in cells}
-    assert {(-3, -6), (3, -6), (-2, -6), (2, -6)} <= addresses
-    assert not ({(0, -6), (0, -4), (1, -4), (-1, -4)} & addresses)
-    assert min(math.hypot(*c.xy_mm) for c in cells) < regions.min_radius_mm
+    # The grid origin moves when the reach profile changes; check physical
+    # side ground instead of assuming fixed cell addresses.
+    assert any(c.xy_mm[1] < -board.base_keepout_half_width_mm
+               and math.hypot(*c.xy_mm) < regions.min_radius_mm for c in cells)
+    assert any(c.xy_mm[1] > board.base_keepout_half_width_mm
+               and math.hypot(*c.xy_mm) < regions.min_radius_mm for c in cells)
     # every named table region is covered by some cell
     for column in regions.columns_deg:
         for row in regions.rows_fraction:

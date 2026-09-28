@@ -13,6 +13,7 @@ pytest.importorskip("placo")
 
 from config import IkConfig  # noqa: E402
 from control.ik import ARM_JOINTS, TopDownIK  # noqa: E402
+from control.grasp import approach_hover_xy  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -52,3 +53,14 @@ def test_solve_holding_wrist_roll_does_not_drift_across_repeated_jogs(ik: TopDow
         result = ik.solve_holding_wrist_roll(x, y, z, wrist_roll)
         assert abs(result.joints["wrist_roll"] - wrist_roll) < 0.5, result.joints["wrist_roll"]
         wrist_roll = result.joints["wrist_roll"]
+
+
+def test_side_tilt_follows_shoulder_axis_at_grasp_and_hover(ik: TopDownIK):
+    """At the side, base-origin tilt misses while shoulder-axis tilt solves."""
+    grasp_xy = (0.0, 300.0)
+    hover_xy = approach_hover_xy(grasp_xy, 20.0, 55.0, -60.0, ik.pan_origin_xy_mm)
+    grasp = ik.solve(*grasp_xy, 20.0, radial_tilt_deg=-60.0)
+    hover = ik.solve(*hover_xy, 55.0, radial_tilt_deg=-60.0)
+    assert grasp.position_error_mm < 3.0
+    assert hover.position_error_mm < 3.0
+    assert abs(grasp.tilt_error_deg - 60.0) < 1.0

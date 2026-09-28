@@ -159,7 +159,7 @@ class PerceptionConfig:
     # what produces phantom warm-coloured candidates. The camera page draws
     # this same sector, so what is outlined is what is detected. Radius 0
     # disables the gate.
-    workspace_radius_mm: float = 380.0
+    workspace_radius_mm: float = 420.0
     workspace_angle_min_deg: float = -90.0
     workspace_angle_max_deg: float = 90.0
     # Optional [azimuth_deg, max_raw_block_radius_mm] samples. When present,
@@ -168,10 +168,10 @@ class PerceptionConfig:
     # corrected PICK + grasp-bias + TopDownIK path used by Task 1.
     workspace_radius_by_angle_mm: list[list[float]] = field(
         default_factory=lambda: [
-            [-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-            [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
-            [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
-            [60, 296], [70, 288], [80, 283], [90, 275],
+            [-90, 300], [-80, 400], [-70, 420], [-60, 420], [-50, 420],
+            [-40, 420], [-30, 420], [-20, 420], [-10, 420], [0, 420],
+            [10, 420], [20, 420], [30, 420], [40, 420], [50, 420],
+            [60, 420], [70, 400], [80, 380], [90, 300],
         ]
     )
 
@@ -382,6 +382,8 @@ class IkConfig:
 
     urdf_path: str = "third_party/so101/so101.urdf"
     target_frame: str = "gripper_frame_link"
+    # URDF shoulder_pan joint origin in the robot base XY frame (mm).
+    shoulder_pan_origin_xy_mm: list[float] = field(default_factory=lambda: [38.8353, 0.0])
     # seed table: joint sweep step and range (degrees) per lift/elbow/wrist_flex
     seed_step_deg: float = 3.0
     seed_range_deg: float = 100.0
@@ -491,12 +493,13 @@ class Task1Config:
     # +95 deg. Gradually tip the approach axis radially outward so the wrist
     # opens while remaining within ik.max_tilt_error_deg.
     pick_tilt_start_radius_mm: float = 280.0
-    pick_tilt_max_radius_mm: float = 320.0
+    pick_tilt_max_radius_mm: float = 300.0
     # Outward target-axis tilt applied at every Task-1 pick. This opens
     # wrist_flex through IK while preserving the requested Cartesian point;
     # placement keeps its original far-reach-only tilt ramp.
     pick_tilt_base_deg: float = 3.0
-    pick_tilt_max_deg: float = 30.0
+    pick_tilt_max_deg: float = 60.0
+    pick_tilt_fallback_deg: list[float] = field(default_factory=lambda: [45.0, 30.0, 15.0])
     place_tilt_max_deg: float = 0.0
     # Model-FK tolerance for a held block's level placement approach.
     place_level_tolerance_deg: float = 3.0
@@ -1223,6 +1226,10 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
 
 
 def validate_ik(cfg: "IkConfig") -> None:
+    if len(cfg.shoulder_pan_origin_xy_mm) != 2 or not all(
+        math.isfinite(v) for v in cfg.shoulder_pan_origin_xy_mm
+    ):
+        raise ValueError("ik.shoulder_pan_origin_xy_mm must be two finite coordinates")
     if cfg.seed_candidate_count <= 0:
         raise ValueError("ik.seed_candidate_count must be positive")
 
@@ -1258,8 +1265,11 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError(
             "task1.pick_tilt_base_deg must be between zero and pick_tilt_max_deg"
         )
-    if not 0 <= cfg.task1.pick_tilt_max_deg <= 30.0:
-        raise ValueError("task1.pick_tilt_max_deg must be between zero and 30 degrees")
+    if not 0 <= cfg.task1.pick_tilt_max_deg <= 60.0:
+        raise ValueError("task1.pick_tilt_max_deg must be between zero and 60 degrees")
+    if any(not 0 <= angle <= cfg.task1.pick_tilt_max_deg
+           for angle in cfg.task1.pick_tilt_fallback_deg):
+        raise ValueError("task1.pick_tilt_fallback_deg must stay within pick_tilt_max_deg")
     if cfg.task1.tilted_pick_hover_clearance_mm < cfg.agent.calibration_clearance.obstacle_height_mm:
         raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
     if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:

@@ -1,0 +1,749 @@
+{
+  "yoloe": {
+    "model": "models/yoloe-26s-seg.pt",
+    "engine": "models/yoloe-26s-block-vp-seg-fp16.engine",
+    "worker_python": ".venv-trt/bin/python",
+    "prompts": [
+      "wooden block",
+      "toy block",
+      "cube"
+    ],
+    "device": "cpu",
+    "imgsz": 640,
+    "confidence": 0.1,
+    "trt_confidence": 0.04,
+    "iou": 0.5,
+    "cpu_threads": 4,
+    "max_detections": 20,
+    "trt_warmup_runs": 5,
+    "web_analysis_fps": 2.0,
+    "snapshot_url": "http://127.0.0.1:8090/snapshot/shoulder.jpg",
+    "http_timeout_s": 10.0
+  },
+  "robot": {
+    "port": "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00",
+    "id": "my_follower",
+    "max_relative_target": 10.0,
+    "disable_torque_on_disconnect": false,
+    "cameras": {}
+  },
+  "perception": {
+    "calibration_path": "src/configs/calib/venue_lab.json",
+    "snapshot_url": "http://127.0.0.1:8090/snapshot/shoulder.jpg",
+    "square_mm": 25.0,
+    "min_pattern": [
+      5,
+      5
+    ],
+    "rectified_mm_per_px": 1.0,
+    "hsv_ranges": {
+      "red": [
+        [
+          0,
+          100,
+          55,
+          10,
+          255,
+          255
+        ],
+        [
+          170,
+          100,
+          55,
+          179,
+          255,
+          255
+        ]
+      ],
+      "yellow": [
+        [
+          13,
+          55,
+          50,
+          40,
+          255,
+          255
+        ]
+      ],
+      "green": [
+        [
+          35,
+          40,
+          30,
+          95,
+          255,
+          255
+        ]
+      ],
+      "blue": [
+        [
+          88,
+          40,
+          30,
+          136,
+          255,
+          255
+        ]
+      ],
+      "wood": [
+        [
+          3,
+          25,
+          40,
+          32,
+          120,
+          255
+        ]
+      ]
+    },
+    "color_prototypes": {
+      "red": [
+        [
+          2,
+          168
+        ]
+      ],
+      "yellow": [
+        [
+          23,
+          116
+        ],
+        [
+          26,
+          190
+        ]
+      ],
+      "green": [
+        [
+          72,
+          148
+        ]
+      ],
+      "blue": [
+        [
+          120,
+          137
+        ]
+      ],
+      "wood": [
+        [
+          17,
+          81
+        ]
+      ]
+    },
+    "prototype_hue_weight": 2.0,
+    "prototype_saturation_weight": 1.0,
+    "prototype_max_distance": 0.35,
+    "area_mm2_min": 900.0,
+    "area_mm2_max": 3200.0,
+    "aspect_ratio_max": 1.6,
+    "solidity_min": 0.78,
+    "fill_min": 0.65,
+    "morph_kernel_px": 9,
+    "morph_fallback_kernel_px": 21,
+    "max_per_color": 1,
+    "min_color_separation_mm": 30.0,
+    "workspace_radius_mm": 420.0,
+    "workspace_angle_min_deg": -90.0,
+    "workspace_angle_max_deg": 90.0,
+    "workspace_radius_by_angle_mm": [
+      [
+        -90,
+        300
+      ],
+      [
+        -80,
+        400
+      ],
+      [
+        -70,
+        420
+      ],
+      [
+        -60,
+        420
+      ],
+      [
+        -50,
+        420
+      ],
+      [
+        -40,
+        420
+      ],
+      [
+        -30,
+        420
+      ],
+      [
+        -20,
+        420
+      ],
+      [
+        -10,
+        420
+      ],
+      [
+        0,
+        420
+      ],
+      [
+        10,
+        420
+      ],
+      [
+        20,
+        420
+      ],
+      [
+        30,
+        420
+      ],
+      [
+        40,
+        420
+      ],
+      [
+        50,
+        420
+      ],
+      [
+        60,
+        420
+      ],
+      [
+        70,
+        400
+      ],
+      [
+        80,
+        380
+      ],
+      [
+        90,
+        300
+      ]
+    ]
+  },
+  "select": {
+    "rule": "nearest_first",
+    "zone_margin_mm": 0.0,
+    "target_cell_mm": 40.0
+  },
+  "sensing": {
+    "gripper_open_pos": 95.0,
+    "gripper_close_pos": 2.0,
+    "gripper_empty_closed_max": 12.0,
+    "gripper_load_min": 200.0,
+    "grasp_check_mode": "position_and_load",
+    "grasp_settle_s": 0.0,
+    "grasp_samples": 1,
+    "sample_interval_s": 0.0,
+    "contact_joints": [
+      "shoulder_lift",
+      "elbow_flex"
+    ],
+    "contact_load_delta": 80.0,
+    "contact_baseline_samples": 5
+  },
+  "motion": {
+    "poses_path": "src/configs/poses.yaml",
+    "fps": 0.0,
+    "max_step_per_tick": 50.0,
+    "descent_step_per_tick": 50.0,
+    "arrival_tol": 4.0,
+    "transit_arrival_tol": 8.0,
+    "grasp_hover_arrival_tol": 2.0,
+    "grasp_hover_settle_s": 0.0,
+    "hover_clearance_mm": 120.0,
+    "hover_min_clearance_mm": 40.0,
+    "hover_search_step_mm": 5.0,
+    "transit_apex_radius_mm": 195.0,
+    "move_timeout_s": 10.0,
+    "gripper_action_wait_s": 0.0,
+    "home_pose": "home",
+    "retreat_pose": "retreat",
+    "transport_waypoints": [
+      "zone_approach"
+    ],
+    "slot_poses": [
+      "slot_0",
+      "slot_1",
+      "slot_2",
+      "slot_3",
+      "slot_4"
+    ],
+    "tower_approach_pose": "tower_approach",
+    "tower_ladder_prefix": "tower_descent",
+    "contact_backoff_ticks": 1,
+    "place_settle_s": 0.0,
+    "grasp_radial_offset_mm": 0.0,
+    "grasp_forward_offset_mm": 0.0,
+    "grasp_tangential_offset_mm": 15.0,
+    "grasp_offsets_follow_jaw_yaw": true,
+    "left_half_y_mm": 0.0,
+    "left_half_radial_offset_mm": 0.0,
+    "left_half_tangential_offset_mm": 0.0,
+    "left_ramp_radial_mm_per_100mm": 0.0,
+    "left_ramp_tangential_mm_per_100mm": 0.0,
+    "grasp_retry_offsets_mm": [],
+    "grasp_retry_roll_deg": 90.0,
+    "descent_blocked_tol": 4.0,
+    "descent_max_lag": 8.0,
+    "descent_settle_s": 0.0
+  },
+  "ik": {
+    "urdf_path": "third_party/so101/so101.urdf",
+    "target_frame": "gripper_frame_link",
+    "shoulder_pan_origin_xy_mm": [
+      38.8353,
+      0.0
+    ],
+    "seed_step_deg": 3.0,
+    "seed_range_deg": 100.0,
+    "seed_tilt_max_deg": 3.0,
+    "seed_cache_path": "src/configs/calib/ik_seed_table.npz",
+    "seed_candidate_count": 10,
+    "pan_offset_candidates_deg": [
+      0.0,
+      6.0,
+      -6.0,
+      12.0,
+      -12.0
+    ],
+    "ik_iters": 8,
+    "max_position_error_mm": 20.0,
+    "max_tilt_error_deg": 6.0
+  },
+  "policy": {
+    "server_address": "127.0.0.1:8080",
+    "policy_type": "act",
+    "pretrained_name_or_path": "",
+    "task": "Pick the nearest block, lift it vertically, and move to the fixed retreat pose.",
+    "policy_device": "cuda",
+    "actions_per_chunk": 50,
+    "chunk_size_threshold": 0.5,
+    "aggregate_fn_name": "weighted_average",
+    "aggregate_weight": 0.5,
+    "fps": 30.0,
+    "connect_timeout_s": 5.0,
+    "retreat_tol": 4.0,
+    "retreat_hold_ticks": 5,
+    "retreat_check_joints": [
+      "shoulder_pan",
+      "shoulder_lift",
+      "elbow_flex",
+      "wrist_flex",
+      "wrist_roll"
+    ],
+    "pick_timeout_s": 25.0
+  },
+  "fsm": {
+    "num_blocks": 5,
+    "time_budget_s": 300.0,
+    "max_retries_per_block": 2,
+    "reserve_time_s": 10.0
+  },
+  "task1": {
+    "empty_timeout_s": 5.0,
+    "scan_interval_s": 0.0,
+    "max_frame_age_s": 1.0,
+    "slot_uv": [
+      [
+        0.14,
+        0.2
+      ],
+      [
+        0.5,
+        0.2
+      ],
+      [
+        0.8,
+        0.2
+      ],
+      [
+        0.32,
+        0.76
+      ],
+      [
+        0.68,
+        0.76
+      ]
+    ],
+    "slot_radial_offset_mm": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "pick_near_boost_max_radius_mm": 175.0,
+    "pick_near_boost_mm": 0.0,
+    "pick_tilt_start_radius_mm": 280.0,
+    "pick_tilt_max_radius_mm": 300.0,
+    "pick_tilt_base_deg": 3.0,
+    "pick_tilt_max_deg": 60.0,
+    "pick_tilt_fallback_deg": [
+      45.0,
+      30.0,
+      15.0
+    ],
+    "place_tilt_max_deg": 0.0,
+    "place_level_tolerance_deg": 3.0,
+    "place_yaw_tolerance_deg": 5.0,
+    "tilted_pick_hover_clearance_mm": 35.0,
+    "release_clearance_mm": 5.0
+  },
+  "task2": {
+    "stack_uv": [
+      0.5,
+      0.76
+    ],
+    "stack_radial_offset_mm": 0.0,
+    "block_height_mm": 20.0,
+    "max_levels": 5,
+    "release_clearance_mm": 2.0,
+    "contact_descent_levels": 0,
+    "place_overshoot_mm": 12.0,
+    "hover_clearance_mm": 45.0,
+    "hover_min_clearance_mm": 15.0,
+    "hover_gate_mm": 3.0,
+    "hover_squeeze_clearance_mm": 8.0,
+    "min_descent_travel_mm": 8.0,
+    "level_tilt_start_level": 2,
+    "level_tilt_per_level_deg": 1.5,
+    "level_tilt_max_deg": 5.0,
+    "descent_max_lag": 10.0,
+    "contact_shortfall": 6.0,
+    "descent_settle_s": 0.4,
+    "descent_probe_segments": 1,
+    "min_descent_fraction": 0.5,
+    "max_descent_retries": 1
+  },
+  "task3": {
+    "record_fps": 30.0,
+    "motion_fps_override": 300.0,
+    "max_grasp_attempts": 1,
+    "repo_id": "local/so101_task3",
+    "root": "",
+    "stamp_repo_id": true,
+    "robot_type": "so101_follower",
+    "video_codec": "h264",
+    "cameras": {
+      "top": "http://127.0.0.1:8090/video/shoulder.mjpg"
+    },
+    "image_width": 640,
+    "image_height": 480,
+    "max_frame_age_s": 0.5,
+    "max_stale_ticks": 10,
+    "min_episode_frames": 60,
+    "max_episode_frames": 3000,
+    "prompt_on_round_complete": true,
+    "max_rounds_without_progress": 3,
+    "task_templates": {
+      "red": "Pick up the red block and place it inside the red tape area.",
+      "yellow": "Pick up the yellow block and place it inside the red tape area.",
+      "green": "Pick up the green block and place it inside the red tape area.",
+      "blue": "Pick up the blue block and place it inside the red tape area.",
+      "wood": "Pick up the wooden block and place it inside the red tape area."
+    }
+  },
+  "logging": {
+    "log_dir": "logs/pick_stack",
+    "save_transitions": false
+  },
+  "camera": {
+    "overlay": {
+      "analysis_fps": 5.0,
+      "smoothing_window": 20,
+      "hide_after_misses": 10,
+      "worker_nice": 10,
+      "opencv_threads": 1,
+      "report_rejects": true,
+      "workspace_boundary": {
+        "enabled": true,
+        "sample_step_deg": 2.0
+      }
+    },
+    "auto_start": true,
+    "extra_args": []
+  },
+  "calibration_capture": {
+    "color": "yellow",
+    "point_count": 9,
+    "area_px2_min": 400.0,
+    "area_px2_max": 16000.0,
+    "morph_kernel_px": 5
+  },
+  "session_tools": {
+    "runtime_dir": "var/so101",
+    "snapshot_url": "http://127.0.0.1:8090/snapshot/shoulder.jpg",
+    "snapshot_timeout_s": 5.0,
+    "poll_interval_s": 0.1,
+    "telemetry_stale_s": 3.0,
+    "capture_stale_s": 5.0,
+    "capture_timeout_s": 15.0,
+    "wrist_limit_deg": 8.0,
+    "temperature_limit_c": 65.0,
+    "telemetry_interval_s": 1.0,
+    "startup_poll_s": 0.1,
+    "startup_ramp_s": 0.0,
+    "expected_motor_model": 777,
+    "telemetry_tail_bytes": 16384
+  },
+  "agent": {
+    "primitives": {
+      "calibrated_pick": false,
+      "target_max_age_s": 120.0,
+      "approach_clearance_mm": 35.0,
+      "lateral_clearance_mm": 35.0,
+      "max_lift_attempts": 4,
+      "alignment_tolerance_mm": 25.0,
+      "arrival_error_mm": 15.0,
+      "loaded_arrival_error_mm": 30.0,
+      "cartesian_step_mm": 10.0,
+      "contact_step_mm": 2.0,
+      "contact_max_descent_mm": 80.0,
+      "contact_timeout_s": 15.0,
+      "contact_backoff_mm": 2.0,
+      "wrist_roll_limit_deg": 90.0,
+      "image_max_width": 960,
+      "image_jpeg_quality": 80
+    },
+    "collection": {
+      "root": "datasets/agent",
+      "max_tick_gap_s": 0.1,
+      "max_mean_period_error": 0.1,
+      "idle_poll_s": 0.005
+    },
+    "provider": "openai",
+    "fallback_provider": "gemini",
+    "models": {
+      "anthropic": "claude-opus-5",
+      "openai": "gpt-6-luna",
+      "gemini": "gemini-3.8-flash",
+      "fake": "fake-1"
+    },
+    "max_tokens": 4096,
+    "max_tool_turns": 50,
+    "max_history_messages": 60,
+    "tool_timeout_s": 900.0,
+    "system_prompt_path": "src/configs/agent_primitives_prompt.md",
+    "host": "0.0.0.0",
+    "port": 8099,
+    "camera_base_url": "http://127.0.0.1:8090",
+    "camera_name": "shoulder",
+    "camera_view": {
+      "stale_s": 3.0,
+      "poll_s": 0.5,
+      "retry_s": 5.0,
+      "connect_timeout_s": 3.0,
+      "read_timeout_s": 15.0
+    },
+    "camera_fresh_timeout_s": 3.0,
+    "lock_path": "var/so101/robot.lock",
+    "zone_scan_max_per_color": 1,
+    "slot_snap_radius_mm": 45.0,
+    "place_clear_radius_mm": 55.0,
+    "table_zone_margin_mm": 30.0,
+    "transcript_dir": "",
+    "lease_grace_s": 15.0,
+    "lease_idle_timeout_s": 300.0,
+    "sse_heartbeat_s": 15.0,
+    "zone_slots": {
+      "frame": "camera_view",
+      "labels": [
+        "top-left",
+        "top-center",
+        "top-right",
+        "bottom-left",
+        "bottom-right"
+      ],
+      "korean_labels": [
+        "\uc88c\uc0c1\ub2e8",
+        "\uc0c1\ub2e8\uc911\uc559",
+        "\uc6b0\uc0c1\ub2e8",
+        "\uc88c\ud558\ub2e8",
+        "\uc6b0\ud558\ub2e8"
+      ],
+      "aliases": {
+        "\uc88c\uc0c1\ub2e8": 0,
+        "\uc67c\ucabd\uc704": 0,
+        "\uc88c\uce21\uc0c1\ub2e8": 0,
+        "\uc0c1\ub2e8\uc67c\ucabd": 0,
+        "\uc67c\ucabd\uc0c1\ub2e8": 0,
+        "\uc0c1\ub2e8\uc911\uc559": 1,
+        "\uac00\uc6b4\ub370\uc704": 1,
+        "\uc911\uc559\uc0c1\ub2e8": 1,
+        "\uc0c1\ub2e8\uac00\uc6b4\ub370": 1,
+        "\uc704\ucabd\uac00\uc6b4\ub370": 1,
+        "\uc6b0\uc0c1\ub2e8": 2,
+        "\uc624\ub978\ucabd\uc704": 2,
+        "\uc6b0\uce21\uc0c1\ub2e8": 2,
+        "\uc0c1\ub2e8\uc624\ub978\ucabd": 2,
+        "\uc624\ub978\ucabd\uc0c1\ub2e8": 2,
+        "\uc88c\ud558\ub2e8": 3,
+        "\uc67c\ucabd\uc544\ub798": 3,
+        "\uc88c\uce21\ud558\ub2e8": 3,
+        "\ud558\ub2e8\uc67c\ucabd": 3,
+        "\uc67c\ucabd\ud558\ub2e8": 3,
+        "\uc6b0\ud558\ub2e8": 4,
+        "\uc624\ub978\ucabd\uc544\ub798": 4,
+        "\uc6b0\uce21\ud558\ub2e8": 4,
+        "\ud558\ub2e8\uc624\ub978\ucabd": 4,
+        "\uc624\ub978\ucabd\ud558\ub2e8": 4,
+        "\uba3c\ucabd\uc67c\ucabd": 0,
+        "\uba3c\ucabd\uac00\uc6b4\ub370": 1,
+        "\uba3c\ucabd\uc624\ub978\ucabd": 2,
+        "\uac00\uae4c\uc6b4\ucabd\uc67c\ucabd": 3,
+        "\uac00\uae4c\uc6b4\ucabd\uc624\ub978\ucabd": 4,
+        "topcentre": 1,
+        "farleft": 0,
+        "farcenter": 1,
+        "farcentre": 1,
+        "farright": 2,
+        "nearleft": 3,
+        "nearright": 4
+      }
+    },
+    "relative": {
+      "frame": "arm",
+      "default_step_mm": 20.0,
+      "small_step_mm": 10.0,
+      "max_pick_offset_mm": 25.0,
+      "max_jog_mm": 50.0,
+      "keyboard_speed_mm_s": 20.0,
+      "keyboard_segment_s": 0.1,
+      "keyboard_tick_hz": 30.0,
+      "keyboard_heartbeat_s": 0.1,
+      "keyboard_timeout_s": 0.4,
+      "keyboard_joint_speed_deg_s": 15.0,
+      "keyboard_acceleration_mm_s2": 100.0,
+      "keyboard_jerk_mm_s3": 1000.0,
+      "keyboard_release_timeout_s": 1.0,
+      "jog_min_z_mm": 40.0,
+      "jog_max_z_mm": 160.0,
+      "jog_max_ik_error_mm": 5.0,
+      "max_shift_mm": 120.0,
+      "max_gripper_roll_deg": 90.0
+    },
+    "table_regions": {
+      "columns_deg": {
+        "leftmost": 75.0,
+        "left": 40.0,
+        "center": 0.0,
+        "right": -40.0,
+        "rightmost": -75.0
+      },
+      "rows_fraction": {
+        "near": 0.15,
+        "middle": 0.5,
+        "far": 0.9
+      },
+      "column_korean": {
+        "leftmost": "\uac00\uc7a5 \uc67c\ucabd",
+        "left": "\uc67c\ucabd",
+        "center": "\uac00\uc6b4\ub370",
+        "right": "\uc624\ub978\ucabd",
+        "rightmost": "\uac00\uc7a5 \uc624\ub978\ucabd"
+      },
+      "row_korean": {
+        "near": "\uc544\ub798(\uac00\uae4c\uc6b4 \ucabd)",
+        "middle": "\uc911\uac04",
+        "far": "\uc704(\uba3c \ucabd)"
+      },
+      "min_radius_mm": 150.0,
+      "edge_margin_mm": 20.0,
+      "search_step_mm": 15.0,
+      "search_max_mm": 60.0
+    },
+    "board_grid": {
+      "enabled": true,
+      "cell_mm": 25.0,
+      "origin_mm": null,
+      "default_layer": "regions",
+      "min_radius_mm": 45.0,
+      "base_keepout_depth_mm": 85.0,
+      "base_keepout_half_width_mm": 40.0
+    },
+    "place_correction": {
+      "enabled": true,
+      "learn": true,
+      "forward_mm": 0.0,
+      "left_mm": 0.0,
+      "max_mm": 60.0,
+      "max_sample_mm": 80.0
+    },
+    "calibration_clearance": {
+      "wrist_roll_min_deg": -65.0,
+      "wrist_probe_target_deg": 90.0,
+      "wrist_probe_close_gripper": true,
+      "hover_correction_max_deg": 3.0,
+      "trial_offsets_mm": [
+        [
+          5.0,
+          0.0
+        ],
+        [
+          10.0,
+          0.0
+        ],
+        [
+          0.0,
+          5.0
+        ],
+        [
+          -5.0,
+          0.0
+        ],
+        [
+          -10.0,
+          0.0
+        ],
+        [
+          0.0,
+          -5.0
+        ],
+        [
+          0.0,
+          10.0
+        ],
+        [
+          0.0,
+          -10.0
+        ],
+        [
+          15.0,
+          0.0
+        ],
+        [
+          15.0,
+          -10.0
+        ]
+      ],
+      "trial_yaw_offsets_deg": [
+        -15.0,
+        15.0
+      ],
+      "rotate_retry_bias": true,
+      "red_separation_kernel_px": 31,
+      "jaw_angle_step_deg": 5.0,
+      "jaw_mount_yaw_deg": -90.0,
+      "jaw_closed_angle_deg": -10.0,
+      "jaw_span_deg": 54.76923076923077,
+      "jaw_angle_uncertainty_deg": 5.0,
+      "jaw_open_positions": [
+        95.0,
+        85.0,
+        75.0
+      ],
+      "tool_radius_mm": 60.0,
+      "block_radius_mm": 29.0,
+      "block_side_mm": 40.0,
+      "uncertainty_mm": 15.0,
+      "jaw_inner_clearance_mm": 2.0,
+      "obstacle_height_mm": 20.0
+    }
+  }
+}

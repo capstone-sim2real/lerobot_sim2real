@@ -975,8 +975,10 @@ class PrimitiveSkills(Skills):
         )
         if inward_carry:
             from control.task1_transport import carry_level_tilt_deg
-            # A far pick can start tilted. Level it while coming inward.
-            tilts = [carry_level_tilt_deg(point[:2], self.s.base_xy, self.cfg)
+            # Level the actual grasp tilt while moving inward, above obstacles.
+            held_tilt = self.s.held.attempt.radial_tilt_deg if self.s.held else None
+            tilts = [carry_level_tilt_deg(
+                point[:2], self.s.base_xy, self.cfg, held_tilt_deg=held_tilt)
                      for point in points]
             points.append(xyz)
             tilts.append(radial_tilt_deg)

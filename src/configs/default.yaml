@@ -79,18 +79,18 @@ perception:
   # 팔이 닿지도 않고, 판 바깥 나무 바닥 같은 잡동사니가 바로 그 유령 후보의
   # 출처다. 관제 화면의 주황 부채꼴이 이 값을 그대로 그리므로, 그려진 것이
   # 곧 검출 범위다. radius 0이면 비활성.
-  workspace_radius_mm: 380.0
+  workspace_radius_mm: 420.0
   workspace_angle_min_deg: -90.0
   workspace_angle_max_deg: 90.0
-  # 실험 범위: 기울인 파지의 grasp/35mm hover, 기존 grasp bias, 중립±45도
-  # yaw를 정적 IK로 확인한 후 정면 ±30도만 확장했다. 20mm IK 게이트와
-  # 카메라 화각은 통과했지만 실물 턱/블록 간섭은 미검증이다.
-  # detector와 웹 경계가 이 값을 공유하며 실제 파지는 후보별 IK를 다시 검사한다.
+  # 실험 범위: 최대 420mm. 60도 파지와 35mm hover를 정적 IK로 확인했고,
+  # 측면 끝은 캘리브레이션 카메라의 전체 블록 시야에 맞춰 줄인다.
+  # 블록 yaw에 따라 일부 목표는 여전히 실패하므로 후보별 IK gate가 최종 판단한다.
+  # 실물 턱/블록 간섭과 이 원거리 범위의 실제 파지는 미검증이다.
   workspace_radius_by_angle_mm:
-    [[-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-     [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
-     [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
-     [60, 296], [70, 288], [80, 283], [90, 275]]
+    [[-90, 300], [-80, 400], [-70, 420], [-60, 420], [-50, 420],
+     [-40, 420], [-30, 420], [-20, 420], [-10, 420], [0, 420],
+     [10, 420], [20, 420], [30, 420], [40, 420], [50, 420],
+     [60, 420], [70, 400], [80, 380], [90, 300]]
 
 select:
   rule: nearest_first
@@ -174,6 +174,7 @@ motion:
 ik:
   urdf_path: third_party/so101/so101.urdf
   target_frame: gripper_frame_link
+  shoulder_pan_origin_xy_mm: [38.8353, 0.0]  # URDF shoulder_pan joint origin, base XY mm
   seed_step_deg: 3.0
   seed_range_deg: 100.0
   seed_tilt_max_deg: 3.0
@@ -223,13 +224,15 @@ task1:
   # 초근거리 실기 보정 비활성. max radius 값은 boost=0일 때 사용되지 않는다.
   pick_near_boost_max_radius_mm: 175.0
   pick_near_boost_mm: 0.0
-  # 파지는 280~320mm 구간에서 3→30도로 점진적으로 기울인다.
-  # 배치는 운반 중 수평(0도)으로 정렬한다. 30도 파지는 실기 검증 전 실험값이다.
+  # 파지는 280~300mm 구간에서 최대 60도까지 기울이되, IK가 안 풀리면
+  # 더 작은 기울기로 폴백한다. 60도 파지는 실기 검증 전 실험값이다.
+  # 배치는 운반 중 수평(0도)으로 정렬한다.
   # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
   pick_tilt_start_radius_mm: 280.0
-  pick_tilt_max_radius_mm: 320.0
+  pick_tilt_max_radius_mm: 300.0
   pick_tilt_base_deg: 3.0
-  pick_tilt_max_deg: 30.0
+  pick_tilt_max_deg: 60.0
+  pick_tilt_fallback_deg: [45.0, 30.0, 15.0]
   place_tilt_max_deg: 0.0
   # 배치 시 모델 FK 수평 오차 한도. 실제 블록 수평은 관찰로 확인해야 한다.
   place_level_tolerance_deg: 3.0

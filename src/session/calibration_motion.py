@@ -282,7 +282,7 @@ class CalibrationMotion(Skills):
             from control.grasp import highest_reachable_hover
             height=highest_reachable_hover(self.s.ik,*shifted,primary.grasp_z_mm,self.cfg,yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm)
             kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
-            hover_xy=approach_hover_xy(shifted,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+            hover_xy=approach_hover_xy(shifted,primary.grasp_z_mm,height,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
             hover=self.s.ik.solve(*hover_xy,height,**kw)
             grasp=self.s.ik.solve(*shifted,primary.grasp_z_mm,**kw)
             extra.append(replace(primary,label=f"trial_f{forward:+g}_l{left:+g}",xy_mm=shifted,
@@ -307,7 +307,7 @@ class CalibrationMotion(Skills):
                        xy[1]+math.sin(angle)*dx+math.cos(angle)*dy)
                 kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
                 height=highest_reachable_hover(self.s.ik,*point,primary.grasp_z_mm,self.cfg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,**kw)
-                hover_xy=approach_hover_xy(point,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+                hover_xy=approach_hover_xy(point,primary.grasp_z_mm,height,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
                 hover=self.s.ik.solve(*hover_xy,height,**kw)
                 grasp=self.s.ik.solve(*point,primary.grasp_z_mm,**kw)
                 extra.append(replace(primary,label=f"yaw_{source.label}_{delta:+g}",xy_mm=point,
@@ -328,7 +328,7 @@ class CalibrationMotion(Skills):
                 if math.dist(rotated,candidate.xy_mm)>self.cfg.agent.relative.max_pick_offset_mm:
                     continue
                 kw=dict(yaw_deg=candidate.yaw_deg,radial_tilt_deg=plan.radial_tilt_deg)
-                hover_xy=approach_hover_xy(rotated,candidate.grasp_z_mm,candidate.hover_z_mm,plan.radial_tilt_deg)
+                hover_xy=approach_hover_xy(rotated,candidate.grasp_z_mm,candidate.hover_z_mm,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
                 hover=self.s.ik.solve(*hover_xy,candidate.hover_z_mm,**kw)
                 grasp=self.s.ik.solve(*rotated,candidate.grasp_z_mm,**kw)
                 candidate=replace(candidate,xy_mm=rotated,hover=hover,hover_xy_mm=hover_xy,grasp=grasp,
@@ -483,7 +483,7 @@ class CalibrationMotion(Skills):
         if yaw is None:
             yaw = self.s.ik.neutral_yaw_deg(*a.xy_mm, a.grasp_z_mm)
         kw = dict(yaw_deg=yaw, radial_tilt_deg=self.plan.radial_tilt_deg)
-        hover_xy=approach_hover_xy(xy,a.grasp_z_mm,a.hover_z_mm,self.plan.radial_tilt_deg)
+        hover_xy=approach_hover_xy(xy,a.grasp_z_mm,a.hover_z_mm,self.plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
         hover = self.s.ik.solve(*hover_xy, a.hover_z_mm, **kw)
         grasp = self.s.ik.solve(*xy, a.grasp_z_mm, **kw)
         if any(over_ik_gate(x,self.cfg,target_tilt_deg=self.plan.radial_tilt_deg) for x in (hover,grasp)):

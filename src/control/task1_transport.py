@@ -142,14 +142,16 @@ def square_angle_error_deg(actual: float, target: float) -> float:
 
 
 def carry_level_tilt_deg(
-    xy_mm: tuple[float, float], base_xy_mm: tuple[float, float], cfg: AppConfig
+    xy_mm: tuple[float, float], base_xy_mm: tuple[float, float], cfg: AppConfig,
+    *, held_tilt_deg: float | None = None,
 ) -> float:
     """Gradually level a far tilted grasp as it moves inside the pick reach band."""
     radius = math.dist(xy_mm, base_xy_mm)
     start = cfg.task1.pick_tilt_start_radius_mm
     end = cfg.task1.pick_tilt_max_radius_mm
     fraction = min(1.0, max(0.0, (radius - start) / (end - start)))
-    return -cfg.task1.pick_tilt_max_deg * fraction
+    return (held_tilt_deg if held_tilt_deg is not None
+            else -cfg.task1.pick_tilt_max_deg) * fraction
 
 
 def solve_place_point(

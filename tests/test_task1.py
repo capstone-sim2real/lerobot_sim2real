@@ -139,17 +139,34 @@ class _AlwaysReachableIk:
         )
 
 
-def test_far_pick_tilts_to_thirty_without_changing_placement():
+def test_far_pick_allows_sixty_without_changing_placement():
     from control.grasp import approach_hover_xy
     from control.task1_transport import over_ik_gate, place_tilt_deg
 
     cfg = AppConfig()
     assert far_reach_tilt_deg((280.0, 0.0), (0.0, 0.0), cfg) == -3.0
-    assert far_reach_tilt_deg((300.0, 0.0), (0.0, 0.0), cfg) == -16.5
-    assert far_reach_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == -30.0
+    assert far_reach_tilt_deg((290.0, 0.0), (0.0, 0.0), cfg) == -31.5
+    assert far_reach_tilt_deg((300.0, 0.0), (0.0, 0.0), cfg) == -60.0
     assert place_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == 0.0
     tilted = IkResult({}, 0.2, 30.0)
     assert not over_ik_gate(tilted, cfg, target_tilt_deg=-30.0)
     assert over_ik_gate(tilted, cfg)
     hover = approach_hover_xy((320.0, 0.0), 4.0, 39.0, -30.0)
     assert hover == pytest.approx((320.0 - 35.0 / np.sqrt(3.0), 0.0))
+
+
+
+def test_unreachable_sixty_uses_lower_gated_tilt():
+    from control.grasp import plan_grasp_attempts
+
+    class SideIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            result = super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+            result.position_error_mm = 30.0 if abs(radial_tilt_deg) > 15.0 else 0.0
+            return result
+
+    cfg = AppConfig()
+    plan = plan_grasp_attempts(SideIk(), cfg, 300.0, 80.0, 4.0, radial_tilt_deg=-60.0)
+    assert plan.radial_tilt_deg == -15.0
+    assert plan.attempts[0].reachable
+    assert plan.attempts[0].radial_tilt_deg == -15.0

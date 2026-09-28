@@ -51,11 +51,12 @@ def _topdown_pose(
     z_mm: float,
     yaw_deg: float,
     radial_tilt_deg: float = 0.0,
+    pan_origin_xy_mm: tuple[float, float] = (0.0, 0.0),
 ) -> np.ndarray:
     """4x4 pose with an optional outward tip of the approach axis.
 
     A negative ``radial_tilt_deg`` tips the downward axis away from the robot
-    around the base-frame tangential axis. This releases wrist-flex saturation
+    around the shoulder-pan tangential axis. This releases wrist-flex saturation
     at long reach without coupling the tilt direction to jaw yaw.
     """
     T = np.eye(4)
@@ -64,7 +65,7 @@ def _topdown_pose(
     T[:3, 1] = [c, s, 0.0]
     T[:3, 2] = [0.0, 0.0, -1.0]
     if radial_tilt_deg:
-        phi = math.atan2(y_mm, x_mm)
+        phi = math.atan2(y_mm - pan_origin_xy_mm[1], x_mm - pan_origin_xy_mm[0])
         axis = np.array([-math.sin(phi), math.cos(phi), 0.0])
         angle = math.radians(radial_tilt_deg)
         cross = np.array(
@@ -148,6 +149,10 @@ class TopDownIK:
         self._project_root = Path(project_root)
         self._kinematics = None
         self._seed_table: np.ndarray | None = None  # columns: r_mm, z_mm, lift, elbow, wf
+
+    @property
+    def pan_origin_xy_mm(self) -> tuple[float, float]:
+        return tuple(self._cfg.shoulder_pan_origin_xy_mm)
 
     def _load_kinematics(self):
         if self._kinematics is not None:
@@ -368,9 +373,13 @@ class TopDownIK:
             probe = yield from self.solve_steps(x_mm, y_mm, z_mm, yaw_deg=0.0)
             yaw_deg = -probe.joints["wrist_roll"]
         k = self._load_kinematics()
-        target = _topdown_pose(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+        target = _topdown_pose(
+            x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg, self.pan_origin_xy_mm
+        )
         r_mm = float(np.hypot(x_mm, y_mm))
-        pan0 = -float(np.degrees(np.arctan2(y_mm, x_mm)))
+        pan0 = -float(np.degrees(np.arctan2(
+            y_mm - self.pan_origin_xy_mm[1], x_mm - self.pan_origin_xy_mm[0]
+        )))
         seeds = self._nearest_seeds(r_mm, z_mm)
 
         best_q: np.ndarray | None = None
