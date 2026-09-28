@@ -127,6 +127,7 @@ class ArmSession:
         self._lock = lock
         self._clock = clock
         self._closed = False
+        self._preserve_pose_on_close = False
         self.held: HeldBlock | None = None
         self.last_pick: LastPick | None = None
         self.last_block_color: str | None = None
@@ -184,18 +185,19 @@ class ArmSession:
                 lock.release()
             raise
 
-    def close(self) -> None:
-        """The single safe shutdown. Never stopped by the STOP flag it clears.
+    def preserve_pose_on_close(self) -> None:
+        """Disconnect without a home command after STOP or an unsafe restart."""
+        self._preserve_pose_on_close = True
 
-        Unlike the rule-based runners this does not open the gripper: a
-        block still held at shutdown is carried home rather than dropped.
-        """
+    def close(self) -> None:
+        """Disconnect safely; a stopped server may preserve the measured pose."""
         if self._closed:
             return
         self._closed = True
         self.cancel.clear()
         try:
-            self.return_home_safely()
+            if not self._preserve_pose_on_close:
+                self.return_home_safely()
         except Exception as exc:  # noqa: BLE001 - best effort
             logger.warning("Safe-shutdown motion failed: %s", exc)
         finally:

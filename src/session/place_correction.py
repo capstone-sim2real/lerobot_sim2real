@@ -4,9 +4,9 @@ The pixel->mm calibration is not what limits placement accuracy here. Its
 own residuals are RMS ~5mm / worst ~14mm (AGENTS.md §6), while placements
 miss by tens of millimetres, and the reason is written into
 ``motion.arrival_tol``: ``release_at`` opens the jaws once every joint is
-within 3 degrees of its command, and this rig measured 3 degrees as ~29mm of
-tool travel at 283mm reach (``MotionConfig.grasp_hover_arrival_tol``'s
-comment). Carrying a block adds a steady-state droop on top, which
+within the configured tolerance (currently 4 degrees). At 283mm reach, this
+rig measured 3 degrees as ~29mm of tool travel; the 4-degree error is not yet
+measured (``MotionConfig.grasp_hover_arrival_tol``'s comment). Carrying a block adds a steady-state droop on top, which
 ``TrajectoryPlayer.move_to`` documents as something waiting does not close.
 
 That error is mostly *systematic*: the same target misses the same way. So

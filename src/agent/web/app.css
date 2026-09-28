@@ -92,6 +92,8 @@ body { margin: 0; background: var(--bg); color: var(--ink);
   padding: 6px 10px; border-radius: 8px; }
 .tool .tool-name { font-weight: 600; }
 .tool.ok { background: #ecfdf5; border-color: #bbf7d0; }
+.tool.warning { background: #fffbeb; border-color: #fcd34d; }
+.dark .tool.warning { color: #fde68a; background: #422006; border-color: #a16207; }
 .tool.fail { background: #fef2f2; border-color: #fecaca; }
 .tool .tool-detail { display: block; margin-top: 2px; color: var(--ink); }
 .composer { display: flex; gap: 6px; margin-top: 8px; }
@@ -224,12 +226,15 @@ body[data-camera=wrist] #camera-tools,body[data-camera=wrist] .perception-contro
 .perception-controls {justify-content:space-between;}
 .perception-controls > .camera-tools {margin-right:auto;}
 .perception-controls .overlay-options {left:auto;right:0;}
+#pixel-reach-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;}
+#pixel-reach-overlay .reach-fill {fill:rgba(239,68,68,.035);}
+#pixel-reach-overlay .reach-arc {fill:none;stroke:rgba(239,68,68,.30);stroke-width:1.5;}
 #pixel-target-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 .pixel-workspace {fill:#10b98116;stroke:#10b981;stroke-width:2;pointer-events:none;}
 body[data-camera=shoulder] #camera-wrap.pixel-pointer-active {cursor:none;}
 .pixel-selection {padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
 #pixel-target-status {font-size:13px;line-height:1.6;color:var(--muted);}
-body[data-camera=wrist] #pixel-target-overlay {display:none;}
+body[data-camera=wrist] #pixel-target-overlay, body[data-camera=wrist] #pixel-reach-overlay {display:none;}
 
 .pixel-hover-ring {position:absolute;width:18px;height:18px;border:2px solid #fff;border-radius:50%;background:#2563eb;opacity:.35;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
 .pixel-selected-ring {fill:#2563eb;stroke:#fff;stroke-width:3;opacity:1;pointer-events:none;}

@@ -84,6 +84,7 @@ class GraspAttempt:
     hover_z_mm: float = 0.0
     grasp_z_mm: float = 0.0
     yaw_deg: float | None = None
+    hover_xy_mm: tuple[float, float] | None = None
 
 
 @dataclass
@@ -132,6 +133,7 @@ def highest_reachable_hover(
     radial_tilt_deg: float = 0.0,
     clearance_mm: float | None = None,
     min_clearance_mm: float | None = None,
+    axis_aligned: bool = False,
 ) -> float:
     """Find the highest genuinely reachable top-down hover at this point.
 
@@ -160,10 +162,27 @@ def highest_reachable_hover(
         # A broad IK gate accepts the calibration error budget.  Hover needs
         # a stricter check: reporting a pose that is 12mm short would make
         # the clearance fictional and can drag a held block.
-        if _solve_ik(ik, x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg).position_error_mm <= 3.0:
+        point = (approach_hover_xy((x_mm, y_mm), base_z_mm, z_mm, radial_tilt_deg)
+                 if axis_aligned else (x_mm, y_mm))
+        if _solve_ik(ik, *point, z_mm, yaw_deg, radial_tilt_deg).position_error_mm <= 3.0:
             return z_mm
         z_mm -= cfg.motion.hover_search_step_mm
     return floor
+
+
+def approach_hover_xy(
+    grasp_xy_mm: tuple[float, float], grasp_z_mm: float, hover_z_mm: float,
+    radial_tilt_deg: float,
+) -> tuple[float, float]:
+    """Put a far-reach hover inward so TCP descends along its tilted axis.
+
+    Keep the established near-vertical path unchanged. The inward distance
+    is geometric; it does not change the final grasp TCP.
+    """
+    if not radial_tilt_deg:
+        return grasp_xy_mm
+    inward_mm = (hover_z_mm - grasp_z_mm) * math.tan(math.radians(abs(radial_tilt_deg)))
+    return gripper_frame_offset(*grasp_xy_mm, -inward_mm, 0.0)
 
 
 def biased_grasp_xy(
@@ -249,11 +268,12 @@ def _solve_attempt(
     x_mm, y_mm = gripper_frame_offset(
         base_xy[0], base_xy[1], *_in_jaw_frame(cfg.motion, offset[0], offset[1], jaw_rot_deg)
     )
-    hover = _solve_ik(ik, x_mm, y_mm, hover_z, yaw_deg, radial_tilt_deg)
+    hover_xy = approach_hover_xy((x_mm, y_mm), grasp_z, hover_z, radial_tilt_deg)
+    hover = _solve_ik(ik, *hover_xy, hover_z, yaw_deg, radial_tilt_deg)
     grasp = _solve_ik(ik, x_mm, y_mm, grasp_z, yaw_deg, radial_tilt_deg)
     reachable = all(
         r.position_error_mm <= cfg.ik.max_position_error_mm
-        and r.tilt_error_deg <= cfg.ik.max_tilt_error_deg
+        and abs(r.tilt_error_deg - abs(radial_tilt_deg)) <= cfg.ik.max_tilt_error_deg
         for r in (hover, grasp)
     )
     return GraspAttempt(
@@ -266,6 +286,7 @@ def _solve_attempt(
         hover_z_mm=hover_z,
         grasp_z_mm=grasp_z,
         yaw_deg=yaw_deg,
+        hover_xy_mm=hover_xy,
     )
 
 
@@ -284,8 +305,11 @@ def _plan_at_scale(
     # Search the hover at the aim point, not at the detection: that is where
     # the arm actually holds station, and the envelope shrinks fast with
     # reach, so a height found 12mm further in can be unreachable here.
+    tilted_clearance = (cfg.task1.tilted_pick_hover_clearance_mm
+                         if abs(radial_tilt_deg) >= 5.0 else None)
     hover_z = highest_reachable_hover(
-        ik, *base_xy, grasp_z, cfg, yaw_deg, radial_tilt_deg
+        ik, *base_xy, grasp_z, cfg, yaw_deg, radial_tilt_deg, axis_aligned=True,
+        clearance_mm=tilted_clearance, min_clearance_mm=tilted_clearance,
     )
     candidate_points = grasp_candidate_points(cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
     attempts = [
@@ -328,6 +352,9 @@ def _plan_at_scale(
             cfg,
             retry_yaw,
             radial_tilt_deg,
+            axis_aligned=True,
+            clearance_mm=tilted_clearance,
+            min_clearance_mm=tilted_clearance,
         )
         attempts.append(
             _solve_attempt(

@@ -227,6 +227,7 @@ function toolCall(event) {
   chip.append(name, detail);
   $("chat").appendChild(chip);
   $("chat").scrollTop = $("chat").scrollHeight;
+  chip._startedAt = performance.now();
   toolChips.set(event.id, chip);
   streamingBubble = null;
 }
@@ -235,9 +236,18 @@ function toolResult(event) {
   let chip = toolChips.get(event.id);
   if (!chip) { toolCall({ id: event.id, name: event.name, arguments: {} }); chip = toolChips.get(event.id); }
   const result = event.result || {};
-  chip.classList.add(result.ok ? "ok" : "fail");
-  const seconds = typeof result.elapsed_s === "number" ? ` · ${result.elapsed_s}s` : "";
-  chip.querySelector(".tool-detail").textContent = `${result.ok ? "✓" : "✗ " + result.reason} ${result.detail || ""}${seconds}`;
+  const holding = result.state?.holding ?? result.holding;
+  const needsHeldRecovery = result.action === "move_block_to_slot" && holding != null;
+  const severity = result.ok ? "ok" : result.severity === "error" || needsHeldRecovery ? "fail" : "warning";
+  chip.classList.add(severity);
+  const elapsed = typeof chip._startedAt === "number"
+    ? (performance.now() - chip._startedAt) / 1000
+    : result.elapsed_s;
+  const seconds = Number.isFinite(elapsed) ? ` · ${elapsed.toFixed(2)}s` : "";
+  const label = severity === "ok" ? "✓" : severity === "fail" ? "✗ " + result.reason
+    : result.retry_advice === "try_other_target" ? "↪ 다른 후보 선택"
+    : result.reason === "task_incomplete" ? "△ 배치 미확인" : "△ 재계획 필요";
+  chip.querySelector(".tool-detail").textContent = `${label} ${result.detail || ""}${seconds}`;
 }
 
 function handleToolResult(event) {
@@ -605,6 +615,19 @@ function drawPlaces(places) {
   svg.setAttribute('viewBox',`0 0 ${places.image_size.join(' ')}`);
 }
 
+function drawReachPreview(rules) {
+  const svg=$('pixel-reach-overlay');
+  svg.replaceChildren();
+  const arc=rules?.reach_arc_px;
+  if (!rules?.image_size || !Array.isArray(arc) || arc.length<2) return;
+  svg.setAttribute('viewBox',`0 0 ${rules.image_size.join(' ')}`);
+  const base=rules.reach_base_px;
+  const points=arc.map(([x,y])=>`${x},${y}`).join(' ');
+  const fill=svgEl('polygon',{points:`${base[0]},${base[1]} ${points}`,class:'reach-fill'});
+  const line=svgEl('polyline',{points,class:'reach-arc'});
+  svg.append(fill,line);
+}
+
 let pixelTarget=null;
 let pixelSelectionGeneration=0;
 function enablePixelButtons() {
@@ -723,6 +746,7 @@ async function loadConfig() {
   const response = await fetch("/api/config");
   const config = await response.json();
   pixelPreview=config.pixel_preview||null;
+  drawReachPreview(pixelPreview);
   keyboardConfig=config.keyboard_jog||null;
   manualTools = new Set(config.manual_tools || []);
   applyControl(control);

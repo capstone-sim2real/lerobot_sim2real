@@ -228,7 +228,7 @@ Task 3 학습 에피소드에 넣지 않는다.
 
 - 이 Codex 세션이 직접 판단하고 `calibration_prepare`, `calibration_adjust`,
   `calibration_grasp`를 웹 수동 API로 호출한다. 별도 LLM API는 호출하지 않는다.
-- 실행기: `src/tools/calibration_server.py`, 수집 기능:
+- 실행기: `src/tools/agent_server.py`, 수집 기능:
   `src/session/grasp_calibration.py`, 호출/영상 저장: `src/tools/agent_tool_call.py`.
 - 기존 CV+IK 첫 후보를 동결하고 기존 보정 뒤에 잔차를 한 번만 적용한다.
   보정은 고정된 기준 좌표축에서 합성한다. 원시 관절/자유 절대좌표 명령은 노출하지 않는다.
@@ -309,7 +309,7 @@ CV (109.5,174.4)mm로 직전 분할 실행 위치와 약 17.5mm 다르므로 대
 
 `green-neighbour-shift.json`: yellow 검출 (279.8,-74.9) -> (275.0,-87.7)mm. 접근/하강 중에는 거의 변하지 않았으며 닫힘 구간에서 이동했다.
 
-URDF mesh를 기존 TCP에 그대로 붙이면 움직이는 턱이 베이스 +x 쪽으로 개폐한다고 예측하나 영상은 -y 쪽이다. `jaw_mount_yaw_deg=90`으로 mesh 방향을 보정했다. 같은 실패 장면 재생(`green-contact-model-replay.json`)에서 0도는 clear, 90도는 yellow/moving_jaw 충돌을 반환한다.
+URDF mesh의 턱 축은 탑뷰만으로 180° 방향 모호성이 남는다. 2026-09-22 목재/빨강 실장면에서 `+90°`는 실제로 가능한 파지를 모든 개방값에서 moving-jaw 충돌로 오판했고, 같은 15mm 여유에서 `-90°`는 모두 통과했다. 따라서 움직이는 턱의 실제 측면에 맞춰 `jaw_mount_yaw_deg=-90`으로 정정했다.
 
 이 값은 영상 기반 방향 정렬이며 전체 3D 형상/원점/개폐 각도 매핑을 완전히 실측한 것이 아니다. `physical_geometry_verified=false`, 공간15mm 및 각도 불확실성을 유지한다. 단일 실패 재현을 전체 안전성 검증으로 해석하지 않는다. 블록 운반 체적과 다른 링크의 충돌은 이 턱 검사에 포함되지 않는다.
 

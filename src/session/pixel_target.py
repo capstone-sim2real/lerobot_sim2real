@@ -3,7 +3,7 @@ import hashlib
 import json
 import math
 
-from perception.detector import point_in_workspace, workspace_radius_at_angle
+from perception.detector import point_in_workspace, workspace_radius_at_angle, workspace_sector_points_mm
 from session.grid import in_base_keepout
 from session.factories import calibration_grasp_z_mm
 
@@ -38,7 +38,19 @@ def resolve_pixel(cfg, calib, u, v, frame_id):
 
 def pixel_preview_config(cfg, calib):
     """Read-only browser preview; execution still uses resolve_pixel and IK."""
+    import numpy as np
+
+    base = np.asarray(calib.base_xy_mm or (0.0, 0.0), dtype=np.float64)
+    outer = workspace_sector_points_mm(cfg.perception, tuple(base), 3.0)
+    radial = outer - base
+    radius = np.linalg.norm(radial, axis=1)
+    usable = base + radial * (
+        np.maximum(0.0, radius - cfg.agent.table_regions.edge_margin_mm) / radius
+    )[:, None]
+    arc_px = calib.board_to_pixel(usable)
+    base_px = calib.board_to_pixel(base[None, :])[0]
     return {
+        'reach_arc_px': arc_px.tolist(), 'reach_base_px': base_px.tolist(),
         'camera_name': cfg.agent.camera_name,
         'H': calib.H.tolist(), 'image_size': list(calib.image_size),
         'base_xy_mm': list(calib.base_xy_mm or (0.0, 0.0)),

@@ -160,6 +160,14 @@ class ControlGate:
 
     # ── commands ─────────────────────────────────────────────────────
 
+    def require_home(self, message: str) -> None:
+        """Keep a non-home arm stopped when a fresh server loses prior state."""
+        with self._lock:
+            self.state = ControlState.STOPPED
+            self.busy_with = None
+            self.message = message
+            self._changed()
+
     def try_begin(self, token: str | None, what: str) -> bool:
         with self._lock:
             if not self.check(token) or self.state is not ControlState.IDLE:

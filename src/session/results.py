@@ -27,7 +27,7 @@ REASONS = frozenset(
 # stopped: the server refuses new commands until a verified return home.
 ROBOT_FAULT_REASONS = frozenset({"cancelled", "motion_timeout", "bus_lost", "internal_error"})
 
-RETRY_ADVICE = frozenset({"retry_ok", "do_not_retry", "ask_operator"})
+RETRY_ADVICE = frozenset({"retry_ok", "try_other_target", "do_not_retry", "ask_operator"})
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,19 @@ class SkillResult:
     def robot_fault(self) -> bool:
         return self.reason in ROBOT_FAULT_REASONS
 
+    @property
+    def severity(self) -> str:
+        if self.ok:
+            return "success"
+        # A failed composite transfer with a block still held needs attention,
+        # even when its immediate reason (such as an IK gate) is recoverable.
+        holding = self.data.get("holding")
+        if self.state is not None:
+            holding = self.state.get("holding", holding)
+        if self.robot_fault or (self.action == "move_block_to_slot" and holding is not None):
+            return "error"
+        return "warning"
+
     def to_envelope(self) -> dict[str, Any]:
         envelope: dict[str, Any] = {
             "ok": self.ok,
@@ -68,6 +81,9 @@ class SkillResult:
             "reason": self.reason,
             "detail": self.detail,
         }
+        if not self.ok:
+            # A planned skip or an unverified placement is not a robot fault.
+            envelope["severity"] = self.severity
         if self.retry_advice is not None:
             envelope["retry_advice"] = self.retry_advice
         if self.data:

@@ -185,7 +185,10 @@ class ToolRegistry:
             return ToolResult(call.id, call.name, result.to_envelope(), is_error=True)
         args = dict(call.arguments)
         result = self.run_skill(call.name, lambda skills: tool.run(skills, args))
-        return ToolResult(call.id, call.name, result.to_envelope(), is_error=not result.ok, images=result.images)
+        # Planned skips and unverified outcomes are data for replanning, not
+        # provider-level tool errors. The envelope still carries ok=false.
+        return ToolResult(call.id, call.name, result.to_envelope(),
+                          is_error=result.severity == "error", images=result.images)
 
     def last_fault(self, results: list[ToolResult]) -> bool:
         from session.results import ROBOT_FAULT_REASONS

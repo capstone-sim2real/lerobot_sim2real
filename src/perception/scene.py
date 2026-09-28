@@ -110,16 +110,33 @@ def detect_scene(
     frame_seq: int = -1,
     captured_at: float = 0.0,
 ) -> Scene:
-    outside = detect_blocks(frame, calib, perception_cfg, is_rgb=is_rgb)
-    zone_cfg = replace(perception_cfg, max_per_color=zone_max_per_color)
-    everything = detect_blocks(frame, calib, zone_cfg, is_rgb=is_rgb, include_zone=True)
-    inside = [d for d in everything if point_in_zone(d.center_mm, calib)]
+    def detect_once(cfg: PerceptionConfig) -> Scene:
+        outside = detect_blocks(frame, calib, cfg, is_rgb=is_rgb)
+        zone_cfg = replace(cfg, max_per_color=zone_max_per_color)
+        everything = detect_blocks(frame, calib, zone_cfg, is_rgb=is_rgb, include_zone=True)
+        inside = [d for d in everything if point_in_zone(d.center_mm, calib)]
+        return build_scene(
+            outside, inside, calib, slot_xy,
+            snap_radius_mm=snap_radius_mm,
+            frame_seq=frame_seq, captured_at=captured_at,
+        )
+
+    primary = detect_once(perception_cfg)
+    fallback_kernel = perception_cfg.morph_fallback_kernel_px
+    if fallback_kernel <= 0 or fallback_kernel == perception_cfg.morph_kernel_px:
+        return primary
+    # Morphology can hide the same red block at different board locations.
+    # Keep every primary identity and use the alternate opening only for a
+    # missing colour; never let a second blob displace a primary detection.
+    fallback = detect_once(replace(perception_cfg, morph_kernel_px=fallback_kernel))
+    outside = [b.detection for b in primary.outside.values()]
+    inside = [b.detection for b in primary.inside.values()]
+    for block in fallback.all():
+        if primary.find(block.color) is not None:
+            continue
+        (inside if block.in_zone else outside).append(block.detection)
     return build_scene(
-        outside,
-        inside,
-        calib,
-        slot_xy,
+        outside, inside, calib, slot_xy,
         snap_radius_mm=snap_radius_mm,
-        frame_seq=frame_seq,
-        captured_at=captured_at,
+        frame_seq=frame_seq, captured_at=captured_at,
     )

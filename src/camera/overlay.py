@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -196,6 +197,95 @@ def reject_metadata(
     }
 
 
+class DetectionStabilizer:
+    """Rolling robust estimate for display-only block geometry."""
+
+    def __init__(self, window: int, hide_after_misses: int) -> None:
+        if window <= 0 or hide_after_misses <= 0:
+            raise ValueError("Overlay smoothing limits must be positive")
+        self.window = int(window)
+        self.hide_after_misses = int(hide_after_misses)
+        self._history: dict[tuple[str, str], deque[BlockDetection]] = {}
+        self._misses: dict[tuple[str, str], int] = {}
+
+    @staticmethod
+    def _smoothed(items: deque[BlockDetection]) -> BlockDetection:
+        latest = items[-1]
+        centres = np.asarray([item.center_mm for item in items], dtype=np.float64)
+        centre = np.median(centres, axis=0)
+
+        # A square's orientation repeats every 90 degrees. Circular averaging
+        # keeps 89/1 degree samples near 0 instead of jumping to 45.
+        angles = np.radians(np.asarray([item.angle_deg for item in items]) * 4.0)
+        angle_deg = math.degrees(
+            math.atan2(float(np.sin(angles).mean()), float(np.cos(angles).mean()))
+        ) / 4.0 % 90.0
+
+        lengths = []
+        for item in items:
+            box = np.asarray(item.box_mm, dtype=np.float64).reshape(4, 2)
+            lengths.append(
+                [float(np.linalg.norm(box[1] - box[0])), float(np.linalg.norm(box[3] - box[0]))]
+            )
+        half_u, half_v = np.median(np.asarray(lengths), axis=0) / 2.0
+        angle = math.radians(angle_deg)
+        u = np.asarray([math.cos(angle), math.sin(angle)])
+        v = np.asarray([-math.sin(angle), math.cos(angle)])
+        box = np.asarray(
+            [
+                centre - u * half_u - v * half_v,
+                centre + u * half_u - v * half_v,
+                centre + u * half_u + v * half_v,
+                centre - u * half_u + v * half_v,
+            ]
+        )
+
+        def median(name: str) -> float:
+            return float(np.median([getattr(item, name) for item in items]))
+
+        return replace(
+            latest,
+            center_mm=(float(centre[0]), float(centre[1])),
+            box_mm=[(float(point[0]), float(point[1])) for point in box],
+            angle_deg=float(angle_deg),
+            area_mm2=median("area_mm2"),
+            aspect=median("aspect"),
+            solidity=median("solidity"),
+            fill=median("fill"),
+        )
+
+    def update(
+        self, camera_name: str, detections: list[BlockDetection]
+    ) -> list[BlockDetection]:
+        # The mission has one physical block per colour. If both detector
+        # passes return a colour, keep the larger accepted contour.
+        current: dict[str, BlockDetection] = {}
+        for item in detections:
+            if item.color not in current or item.area_mm2 > current[item.color].area_mm2:
+                current[item.color] = item
+
+        keys = {key for key in self._history if key[0] == camera_name}
+        keys.update((camera_name, color) for color in current)
+        output = []
+        for key in sorted(keys):
+            item = current.get(key[1])
+            if item is not None:
+                history = self._history.setdefault(key, deque(maxlen=self.window))
+                history.append(item)
+                self._misses[key] = 0
+            else:
+                misses = self._misses.get(key, 0) + 1
+                self._misses[key] = misses
+                if misses >= self.hide_after_misses:
+                    self._history.pop(key, None)
+                    self._misses.pop(key, None)
+                    continue
+            history = self._history.get(key)
+            if history:
+                output.append(self._smoothed(history))
+        return output
+
+
 class OverlayAnalyzer:
     """Detect blocks and publish geometry, without IK or JPEG re-encoding."""
 
@@ -207,6 +297,11 @@ class OverlayAnalyzer:
         if not calibration_path.is_absolute():
             calibration_path = project_root / calibration_path
         self.calibration = PlaneCalibration.load(calibration_path)
+        overlay_cfg = self.cfg.camera.overlay
+        self._stabilizer = DetectionStabilizer(
+            overlay_cfg.smoothing_window,
+            overlay_cfg.hide_after_misses,
+        )
 
     def static_metadata(self) -> dict[str, Any]:
         return {
@@ -249,6 +344,7 @@ class OverlayAnalyzer:
         )
         detections.extend(item for item in zone_detections
                           if point_in_zone(item.center_mm, self.calibration))
+        detections = self._stabilizer.update(camera_name, detections)
         return {
             "camera": camera_name,
             "ready": True,

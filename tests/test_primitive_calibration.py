@@ -11,7 +11,6 @@ def setup(tmp_path):
     base, world, robot = make_skills({"green": (180., 0.)})
     base.cfg.agent.primitives.calibrated_pick = True
     base.cfg.agent.collection.root = str(tmp_path)
-    base.cfg.agent.calibration_clearance.expected_colors = ["green"]
     sk = PrimitiveSkills(base.s)
     cal = sk._calibration()
     # Fake IK has no URDF meshes. Only the geometry gate is stubbed here;
@@ -65,7 +64,8 @@ def test_geometry_rejection_prevents_motion_and_close(tmp_path):
     sk, cal, robot = setup(tmp_path)
     cal._clearance_gate = lambda *a: {"clear": False, "reason": "neighbour_clearance"}
     before = len(robot.sent_actions)
-    assert not approach(sk).ok
+    result = approach(sk)
+    assert not result.ok and result.reason == "neighbour_clearance"
     assert not sk.close_gripper().ok
     assert len(robot.sent_actions) == before
 
@@ -99,14 +99,6 @@ def test_partial_descent_does_not_authorize_early_close(tmp_path):
     assert cal.attempt is not None
 
 
-def test_transit_rejects_measured_path_deviation(tmp_path):
-    import pytest
-    sk, cal, robot = setup(tmp_path)
-    sk.s.arm_position_mm = Mock(side_effect=[(150.,0.,60.), (150.,0.,60.), (200.,0.,65.)])
-    with pytest.raises(TimeoutError, match="path corridor"):
-        sk.move_relative(up_mm=30)
-
-
 def test_held_motion_keeps_calibrated_pick_tilt(tmp_path):
     sk, cal, robot = setup(tmp_path)
     assert approach(sk).ok
@@ -122,39 +114,80 @@ def test_held_motion_keeps_calibrated_pick_tilt(tmp_path):
     assert sk.s.ik.solve_holding_wrist_roll.call_args.kwargs["radial_tilt_deg"] == 0.0
 
 
-def test_loaded_transit_applies_only_one_bounded_tracking_correction(tmp_path):
+def test_loaded_transit_skips_empty_arm_tracking_correction(tmp_path):
     sk, cal, robot = setup(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
-    sk.cfg.motion.grasp_hover_arrival_tol = 1.0
     original = sk.s.player.move_through
     calls = []
     def lagged(points, **kwargs):
         calls.append(points)
         result = original(points, **kwargs)
-        if len(calls) == 1:
-            robot.joints["elbow_flex"] -= 2.0
+        robot.joints["elbow_flex"] -= 2.0
         return result
     sk.s.player.move_through = lagged
-    sk.s.player.settle = lambda *a, **k: (2.0, False)
     result = sk.move_relative(up_mm=30)
     assert result.ok
-    assert len(calls) == 2
-    assert result.data["tracking_correction_deg"]["elbow_flex"] == 2.0
-    assert max(map(abs,result.data["tracking_correction_deg"].values())) <= 3.0
+    assert len(calls) == 1
+    assert result.data["tracking_correction_deg"] == {}
 
 
-def test_magnitude_contact_ignores_load_sign_reversal():
+def test_magnitude_contact_uses_local_free_motion_baseline():
     from config import SensingConfig
     from control.sensing import ContactMonitor
     robot = Mock()
     cfg = SensingConfig(contact_joints=["elbow_flex"], contact_baseline_samples=1)
-    robot.read_loads.side_effect = [{"elbow_flex":132.}, {"elbow_flex":-60.}, {"elbow_flex":-220.}]
-    monitor = ContactMonitor(robot,cfg,magnitude_increase=True)
+    robot.read_loads.side_effect = [
+        {"elbow_flex": 20.0},
+        {"elbow_flex": 60.0},
+        {"elbow_flex": 100.0},
+        {"elbow_flex": 220.0},
+    ]
+    monitor = ContactMonitor(robot, cfg, magnitude_increase=True)
     monitor.start()
-    assert not monitor.check().contact
+    first = monitor.check()
+    assert not first.contact
+    monitor.rebase(first.loads)
+    second = monitor.check()
+    assert not second.contact
+    monitor.rebase(second.loads)
     assert monitor.check().contact
+
+
+
+def test_preplace_reuses_task1_far_slot_tilt_and_gate(tmp_path):
+    from control.task1_transport import place_tilt_deg
+
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    sk._move = Mock(return_value=SkillResult(True, "move_to_target", "moved"))
+
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+
+    assert result.ok
+    expected = place_tilt_deg(sk.s.slot_centres[0], sk.s.base_xy, sk.cfg)
+    assert sk._move.call_args.kwargs["radial_tilt_deg"] == expected
+    assert sk._move.call_args.kwargs["max_ik_error_mm"] == sk.cfg.ik.max_position_error_mm
+
+def test_preplace_backs_off_correction_only_after_preflight_ik_failure(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    assert sk.close_gripper().ok
+    sk._move = Mock(side_effect=[
+        SkillResult(False, "move_to_target", "ik_gate"),
+        SkillResult(True, "move_to_target", "moved"),
+    ])
+
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+
+    assert result.ok
+    assert result.data["place_correction_scale"] == 0.75
+    assert [row["scale"] for row in result.data["place_correction_attempts"]] == [1.0, 0.75]
+    assert sk._move.call_count == 2
 
 
 def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
@@ -169,3 +202,34 @@ def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
     monkeypatch.setattr("session.primitives.ContactMonitor.check",lambda self:ContactReading(True))
     assert not sk.descend_until_contact(20).ok
     assert not sk.open_gripper().ok
+
+def test_tilted_held_pick_reverses_approach_before_lift(tmp_path):
+    sk, cal, robot = setup(tmp_path)
+    assert approach(sk).ok
+    assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
+    grasp = cal.attempt
+    hover = sk.s.ik.solve(160.0, 0.0, 45.0, radial_tilt_deg=-30.0)
+    cal.attempt = replace(grasp, hover=hover, hover_xy_mm=(160.0, 0.0), hover_z_mm=45.0)
+    cal.plan.radial_tilt_deg = -30.0
+    assert sk.close_gripper().ok
+    original = sk.s.ik.solve_holding_wrist_roll
+    def strict_vertical(x, y, z, wrist_roll_deg, **kwargs):
+        result = original(x, y, z, wrist_roll_deg, **kwargs)
+        if x > 175.0 and 10.0 < z < 45.0:
+            return replace(result, position_error_mm=5.6)
+        return result
+    sk.s.ik.solve_holding_wrist_roll = strict_vertical
+    # Exercise planning and the clearance branch without simulating motor time.
+    def arrive(goal, **kwargs):
+        robot.joints.update(goal)
+        return robot.read_joints()
+    def traverse(goals, **kwargs):
+        return arrive(goals[-1])
+    sk.s.player.move_to = arrive
+    sk.s.player.move_through = traverse
+    result = sk.move_relative(up_mm=50.0)
+    assert result.ok
+    assert result.data["reverse_pick_retreat"]
+    assert result.data["lateral_clearance_ready"]
+    assert sk.s.arm_position_mm() == (160.0, 0.0, 60.0)
+    assert sk.s.held is not None

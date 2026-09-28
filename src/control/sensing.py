@@ -109,6 +109,12 @@ class ContactMonitor:
         self._baseline = {joint: total / samples for joint, total in acc.items()}
         return dict(self._baseline)
 
+    def rebase(self, loads: dict[str, float]) -> None:
+        """Advance the free-motion reference without taking extra bus samples."""
+        if self._baseline is None:
+            raise RuntimeError("ContactMonitor.rebase() before start()")
+        self._baseline = {joint: float(loads[joint]) for joint in self._cfg.contact_joints}
+
     def check(self) -> ContactReading:
         if self._baseline is None:
             raise RuntimeError("ContactMonitor.check() before start(); capture a baseline first")

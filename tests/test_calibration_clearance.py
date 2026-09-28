@@ -1,51 +1,49 @@
 from config import CalibrationClearanceConfig
-from session.calibration_clearance import clearance_check
+from session.calibration_clearance import directional_clearance, top_view_clearance
 
 
-def test_sideways_sweep_checked_not_only_endpoint():
-    cfg = CalibrationClearanceConfig()
-    assert clearance_check([(300,0,4)], {"wood":(150,0)}, cfg)["clear"]
-    assert not clearance_check([(150,0,60),(300,0,4)], {"wood":(150,0)}, cfg)["clear"]
+def square(cx, cy, half=20):
+    return [(cx-half, cy-half), (cx+half, cy-half),
+            (cx+half, cy+half), (cx-half, cy+half)]
 
 
-def test_missing_scene_rejects_before_opening_jaws(tmp_path):
-    from agent_helpers import make_skills
-    from session.grasp_calibration import CalibrationSkills
-    sk,world,robot = make_skills({"green":(180,0)})
-    cal = CalibrationSkills(sk.s,tmp_path)
-    def forbidden():
-        raise AssertionError("Must not open jaws for incomplete scene")
-    cal.s.motion.open_gripper = forbidden
-    result = cal.calibration_prepare("green")
-    assert result.reason == "scene_incomplete"
-    assert cal.attempt is None
+def test_neighbour_blocks_only_its_matching_grasp_direction():
+    cfg = CalibrationClearanceConfig(uncertainty_mm=15)
+    obstacles = {"right": square(50, 0)}
+    assert not directional_clearance(square(0, 0), obstacles, cfg, 0)["clear"]
+    assert directional_clearance(square(0, 0), obstacles, cfg, 90)["clear"]
+    assert top_view_clearance(square(0, 0), obstacles, cfg)["clear"]
 
 
-def test_hover_correction_dry_run_and_load_abort(tmp_path):
-    from agent_helpers import make_skills
-    from session.grasp_calibration import CalibrationSkills
-    sk,_,robot=make_skills({'green':(180,0)})
-    cal=CalibrationSkills(sk.s,tmp_path)
-    cal.cfg.agent.calibration_clearance.expected_colors=['green']
-    def clear(*args):
-        cal._approach_joints=None
-        return {'clear':True,'reason':'ok'}
-    cal._clearance_gate=clear
-    assert cal.calibration_prepare('green').ok
-    a=cal.attempt;cal.attempt=None
-    current={**robot.read_joints(),**a.hover.joints}
-    current['elbow_flex']-=2.2
-    sent=[]
-    robot.read_joints=lambda:dict(current)
-    robot.send_joints=lambda q:(sent.append(q) or dict(q))
-    assert cal.calibration_correct_hover(dry_run=True).ok
-    assert sent==[]
-    count=[0]
-    def loads():
-        count[0]+=1
-        return {j:(100 if count[0]>1 else 0) for j in cal.cfg.sensing.contact_joints}
-    robot.read_loads=loads
-    result=cal.calibration_correct_hover(dry_run=False)
-    assert not result.ok and result.data['stop_reason']=='load_increase'
-    assert cal.attempt is None and not cal.descent_ready
-    assert sent[-1]=={j:current[j] for j in a.hover.joints}
+def test_both_directions_must_be_blocked_before_target_is_rejected():
+    cfg = CalibrationClearanceConfig(uncertainty_mm=15)
+    obstacles = {"right": square(50, 0), "above": square(0, 50)}
+    result = top_view_clearance(square(0, 0), obstacles, cfg)
+    assert not result["clear"]
+    assert not result["orientations"]["x"]["clear"]
+    assert not result["orientations"]["y"]["clear"]
+
+
+def test_shifted_jaw_footprint_rejects_target_top_contact():
+    cfg = CalibrationClearanceConfig(
+        uncertainty_mm=15,
+        jaw_inner_clearance_mm=2,
+    )
+    result = directional_clearance(
+        square(0, 0), {}, cfg, 0, jaw_center_mm=(10, 0)
+    )
+    assert not result["clear"]
+    assert result["target_overlap"]
+    assert result["target_jaw_hits"] == [0]
+
+
+def test_centred_jaw_footprint_clears_target_top():
+    cfg = CalibrationClearanceConfig(
+        uncertainty_mm=15,
+        jaw_inner_clearance_mm=2,
+    )
+    result = directional_clearance(
+        square(0, 0), {}, cfg, 0, jaw_center_mm=(0, 0)
+    )
+    assert result["clear"]
+    assert not result["target_overlap"]

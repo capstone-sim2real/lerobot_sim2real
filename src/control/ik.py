@@ -378,11 +378,13 @@ class TopDownIK:
                 achieved = k.forward_kinematics(q)
                 pos_err = float(np.linalg.norm(achieved[:3, 3] * 1000.0 - [x_mm, y_mm, z_mm]))
                 tilt_err = _tilt_deg(achieved)
-                if pos_err < best_pos_err:
+                tilt_target_err = abs(tilt_err - abs(radial_tilt_deg))
+                best_target_err = abs(best_tilt_err - abs(radial_tilt_deg))
+                if (pos_err, tilt_target_err) < (best_pos_err, best_target_err):
                     best_q, best_pos_err, best_tilt_err = q, pos_err, tilt_err
-                    if pos_err < 1.0 and tilt_err < 1.0:
+                    if pos_err < 1.0 and tilt_target_err < 1.0:
                         break
-            if best_pos_err < 1.0 and best_tilt_err < 1.0:
+            if best_pos_err < 1.0 and abs(best_tilt_err - abs(radial_tilt_deg)) < 1.0:
                 break
 
         assert best_q is not None

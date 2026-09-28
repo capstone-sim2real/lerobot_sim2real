@@ -61,11 +61,11 @@ def push_out_from_base(
     return base_xy_mm[0] + dx * scale, base_xy_mm[1] + dy * scale
 
 
-def over_ik_gate(result: IkResult, cfg: AppConfig) -> bool:
+def over_ik_gate(result: IkResult, cfg: AppConfig, *, target_tilt_deg: float = 0.0) -> bool:
     """True when a solve missed by more than the configured reach gate."""
     return (
         result.position_error_mm > cfg.ik.max_position_error_mm
-        or result.tilt_error_deg > cfg.ik.max_tilt_error_deg
+        or abs(result.tilt_error_deg - abs(target_tilt_deg)) > cfg.ik.max_tilt_error_deg
     )
 
 
@@ -113,7 +113,7 @@ def place_tilt_deg(
     radius = math.dist(xy_mm, base_xy_mm)
     start = cfg.task1.pick_tilt_start_radius_mm
     end = cfg.task1.pick_tilt_max_radius_mm
-    maximum = cfg.task1.pick_tilt_max_deg
+    maximum = cfg.task1.place_tilt_max_deg
     if radius <= start or maximum == 0.0:
         return 0.0
     fraction = min(1.0, (radius - start) / (end - start))

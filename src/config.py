@@ -141,6 +141,8 @@ class PerceptionConfig:
     # frames: solidity floor 0.691 (k=5) -> 0.802 (k=7) -> 0.847 (k=9), while
     # a 40 mm block still measures ~1900-2400 mm2, far above area_mm2_min.
     morph_kernel_px: int = 9
+    # Agent scene fallback for colours missed by the primary morphology.
+    morph_fallback_kernel_px: int = 21
     # The arena holds exactly one block of each colour, so a second surviving
     # blob of the same colour is by definition not a block. Keeping only the
     # best one is what lets the HSV bands stay loose enough for the dark table
@@ -157,7 +159,7 @@ class PerceptionConfig:
     # what produces phantom warm-coloured candidates. The camera page draws
     # this same sector, so what is outlined is what is detected. Radius 0
     # disables the gate.
-    workspace_radius_mm: float = 320.0
+    workspace_radius_mm: float = 380.0
     workspace_angle_min_deg: float = -90.0
     workspace_angle_max_deg: float = 90.0
     # Optional [azimuth_deg, max_raw_block_radius_mm] samples. When present,
@@ -167,8 +169,8 @@ class PerceptionConfig:
     workspace_radius_by_angle_mm: list[list[float]] = field(
         default_factory=lambda: [
             [-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-            [-40, 307], [-30, 311], [-20, 313], [-10, 315], [0, 315],
-            [10, 315], [20, 313], [30, 309], [40, 305], [50, 300],
+            [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
+            [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
             [60, 296], [70, 288], [80, 283], [90, 275],
         ]
     )
@@ -246,7 +248,7 @@ class MotionConfig:
     # slower cap while descending onto the tower (contact must be gentle)
     descent_step_per_tick: float = 0.6
     # a move counts as arrived when every joint is within this tolerance
-    arrival_tol: float = 3.0
+    arrival_tol: float = 4.0
     # looser tolerance for transit moves: holding a block leaves a
     # steady-state joint offset that no amount of extra time closes
     transit_arrival_tol: float = 8.0
@@ -325,7 +327,7 @@ class MotionConfig:
     # 2*24*sin(rot/2) — about 5mm at a 12 deg jaw turn. Flip it only with a
     # before/after grasp count, and note the overlay keeps drawing the
     # neutral-frame points either way (it never solves IK).
-    grasp_offsets_follow_jaw_yaw: bool = False
+    grasp_offsets_follow_jaw_yaw: bool = True
     # Extra bias on the left half of the workspace (y > left_half_y_mm),
     # where the measured grasp success is lower. Adds to the global bias.
     left_half_y_mm: float = 0.0
@@ -494,7 +496,9 @@ class Task1Config:
     # wrist_flex through IK while preserving the requested Cartesian point;
     # placement keeps its original far-reach-only tilt ramp.
     pick_tilt_base_deg: float = 3.0
-    pick_tilt_max_deg: float = 5.0
+    pick_tilt_max_deg: float = 30.0
+    place_tilt_max_deg: float = 5.0
+    tilted_pick_hover_clearance_mm: float = 35.0
     # Assumption pending hardware measurement: release just above the
     # calibrated pick plane instead of driving the held block into the table.
     release_clearance_mm: float = 5.0
@@ -704,6 +708,12 @@ class CameraOverlayConfig:
     """Resource limits for the non-critical operator overlay process."""
 
     analysis_fps: float = 5.0
+    # Stabilise static block coordinates and grasp axes over recent accepted
+    # observations. A colour disappears only after this many consecutive
+    # misses; its history is then reset so reappearance is immediate and does
+    # not blend with the old location.
+    smoothing_window: int = 20
+    hide_after_misses: int = 10
     worker_nice: int = 10
     opencv_threads: int = 1
     # publish near-miss contours (and which gate dropped them) to the page, so
@@ -880,8 +890,8 @@ class PlaceCorrectionConfig:
 
     enabled: bool = True
     learn: bool = True
-    forward_mm: float = 0.0
-    left_mm: float = 0.0
+    forward_mm: float = 13.3
+    left_mm: float = 5.4
     max_mm: float = 60.0
     max_sample_mm: float = 80.0
 
@@ -948,16 +958,17 @@ class CalibrationClearanceConfig:
     # Encoder span is 2490-1867 ticks at 4095 ticks/rev on this rig.
     # Closed-angle origin is a provisional URDF/side-view alignment, not a
     # measured camera calibration. Retain angle and spatial uncertainty.
-    jaw_mount_yaw_deg: float = 90.0  # Provisional rig visual alignment, matching default.yaml.
+    jaw_mount_yaw_deg: float = -90.0  # Live scene fixes the moving-jaw side, not only the unsigned axis.
     jaw_closed_angle_deg: float = -10.0
     jaw_span_deg: float = 54.76923076923077
     jaw_angle_uncertainty_deg: float = 5.0
     jaw_open_positions: list[float] = field(default_factory=lambda: [95.0,85.0,75.0])
     tool_radius_mm: float = 60.0
     block_radius_mm: float = 29.0
+    block_side_mm: float = 40.0
     uncertainty_mm: float = 15.0
+    jaw_inner_clearance_mm: float = 2.0
     obstacle_height_mm: float = 20.0  # user-confirmed flat block height; reobserve after tipping
-    expected_colors: list[str] = field(default_factory=lambda: ["red", "green", "blue", "yellow", "wood"])
 
 
 @dataclass
@@ -965,10 +976,14 @@ class PrimitiveConfig:
     """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
     calibrated_pick: bool = True  # Same calibrated primitive path as default.yaml.
     target_max_age_s: float = 120.0
-    approach_clearance_mm: float = 60.0
-    lateral_clearance_mm: float = 40.0
+    approach_clearance_mm: float = 35.0
+    lateral_clearance_mm: float = 35.0
+    max_lift_attempts: int = 4
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
+    # Measured loaded-arm endpoint sag is 24-29mm at far slots. This applies
+    # only while carrying; empty moves retain arrival_error_mm.
+    loaded_arrival_error_mm: float = 30.0
     cartesian_step_mm: float = 10.0
     contact_step_mm: float = 2.0
     contact_max_descent_mm: float = 80.0
@@ -1003,7 +1018,7 @@ class AgentConfig:
     models: dict[str, str] = field(
         default_factory=lambda: {
             "anthropic": "claude-opus-5",
-            "openai": "gpt-5.6-luna",
+            "openai": "gpt-6-luna",
             "gemini": "gemini-3.8-flash",
             "fake": "fake-1",
         }
@@ -1199,10 +1214,12 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError(
             "task1.pick_tilt_base_deg must be between zero and pick_tilt_max_deg"
         )
-    if not 0 <= cfg.task1.pick_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
-        raise ValueError(
-            "task1.pick_tilt_max_deg must be between zero and ik.max_tilt_error_deg"
-        )
+    if not 0 <= cfg.task1.pick_tilt_max_deg <= 30.0:
+        raise ValueError("task1.pick_tilt_max_deg must be between zero and 30 degrees")
+    if cfg.task1.tilted_pick_hover_clearance_mm < cfg.agent.calibration_clearance.obstacle_height_mm:
+        raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
+    if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
+        raise ValueError("task1.place_tilt_max_deg must be within the placement IK tilt gate")
 
 
 def validate_task2(cfg: AppConfig) -> None:
@@ -1342,6 +1359,8 @@ def validate_agent(cfg: AppConfig) -> None:
             raise ValueError(f"agent.primitives.{name} must be finite and positive")
     if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
         raise ValueError("primitive approach clearance must cover lateral clearance")
+    if type(primitive.max_lift_attempts) is not int or not 1 <= primitive.max_lift_attempts <= 4:
+        raise ValueError("agent.primitives.max_lift_attempts must be in [1, 4]")
     if (type(primitive.image_jpeg_quality) is not int or type(primitive.image_max_width) is not int
             or not 1 <= primitive.image_jpeg_quality <= 100 or primitive.image_max_width <= 0):
         raise ValueError("invalid primitive image settings")

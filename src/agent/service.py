@@ -100,6 +100,17 @@ class AgentService:
 
     def start(self, timeout_s: float | None = None) -> None:
         self._worker.start(timeout_s)
+        # A restart cannot reconstruct an in-memory held-block record. Do not
+        # expose IDLE while the measured arm is still away from home.
+        try:
+            at_home = self._worker.run(lambda skills: skills.s.arm_at_home(), timeout_s=60.0)
+        except Exception:
+            logger.exception("startup home check failed")
+            at_home = False
+        if not at_home:
+            self.gate.require_home(
+                "서버 시작 시 팔이 홈이 아닙니다. 파지 상태를 확인하고 수동 복구하세요."
+            )
         self.places = self._worker.run(lambda skills: places_payload(skills), timeout_s=60.0)
         self.started = True
 
@@ -108,6 +119,8 @@ class AgentService:
             self.cancel.set()
         for thread in list(self._threads):
             thread.join(timeout=30.0)
+        if self.gate.state is ControlState.STOPPED:
+            self._worker.run(lambda skills: skills.s.preserve_pose_on_close(), timeout_s=5.0)
         self._worker.stop()
 
     def _execute(self, job):

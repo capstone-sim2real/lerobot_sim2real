@@ -338,7 +338,7 @@ uv run --extra dev pytest tests -q
    똑같이 통과해야 하고, mm는 여전히 LLM에서 오지 않는다. 화면에서 가리킨 곳을
    이름 없이 말해야 해서 열어둔 유일한 절대 주소이며, 새 툴도 이 선을 지킨다.
 4. **배치 정확도는 캘리브레이션이 아니라 릴리즈 동작이 정한다.** `release_at`은
-   `motion.arrival_tol`(3°)에서 그리퍼를 열고, 이 장비 실측으로 3°는 283mm 리치에서
+   `motion.arrival_tol`(4°)에서 그리퍼를 열며, 이 장비에서 3°는 283mm 리치 기준
    약 29mm다(`MotionConfig.grasp_hover_arrival_tol` 주석). 블록을 든 상태의 정상상태
    처짐이 더해지며, `TrajectoryPlayer.move_to`가 적어 둔 대로 더 기다린다고 닫히지 않는다.
    §6의 캘리브레이션 잔차(RMS ~5mm)를 이 오차의 원인으로 지목하지 않는다.
@@ -346,12 +346,15 @@ uv run --extra dev pytest tests -q
    스스로를 검증하므로, 그 (명령, 실제) 쌍이 곧 보정값이다
    (`session/place_correction.py`, 팔 기준 프레임 — 처짐은 뻗은 정도와 회전각의 함수라
    베이스 x/y로 배운 값은 다른 방위각으로 옮겨가지 않는다).
-5. **LLM은 primitive만 조합한다.** 복합 pick/place 및 `run_task1/2/3`는 도구로
-   노출하지 않는다. 기존 미션 FSM의 재시도 정책은 유지한다. 에이전트의 각 호출은
-   제한된 동작 하나이며 파지 검증·접촉·좌표 제한은 코드에서 강제한다.
-   데이터 수집은 `begin_episode` → 같은 동작 primitive들 → 홈·재관찰 →
-   `save_episode` 조합이다. 성공 플래그는 LLM에서 받지 않는다. 실패·STOP·시간축
-   불량은 recorder 버퍼 폐기와 사유 기록으로 처리하며 기존 Task 3 러너는 유지한다.
+5. **반복되는 Task 1 절차는 코드가 순차 실행한다.** LLM은 블록 색과 슬롯을
+   고르고 `move_block_to_slot`을 호출한다. 이 도구는 기존 calibrated primitive를
+   같은 로봇 스레드에서 하나씩 실행하며, 매 단계의 파지·간섭·높이·접촉 결과를
+   확인한 뒤에만 다음 단계로 간다. 실패·STOP에서 즉시 멈추고 상태를 LLM에
+   돌려준다. 개별 primitive는 수동 보정·Task 2에 남기되 `run_task1/2/3`는
+   도구로 노출하지 않는다. 데이터 수집은 `begin_episode` → 개별 primitive들 →
+   홈·재관찰 → `save_episode` 조합을 유지한다. 성공 플래그는 LLM에서 받지
+   않는다. 실패·STOP·시간축 불량은 recorder 버퍼 폐기와 사유 기록으로 처리하며
+   기존 Task 3 러너는 유지한다.
 6. **STOP은 `session/cancel.py`의 `CancellableRobotIO`에서만 구현한다.** 제어
    경로(control/, fsm/)에 훅을 심지 않는다. `Cancelled`는 RuntimeError/OSError/
    ValueError가 아니어야 한다(`fsm/task1.py`가 삼킨다).

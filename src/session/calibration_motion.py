@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from control.grasp import plan_grasp_attempts, attempt_grasp, GraspOutcome
+from control.grasp import plan_grasp_attempts, attempt_grasp, GraspOutcome, approach_hover_xy
 from control.sensing import check_grasp, ContactMonitor
 from control.trajectory import interpolate
 from control.task1_transport import over_ik_gate
@@ -158,70 +158,71 @@ class CalibrationMotion(Skills):
         return result
 
     def calibration_clearance_status(self):
-        """Observe without moving; rank known targets and expose unseen obstacles."""
-        from session.calibration_clearance import clearance_check
+        """Observe without moving and rank targets by top-view neighbour gap."""
+        from session.calibration_clearance import top_view_clearance
         scene = self.s.observe(after=time.time())
-        blocks = {b.color: b.center_mm for b in scene.all()}
+        blocks = {block.color: block for block in scene.all()}
         cfg = self.cfg.agent.calibration_clearance
-        missing = sorted(set(cfg.expected_colors) - set(blocks))
         ranked = []
-        for color, xy in blocks.items():
-            check = clearance_check([(*xy, self.s.grasp_z_mm)],
-                                    {k:v for k,v in blocks.items() if k != color}, cfg)
+        for color, block in blocks.items():
+            obstacles = {name: other.detection.box_mm for name, other in blocks.items() if name != color}
+            check = top_view_clearance(block.detection.box_mm, obstacles, cfg)
             ranked.append(dict(color=color, **check))
-        ranked.sort(key=lambda r: (not r["clear"], -(r["margin_mm"] or 0)))
-        return SkillResult(not missing, "calibration_clearance_status",
-                           "scene_incomplete" if missing else "ok",
-                           data={"missing_colors":missing,"ranked":ranked})
+        ranked.sort(key=lambda row: not row["clear"])
+        return SkillResult(True, "calibration_clearance_status", "ok", data={"ranked": ranked})
 
     def _clearance_gate(self, scene, color, attempt, opening=None):
-        import numpy as np
-        from session.calibration_jaw_geometry import JawGeometry
-        from control.ik import ARM_JOINTS
-        from control.grasp import highest_reachable_hover
-        cfg=self.cfg.agent.calibration_clearance
-        missing=sorted(set(cfg.expected_colors)-{b.color for b in scene.all()})
-        if missing:return {"clear":False,"missing_colors":missing,"reason":"scene_incomplete"}
-        obstacles={b.color:{"xy":b.center_mm,"box":b.detection.box_mm} for b in scene.all() if b.color!=color}
-        ik=self.s.ik; geometry=JawGeometry(ik._project_root/ik._cfg.urdf_path)
-        k=ik._load_kinematics(); start=self.s.robot.read_joints()
-        def pose(q):
-            return k.forward_kinematics(np.array([q[j] for j in ARM_JOINTS])).copy()
-        def route(goals):
-            q=start;result=[pose(q)]
-            for goal in goals:
-                result.extend(pose({**q,**step}) for step in interpolate(q,goal,self.cfg.motion.descent_step_per_tick))
-                q={**q,**goal}
-            return result
-        direct=route([attempt.hover.joints,attempt.grasp.joints])
-        self._approach_joints=None; candidates=[];high=None;high_route=None
-        for width in ([opening] if opening is not None else cfg.jaw_open_positions):
-            approach_angles=geometry.command_angles([width],cfg)
-            closing_angles=geometry.command_angles([self.cfg.sensing.gripper_close_pos,width],cfg)
-            endpoint=geometry.check([direct[-1]],obstacles,cfg,jaw_angles=closing_angles)
-            entry=geometry.check([direct[0]],obstacles,cfg,
-                                 jaw_angles=geometry.command_angles([start['gripper'],width],cfg))
-            checked=dict(opening_position=width,grasp_pose_check=endpoint,opening_change_check=entry)
-            if not endpoint['clear'] or not entry['clear']:
-                candidates.append({**checked,'clear':False});continue
-            result=geometry.check(direct,obstacles,cfg,jaw_angles=approach_angles)
-            if not result['clear']:
-                if high is None:
-                    x,y,z=ik.forward_position_mm(start)
-                    height=highest_reachable_hover(ik,x,y,self.s.grasp_z_mm,self.cfg,yaw_deg=attempt.yaw_deg)
-                    high=ik.solve(x,y,height,yaw_deg=attempt.yaw_deg)
-                    if not over_ik_gate(high,self.cfg):
-                        high_route=route([high.joints,attempt.hover.joints,attempt.grasp.joints])
-                if high_route is not None:
-                    alternate=geometry.check(high_route,obstacles,cfg,jaw_angles=approach_angles)
-                    checked['high_approach_check']=alternate
-                    if alternate['clear']:
-                        result=alternate;self._approach_joints=high.joints
-            candidates.append({**checked,**result})
-            if result['clear']:
-                self._selected_opening=width
-                return {**result,**checked,'reason':'ok','opening_candidates':candidates}
-        return {'clear':False,'reason':'neighbour_clearance','opening_candidates':candidates}
+        """Use one top-view local-clearance rule for vertical and tilted IK."""
+        from session.calibration_clearance import directional_clearance
+        target = scene.find(color)
+        if target is None:
+            return {"clear": False, "reason": "not_detected"}
+        block_side = self.cfg.agent.calibration_clearance.block_side_mm
+        target_outline = {
+            "center": target.center_mm,
+            "angle_deg": target.angle_deg,
+            "side_mm": block_side,
+        }
+        obstacles = {
+            block.color: {
+                "center": block.center_mm,
+                "angle_deg": block.angle_deg,
+                "side_mm": block_side,
+            }
+            for block in scene.all()
+            if block.color != color
+        }
+        self._approach_joints = None
+        yaw = attempt.yaw_deg
+        if yaw is None:
+            yaw = self.s.ik.neutral_yaw_deg(*attempt.xy_mm, attempt.grasp_z_mm)
+        clearance_cfg = self.cfg.agent.calibration_clearance
+        # The calibrated baseline bias maps the URDF TCP onto the physical
+        # centre between the pads. Express the safety footprint from that
+        # physical intent directly: the primary candidate is centred on the
+        # detected 40mm top; only an explicit retry offset moves it.
+        forward, left = attempt.offset_mm
+        jaw_center = offset_xy(
+            target.center_mm,
+            forward,
+            left,
+            frame=self.cfg.agent.relative.frame,
+            base_xy_mm=self.s.base_xy,
+        )
+        result = directional_clearance(
+            target_outline,
+            obstacles,
+            clearance_cfg,
+            yaw,
+            jaw_center_mm=jaw_center,
+        )
+        if result["clear"]:
+            reason = "ok"
+        elif result["target_overlap"]:
+            reason = "target_top_overlap"
+        else:
+            reason = "neighbour_clearance"
+        return {**result, "reason": reason}
 
     def calibration_prepare_visible(self, color, x, y):
         """Use existing gated observation motion, then gate the entire pick.
@@ -249,8 +250,9 @@ class CalibrationMotion(Skills):
         self.trial = None
         if self.s.held is not None:
             return SkillResult(False, "calibration_prepare", "already_holding")
-        scene = self.s.home_and_observe() if _scene is None else _scene
-        if scene.find("red") is None and self.s._scene_fn is None:
+        supplied_scene = _scene is not None
+        scene = self.s.home_and_observe() if not supplied_scene else _scene
+        if not supplied_scene and scene.find("red") is None and self.s._scene_fn is None:
             # Fresh second pass separates a red block joined to thinner tape;
             # keeps all shape/colour gates and restores production config.
             original=self.cfg.perception
@@ -262,9 +264,6 @@ class CalibrationMotion(Skills):
         block = scene.find(color)
         if block is None:
             return SkillResult(False, "calibration_prepare", "not_detected")
-        missing=sorted(set(self.cfg.agent.calibration_clearance.expected_colors)-{b.color for b in scene.all()})
-        if missing:
-            return SkillResult(False,"calibration_prepare","scene_incomplete",data={"missing_colors":missing})
         xy = corrected_pick_xy(block.center_mm, self.s.base_xy, self.cfg)
         plan = plan_grasp_attempts(self.s.ik, self.cfg, *xy, self.s.grasp_z_mm,
                                   block_angle_deg=block.angle_deg,
@@ -280,13 +279,14 @@ class CalibrationMotion(Skills):
             yaw=primary.yaw_deg
             if yaw is None:yaw=self.s.ik.neutral_yaw_deg(*primary.xy_mm,primary.grasp_z_mm)
             from control.grasp import highest_reachable_hover
-            height=highest_reachable_hover(self.s.ik,*shifted,primary.grasp_z_mm,self.cfg,yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
+            height=highest_reachable_hover(self.s.ik,*shifted,primary.grasp_z_mm,self.cfg,yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm)
             kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
-            hover=self.s.ik.solve(*shifted,height,**kw)
+            hover_xy=approach_hover_xy(shifted,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+            hover=self.s.ik.solve(*hover_xy,height,**kw)
             grasp=self.s.ik.solve(*shifted,primary.grasp_z_mm,**kw)
             extra.append(replace(primary,label=f"trial_f{forward:+g}_l{left:+g}",xy_mm=shifted,
-                                 offset_mm=(forward,left),hover=hover,hover_z_mm=height,grasp=grasp,
-                                 reachable=not any(over_ik_gate(v,self.cfg) for v in (hover,grasp))))
+                                 offset_mm=(forward,left),hover=hover,hover_z_mm=height,hover_xy_mm=hover_xy,grasp=grasp,
+                                 reachable=not any(over_ik_gate(v,self.cfg,target_tilt_deg=plan.radial_tilt_deg) for v in (hover,grasp))))
         from control.grasp import highest_reachable_hover
         # Exact face alignment is not the only possible square-block grasp.
         # Small yaw candidates also avoid forcing a -78 degree wrist through
@@ -305,12 +305,13 @@ class CalibrationMotion(Skills):
                 point=(xy[0]+math.cos(angle)*dx-math.sin(angle)*dy,
                        xy[1]+math.sin(angle)*dx+math.cos(angle)*dy)
                 kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
-                height=highest_reachable_hover(self.s.ik,*point,primary.grasp_z_mm,self.cfg,**kw)
-                hover=self.s.ik.solve(*point,height,**kw)
+                height=highest_reachable_hover(self.s.ik,*point,primary.grasp_z_mm,self.cfg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,**kw)
+                hover_xy=approach_hover_xy(point,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+                hover=self.s.ik.solve(*hover_xy,height,**kw)
                 grasp=self.s.ik.solve(*point,primary.grasp_z_mm,**kw)
                 extra.append(replace(primary,label=f"yaw_{source.label}_{delta:+g}",xy_mm=point,
-                                     yaw_deg=yaw,hover=hover,hover_z_mm=height,grasp=grasp,
-                                     reachable=not any(over_ik_gate(v,self.cfg) for v in (hover,grasp))))
+                                     yaw_deg=yaw,hover=hover,hover_z_mm=height,hover_xy_mm=hover_xy,grasp=grasp,
+                                     reachable=not any(over_ik_gate(v,self.cfg,target_tilt_deg=plan.radial_tilt_deg) for v in (hover,grasp))))
         considered=[]
         a=None
         for candidate in [*plan.attempts,*extra]:
@@ -326,10 +327,11 @@ class CalibrationMotion(Skills):
                 if math.dist(rotated,candidate.xy_mm)>self.cfg.agent.relative.max_pick_offset_mm:
                     continue
                 kw=dict(yaw_deg=candidate.yaw_deg,radial_tilt_deg=plan.radial_tilt_deg)
-                hover=self.s.ik.solve(*rotated,candidate.hover_z_mm,**kw)
+                hover_xy=approach_hover_xy(rotated,candidate.grasp_z_mm,candidate.hover_z_mm,plan.radial_tilt_deg)
+                hover=self.s.ik.solve(*hover_xy,candidate.hover_z_mm,**kw)
                 grasp=self.s.ik.solve(*rotated,candidate.grasp_z_mm,**kw)
-                candidate=replace(candidate,xy_mm=rotated,hover=hover,grasp=grasp,
-                                  reachable=not any(over_ik_gate(v,self.cfg) for v in (hover,grasp)),
+                candidate=replace(candidate,xy_mm=rotated,hover=hover,hover_xy_mm=hover_xy,grasp=grasp,
+                                  reachable=not any(over_ik_gate(v,self.cfg,target_tilt_deg=plan.radial_tilt_deg) for v in (hover,grasp)),
                                   label="roll_90_rotated_bias")
             wrist_limit = getattr(self, "primitive_wrist_limit", float("inf"))
             if any(v.joints["wrist_roll"] < self.cfg.agent.calibration_clearance.wrist_roll_min_deg
@@ -344,9 +346,24 @@ class CalibrationMotion(Skills):
                 a=candidate
                 break
         if a is None:
-            reason=considered[-1]["reason"] if considered else "ik_gate"
-            return SkillResult(False,"calibration_prepare",reason,retry_advice="do_not_retry",
-                               data={"candidates":considered})
+            reasons = [item["reason"] for item in considered]
+            # Report the actionable cause, not whichever candidate happened
+            # to be checked last. A collision-dominated search with a few
+            # wrist-limited rotations is still a clearance failure.
+            reason = (
+                "neighbour_clearance" if "neighbour_clearance" in reasons
+                else "limit_exceeded" if "limit_exceeded" in reasons
+                else reasons[0] if reasons else "ik_gate"
+            )
+            counts = {value: reasons.count(value) for value in sorted(set(reasons))}
+            alternatives = [block.color for block in scene.all() if block.color != color]
+            return SkillResult(
+                False, "calibration_prepare", reason,
+                detail=(f"No safe grasp candidate for {color}; failures={counts}. "
+                        "Try another observed block before asking the operator."),
+                retry_advice="try_other_target",
+                data={"candidates": considered, "alternative_objects": alternatives},
+            )
         self.clearance_scene = scene
         self.trial = str(time.time_ns())
         self.baseline = a
@@ -461,15 +478,16 @@ class CalibrationMotion(Skills):
         if yaw is None:
             yaw = self.s.ik.neutral_yaw_deg(*a.xy_mm, a.grasp_z_mm)
         kw = dict(yaw_deg=yaw, radial_tilt_deg=self.plan.radial_tilt_deg)
-        hover = self.s.ik.solve(*xy, a.hover_z_mm, **kw)
+        hover_xy=approach_hover_xy(xy,a.grasp_z_mm,a.hover_z_mm,self.plan.radial_tilt_deg)
+        hover = self.s.ik.solve(*hover_xy, a.hover_z_mm, **kw)
         grasp = self.s.ik.solve(*xy, a.grasp_z_mm, **kw)
-        if any(over_ik_gate(x,self.cfg) for x in (hover,grasp)):
+        if any(over_ik_gate(x,self.cfg,target_tilt_deg=self.plan.radial_tilt_deg) for x in (hover,grasp)):
             return SkillResult(False, "calibration_adjust", "ik_gate")
         if hasattr(self, "primitive_wrist_limit") and any(
                 v.joints["wrist_roll"] < self.cfg.agent.calibration_clearance.wrist_roll_min_deg
                 or abs(v.joints["wrist_roll"]) > self.primitive_wrist_limit for v in (hover, grasp)):
             return SkillResult(False, "calibration_adjust", "limit_exceeded")
-        adjusted = replace(a,xy_mm=xy,hover=hover,grasp=grasp,yaw_deg=yaw)
+        adjusted = replace(a,xy_mm=xy,hover=hover,hover_xy_mm=hover_xy,grasp=grasp,yaw_deg=yaw)
         clearance = self._clearance_gate(self.clearance_scene, self.color, adjusted,
                                          getattr(self,"_selected_opening",self.cfg.sensing.gripper_open_pos))
         if not clearance["clear"]:

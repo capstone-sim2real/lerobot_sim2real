@@ -12,7 +12,7 @@ from agent.provider.fake import ScriptedProvider
 from agent.runner import AgentRunner
 from session.primitives import PrimitiveSkills
 from session.results import ObservationImage, SkillResult
-from control.sensing import ContactReading
+from control.sensing import ContactMonitor, ContactReading
 
 
 def fixture():
@@ -66,6 +66,21 @@ def test_low_lateral_move_and_unverified_carry_refused():
     assert not sk.move_relative(forward_mm=40).ok
     assert sk.open_gripper().ok
     assert sk.move_relative(forward_mm=20).ok
+
+
+def test_primitive_preplace_rejects_slot_occupied_by_another_block():
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    occupied_index = next(
+        index for index, color in sk._observed_scene.slot_occupancy.items()
+        if color == "red"
+    )
+    slot = sk.cfg.agent.zone_slots.labels[occupied_index]
+    result = sk.move_to_target("slot", "preplace", slot=slot)
+    assert not result.ok
+    assert result.reason == "slot_occupied"
+    assert slot not in result.data["free_slots"]
 
 
 def test_no_contact_does_not_release():
@@ -131,3 +146,70 @@ def test_frame_bytes_match_observation_and_downscale(monkeypatch):
     decoded = cv2.imdecode(np.frombuffer(result.images[0].jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
     assert decoded.shape[1] == sk.limits.image_max_width
     assert decoded[0, 0, 2] > 240 and decoded[0, 0, 0] < 10
+
+
+def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypatch):
+    sk, world, _ = fixture()
+    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
+    lift_commands = []
+    move_relative = sk.move_relative
+
+    def record_lift(**kwargs):
+        lift_commands.append(kwargs["up_mm"])
+        return move_relative(**kwargs)
+
+    monkeypatch.setattr(sk, "move_relative", record_lift)
+    result = sk.move_block_to_slot("yellow", "top-left")
+
+    assert lift_commands and max(lift_commands) < sk.cfg.agent.relative.max_jog_mm
+    assert result.ok and result.reason == "released"
+    assert result.data["slot"] == "top-left"
+    assert result.data["miss_mm"] < sk.cfg.agent.slot_snap_radius_mm
+    assert world.held is None
+    assert sk.s.arm_at_home()
+
+
+def test_block_transfer_stops_before_transport_when_grasp_fails(monkeypatch):
+    sk, world, _ = fixture()
+    monkeypatch.setattr(
+        sk, "close_gripper",
+        lambda: SkillResult(False, "close_gripper", "grasp_empty", "empty"),
+    )
+
+    result = sk.move_block_to_slot("yellow", "top-left")
+
+    assert not result.ok and result.reason == "grasp_empty"
+    assert result.data["failed_stage"] == "close_verify"
+    assert world.held is None
+    assert "preplace" not in [step["stage"] for step in result.data["steps"]]
+
+
+def test_unverified_transfer_at_source_is_recoverable(monkeypatch):
+    sk, world, _ = fixture()
+    monkeypatch.setattr(ContactMonitor, "check", lambda self: ContactReading(True))
+    home = sk.return_to_home
+    source = world.blocks["yellow"]
+
+    def home_after_simulated_drop():
+        result = home()
+        world.blocks["yellow"] = source
+        return result
+
+    monkeypatch.setattr(sk, "return_to_home", home_after_simulated_drop)
+    result = sk.move_block_to_slot("yellow", "top-left")
+
+    assert not result.ok and result.reason == "task_incomplete"
+    assert result.data["still_at_source"] is True
+    assert result.retry_advice == "try_other_target"
+    assert result.to_envelope()["severity"] == "warning"
+    assert SkillResult(False, "move", "motion_timeout").to_envelope()["severity"] == "error"
+
+
+def test_failed_transfer_while_holding_is_error_not_warning():
+    blocked = SkillResult(False, "move_block_to_slot", "ik_gate", "lift blocked",
+                          data={"holding": "red", "failed_stage": "lift_held"},
+                          state={"holding": "red", "arm_at_home": False})
+    skipped = SkillResult(False, "move_block_to_slot", "neighbour_clearance",
+                          data={"holding": None}, state={"holding": None})
+    assert blocked.to_envelope()["severity"] == "error"
+    assert skipped.to_envelope()["severity"] == "warning"

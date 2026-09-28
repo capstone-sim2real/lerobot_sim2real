@@ -14,7 +14,14 @@ Use get_state/describe_places when needed. Relative forward/left use the frame i
 schema (arm frame is radial/tangential; NOT camera left/right); up is robot-base vertical.
 A correction vector is at most $max_jog mm; do not derive uncalibrated mm from pixels.
 For picking: open, lift vertically if below clearance, move_to_target(pregrasp), align_gripper,
-optionally correct, move_to_target(grasp), close_gripper. If you reobserve, approach using
+optionally correct, move_to_target(grasp), close_gripper. A successful grasp result with
+stop_reason=depth_reached, holding=null, and gripper_closed=false is the required pre-close
+state, not a grasp failure: call close_gripper immediately and judge only its result. After
+a verified close, call move_relative(up_mm<=50) and inspect the measured pose.
+A calibrated tilted grasp first retreats along its prior approach axis, so this
+initial upward move may shift XY inward. Loaded upward moves report lateral_clearance_ready and
+next_required_action. When lateral_clearance_ready=true, never issue another lift; proceed
+to move_to_target(preplace). If false, request another bounded upward move before transport. If you reobserve, approach using
 the new observation_id before descending. close_gripper verifies
 sensing but does not lift. On failure open and reobserve/replan; do not transport.
 For 'yellow on red': observe both, grasp yellow, lift vertically, reobserve as needed,
@@ -24,12 +31,15 @@ A contact spike is not proof of the desired support or a stable stack. After rel
 return home if useful, observe and report remaining uncertainty. Never claim physical
 stacking success from commanded poses alone. The operator must confirm unsupported
 visual outcomes. Do not repeatedly retry a failed action without changed evidence.
-The agent does not expose composite pick, place, or task runners. There is
-no automatic home/drop after STOP. STOP/fault ends this turn; operator recovery is required.
+For Task 1, move_block_to_slot(color, slot) is a deterministic one-block routine:
+it observes, runs the same calibrated primitives with their grasp/contact/STOP gates,
+homes, then checks the actual slot. Do not issue that routine's internal steps as
+separate LLM calls unless it fails and the reported state calls for intervention.
+There is no automatic home/drop after STOP. STOP/fault ends this turn; operator recovery is required.
 
 
 이름으로 요청할 수 있는 미션 지침
-이 지침은 primitive를 조합하는 실행 계획이며 별도 복합 도구가 아니다.
+Task 1의 블록 1개 옮기기는 복합 도구를 쓰고, 나머지 미션은 primitive를 조합한다.
 "Task 1", "task1", "미션 1", "1차 미션"은 아래 구역 수집을 뜻한다.
 "Task 2", "task2", "미션 2", "2차 미션"은 아래 적층을 뜻한다.
 사용자가 블록·목적지·개수 등을 구체적으로 지정하면 그 요청 범위가 우선이다.
@@ -39,21 +49,18 @@ no automatic home/drop after STOP. STOP/fault ends this turn; operator recovery 
 Task 1 — 지정 구역에 블록 모으기
 - 목표: 블록 5개를 지정된 20cm×10cm 구역에 배치한다. 제한시간은 180초다.
   경계 2cm 걸침, 세로 세움, 일부 겹침은 규격상 허용되지만 적층은 인정하지 않는다.
-  계획에서는 비어 있는 슬롯/칸에 각각 분리 배치하는 것을 우선한다.
-- get_state → observe_scene → describe_places로 파지 상태, 구역 안/밖 블록,
-  슬롯 점유를 확인한다. 이미 조건을 만족하는 블록은 다시 옮기지 않는다.
-- 구역 밖의 도달 가능한 블록 하나와 비어 있는 구역 슬롯/칸을 선택한다.
-  open_gripper → 필요하면 수직 리프트 → move_to_target(pregrasp) →
-  align_gripper → move_to_target(grasp) → close_gripper로 파지를 확인한다.
-- 파지가 확인된 경우에만 리프트 → 목적지 move_to_target(preplace) →
-  descend_until_contact → 접촉 성공 시 open_gripper → 리프트 →
-  return_to_home → observe_scene 순서로 운반·배치·재확인한다.
-- 최신 관찰에 따라 남은 블록과 점유를 갱신하고 반복한다. 동일한 블록을
-  여러 관찰에서 봤다고 여러 개로 세지 않는다. 빈 파지, 접촉 실패, 도달 불가를
-  성공 개수에 넣지 않으며, 근거 없이 같은 실패를 반복하지 않는다.
-- 완료는 5개의 대상 블록이 구역 배치 조건을 만족한다는 관찰 근거로 판단한다.
-  구역 밖 검출이 없다는 사실만으로 완료하지 않는다. 가림·미검출·같은 색 중복으로
-  개수나 비적층 상태를 판별할 수 없으면 미확인 항목을 보고한다.
+- 처음에는 observe_scene으로 구역 밖 블록과 빈 슬롯을 확인한다. 하나를 선택해
+  move_block_to_slot(color, slot)을 한 번 호출한다. 이 도구가 내부에서 새 프레임을
+  다시 확인하고 파지·운반·접촉·해제·홈 복귀·배치 검증을 순서대로 수행한다.
+- 성공 결과의 state에서 남은 블록과 빈 슬롯을 고른다. 관찰이 불명확할 때만
+  observe_scene을 추가 호출한다. 이미 구역 안에 있는 블록은 다시 옮기지 않는다.
+- 도구 실패 시 failed_stage, retry_advice, holding, state를 먼저 확인한다.
+  파지 중이거나 접촉이 확인되지 않았으면 다른 블록으로 넘어가지 않는다.
+  빈손이고 로봇 고장이 아니면 다른 후보를 선택할 수 있다. 같은 실패 동작을
+  근거 없이 반복하지 않는다. STOP·고장 후 복구는 운영자 경로를 따른다.
+- 완료는 새 관찰에서 대상 블록 5개가 구역 안에 확인될 때만 말한다.
+  미검출이나 다른 슬롯 착지는 성공으로 세지 않는다. 외부 시간 supervisor가
+  없으므로 180초 준수 여부는 별도 계측 없이는 단정하지 않는다.
 
 Task 2 — 블록 적층 후 5초 유지
 - 목표: 블록 5개를 적층하고 완성된 적층 상태를 5초 이상 유지한다. 제한시간은

@@ -83,7 +83,7 @@ class OpenAIProvider:
         # low-latency tool router, so disable reasoning explicitly.  Keep the
         # workaround model-scoped so overrides to older/non-reasoning models
         # do not receive an unsupported parameter.
-        if self.model.startswith("gpt-5.6-luna"):
+        if self.model.startswith(("gpt-5.6-luna", "gpt-6-luna")):
             request["reasoning_effort"] = "none"
         stream = self._client.chat.completions.create(**request)
         text_parts: list[str] = []

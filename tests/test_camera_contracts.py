@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from camera.overlay import (
+    DetectionStabilizer,
     detection_metadata,
     target_zone_metadata,
     workspace_boundary_metadata,
@@ -98,3 +99,34 @@ def test_runner_perception_uses_http_snapshot_as_bgr(monkeypatch):
     result = run_task.make_perceive(calibration, cfg)(set())
     assert result.target is candidate
     assert calls == {"url": cfg.perception.snapshot_url, "is_rgb": False}
+
+
+
+def test_overlay_stabilises_twenty_samples_and_resets_after_ten_misses():
+    stabilizer = DetectionStabilizer(window=20, hide_after_misses=10)
+    for index in range(20):
+        block = BlockDetection(
+            color="wood",
+            center_mm=(float(index), float(index * 2)),
+            area_mm2=1600.0,
+            aspect=1.0,
+            solidity=1.0,
+            fill=1.0,
+            box_mm=[
+                (index - 20, -20),
+                (index + 20, -20),
+                (index + 20, 20),
+                (index - 20, 20),
+            ],
+            angle_deg=89.0 if index % 2 else 1.0,
+        )
+        shown = stabilizer.update("shoulder", [block])
+    np.testing.assert_allclose(shown[0].center_mm, (9.5, 19.0))
+    assert shown[0].angle_deg == pytest.approx(0.0, abs=1e-6)
+
+    for _ in range(9):
+        assert stabilizer.update("shoulder", [])
+    assert stabilizer.update("shoulder", []) == []
+
+    reappeared = stabilizer.update("shoulder", [block])
+    assert reappeared[0].center_mm == block.center_mm

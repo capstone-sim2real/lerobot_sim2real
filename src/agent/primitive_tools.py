@@ -1,4 +1,4 @@
-"""Unified primitive tool surface; no composite mission tools are exposed."""
+"""Guarded robot primitives and the deterministic Task 1 block transfer."""
 from .provider.types import ToolSpec
 from .tools import ToolDef, _obj, _mm, _cell_span
 
@@ -8,6 +8,14 @@ def build_primitive_tools(cfg):
     def add(name, description, properties=None, required=None, moves=True):
         tools.append(ToolDef(ToolSpec(name, description, _obj(properties or {}, required)),
                              lambda skills, args, method=name: getattr(skills, method)(**args), moves))
+    add("move_block_to_slot",
+        "Task 1: transfer one named outside-zone block into one free zone slot. The server "
+        "observes before picking, checks grasp and clearance after each primitive, stops on "
+        "failure, then homes and verifies the actual slot. Prefer this over issuing the "
+        "same primitive sequence one call at a time.",
+        {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)},
+         "slot": {"type": "string", "enum": list(cfg.agent.zone_slots.labels)}},
+        ["color", "slot"])
     object_fields = {
         "object_id": {"type": "string", "enum": [f"{c}_1" for c in sorted(cfg.perception.color_prototypes)]},
         "observation_id": {"type": "integer", "minimum": 1},
@@ -23,7 +31,7 @@ def build_primitive_tools(cfg):
     add("get_state", "Measured joints and model FK, held state, contact state; no movement.", moves=False)
     add("describe_places", "List addressable cells and named slots; no movement.", moves=False)
     span = _cell_span(cfg)
-    add("move_to_target", "Move to an observed object, named slot or discrete cell. pregrasp/preplace are hover only; grasp descends empty gripper at its corrected current XY. Lift vertically before lateral motion at low height.", {
+    add("move_to_target", "Move to an observed object, named slot or discrete cell. pregrasp/preplace are hover only; grasp descends empty gripper at its corrected current XY. Clear the block-height band before ordinary lateral motion.", {
         "target_type": {"type": "string", "enum": ["object", "slot", "cell"]},
         "phase": {"type": "string", "enum": ["pregrasp", "grasp", "preplace", "hover"]},
         **object_fields,
@@ -31,10 +39,10 @@ def build_primitive_tools(cfg):
         "x": {"type": "integer", "minimum": -span, "maximum": span},
         "y": {"type": "integer", "minimum": -span, "maximum": span},
     }, ["target_type", "phase"])
-    add("move_relative", f"Bounded correction in {cfg.agent.relative.frame} frame. up is robot-base vertical. While holding, downward moves require contact descent.", {
+    add("move_relative", f"Bounded correction in {cfg.agent.relative.frame} frame. up is robot-base vertical. While holding, downward moves require contact descent. After a calibrated tilted grasp, up first reverses the pick approach and may shift XY inward. A loaded upward result reports lateral_clearance_ready; when true, do not lift again and proceed to the placement target.", {
         key: _mm(key, cfg.agent.relative.max_jog_mm) for key in ("forward_mm", "left_mm", "up_mm")})
     add("align_gripper", "Align to observed block using nearest neutral symmetric yaw at clearance. Empty gripper only.", object_fields, list(object_fields))
-    add("close_gripper", "Close in place and verify grasp with existing position/load sensing. Does not approach, lift or transport.")
+    add("close_gripper", "Required immediately after a successful grasp descent with stop_reason=depth_reached: the jaws are intentionally open then. Close in place and verify grasp with position/load sensing. Does not approach, lift or transport.")
     add("descend_until_contact", "Bounded vertical descent at placement target; load contact stops and backs off. Never releases; failure leaves block held.", {
         "max_descent_mm": {"type": "number", "minimum": 0,
                            "maximum": cfg.agent.primitives.contact_max_descent_mm}}, ["max_descent_mm"])

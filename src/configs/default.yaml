@@ -69,6 +69,7 @@ perception:
   # OPEN을 넓히면 그 테두리가 깎여 나가고 안정된 코어만 남는다.
   # +82° 파랑 30프레임 실측 solidity 하한: k=5 0.691 -> k=7 0.802 -> k=9 0.847
   morph_kernel_px: 9
+  morph_fallback_kernel_px: 21
   # 경기장에 색상별 블록이 1개씩만 존재 — 색마다 최대 이 개수까지만. 0이면 무제한.
   max_per_color: 1
   # 이 거리보다 가까운 다른 색 후보는 '같은 블록이 여러 게이트에 걸린 것'으로
@@ -78,16 +79,17 @@ perception:
   # 팔이 닿지도 않고, 판 바깥 나무 바닥 같은 잡동사니가 바로 그 유령 후보의
   # 출처다. 관제 화면의 주황 부채꼴이 이 값을 그대로 그리므로, 그려진 것이
   # 곧 검출 범위다. radius 0이면 비활성.
-  workspace_radius_mm: 320.0
+  workspace_radius_mm: 380.0
   workspace_angle_min_deg: -90.0
   workspace_angle_max_deg: 90.0
-  # 2026-09-11 활성 grasp-z/보정/bias/20mm IK gate로 계산한 raw 블록 중심의
-  # 방위각별 도달 경계. 실제 IK 한계에서 5mm 안쪽이며 각도 사이는 선형 보간한다.
-  # detector와 카메라 주황 경계가 이 값을 함께 사용한다.
+  # 실험 범위: 기울인 파지의 grasp/35mm hover, 기존 grasp bias, 중립±45도
+  # yaw를 정적 IK로 확인한 후 정면 ±30도만 확장했다. 20mm IK 게이트와
+  # 카메라 화각은 통과했지만 실물 턱/블록 간섭은 미검증이다.
+  # detector와 웹 경계가 이 값을 공유하며 실제 파지는 후보별 IK를 다시 검사한다.
   workspace_radius_by_angle_mm:
     [[-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-     [-40, 307], [-30, 311], [-20, 313], [-10, 315], [0, 315],
-     [10, 315], [20, 313], [30, 309], [40, 305], [50, 300],
+     [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
+     [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
      [60, 296], [70, 288], [80, 283], [90, 275]]
 
 select:
@@ -122,7 +124,7 @@ motion:
   fps: 45.0
   max_step_per_tick: 2.0
   descent_step_per_tick: 0.6
-  arrival_tol: 3.0
+  arrival_tol: 4.0
   transit_arrival_tol: 8.0
   # 파지 하강 직전 hover 도착 허용오차. descend()가 '측정된' 자세에서 보간하므로
   # 여기서 남은 오차만큼 내려가면서 옆으로 쓸려 블록을 밀어낸다(283mm 반경 실측:
@@ -153,7 +155,7 @@ motion:
   grasp_tangential_offset_mm: 15.0
   # false: 중립 요 기준(반경/접선) — 기존 측정이 모두 이 프레임에서 나옴
   # true : 조우가 블록 면과 평행해진 뒤의 프레임 기준(그리퍼 롤각 반영)
-  grasp_offsets_follow_jaw_yaw: false
+  grasp_offsets_follow_jaw_yaw: true
   left_half_y_mm: 0.0
   left_half_radial_offset_mm: 0.0
   left_half_tangential_offset_mm: 0.0
@@ -221,13 +223,15 @@ task1:
   # 초근거리 실기 보정 비활성. max radius 값은 boost=0일 때 사용되지 않는다.
   pick_near_boost_max_radius_mm: 175.0
   pick_near_boost_mm: 0.0
-  # 모든 파지 위치에서 기본 3도 펼치고, 원거리 파지는 최대 5도까지 점진적으로 펼친다.
-  # 배치는 기존처럼 280mm 이후에만 0→5도 적용한다.
+  # 파지는 280~320mm 구간에서 3→30도로 점진적으로 기울인다.
+  # 배치는 별도 최대 5도로 유지한다. 30도 파지는 실기 검증 전 실험값이다.
   # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
   pick_tilt_start_radius_mm: 280.0
   pick_tilt_max_radius_mm: 320.0
   pick_tilt_base_deg: 3.0
-  pick_tilt_max_deg: 5.0
+  pick_tilt_max_deg: 30.0
+  place_tilt_max_deg: 5.0
+  tilted_pick_hover_clearance_mm: 35.0
   # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
   release_clearance_mm: 5.0
 
@@ -367,6 +371,10 @@ logging:
 camera:
   overlay:
     analysis_fps: 5.0
+    # Stabilise static block coordinates and grasp axes with recent detections.
+    # Clear history after consecutive misses; redisplay on the first new hit.
+    smoothing_window: 20
+    hide_after_misses: 10
     worker_nice: 10
     opencv_threads: 1
     # 게이트에서 탈락한 근접 후보를 사유와 함께 화면에 표시 (표시 전용)
@@ -407,18 +415,19 @@ agent:
     red_separation_kernel_px: 31
     jaw_angle_step_deg: 5.0
     # Encoder-scaled provisional jaw model; origin uncertainty retained.
-    # 2026-09-20 side/top images show +90deg relative to URDF jaw direction.
-    # Visual alignment only; retain uncertainty until multi-pose validation.
-    jaw_mount_yaw_deg: 90.0
+    # The top-view jaw axis alone is 180deg ambiguous. A 2026-09-22 live
+    # wood/red scene resolved the moving-jaw side as -90deg relative to URDF.
+    jaw_mount_yaw_deg: -90.0
     jaw_closed_angle_deg: -10.0
     jaw_span_deg: 54.76923076923077
     jaw_angle_uncertainty_deg: 5.0
     jaw_open_positions: [95.0, 85.0, 75.0]
     tool_radius_mm: 60.0
     block_radius_mm: 29.0
+    block_side_mm: 40.0  # user-confirmed square top face
     uncertainty_mm: 15.0
+    jaw_inner_clearance_mm: 2.0
     obstacle_height_mm: 20.0  # user-confirmed flat block height
-    expected_colors: [red, green, blue, yellow, wood]
 
   collection:
     root: datasets/agent
@@ -430,10 +439,12 @@ agent:
     calibrated_pick: true
     # Assumed bounds: validate on the real arm before deployment.
     target_max_age_s: 120.0
-    approach_clearance_mm: 60.0
-    lateral_clearance_mm: 40.0
+    approach_clearance_mm: 35.0
+    lateral_clearance_mm: 35.0
+    max_lift_attempts: 4
     alignment_tolerance_mm: 25.0
     arrival_error_mm: 15.0
+    loaded_arrival_error_mm: 30.0
     cartesian_step_mm: 10.0
     contact_step_mm: 2.0
     contact_max_descent_mm: 80.0
@@ -450,7 +461,7 @@ agent:
   # 제공자별 모델 id. 시연 전 각 벤더의 현재 모델 목록으로 확인할 것.
   models:
     anthropic: claude-opus-5
-    openai: gpt-5.6-luna
+    openai: gpt-6-luna
     gemini: gemini-3.8-flash
     fake: fake-1
   max_tokens: 4096
@@ -595,8 +606,8 @@ agent:
     enabled: true
     learn: true
     # 이미 잰 값이 있으면 여기에 심는다. 0이면 세션 중 학습으로 채운다.
-    forward_mm: 0.0
-    left_mm: 0.0
+    forward_mm: 13.3
+    left_mm: 5.4
     max_mm: 60.0
     max_sample_mm: 80.0
   # 부채꼴 안의 체스판 칸에 정수 좌표를 붙인다 (화면 기준 x=오른쪽, y=먼 쪽).
