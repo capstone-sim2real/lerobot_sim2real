@@ -625,3 +625,19 @@ agent:
     min_radius_mm: 45.0
     base_keepout_depth_mm: 85.0
     base_keepout_half_width_mm: 40.0
+
+# Candidate settings for the independent YOLOE experiment (no robot control).
+yoloe:
+  model: models/yoloe-26s-seg.pt
+  engine: models/yoloe-26s-block-vp-seg-fp16.engine
+  prompts: [wooden block, toy block, cube]
+  device: cpu
+  imgsz: 640
+  confidence: 0.1
+  trt_confidence: 0.04
+  iou: 0.5
+  cpu_threads: 4
+  max_detections: 20
+  trt_warmup_runs: 5
+  snapshot_url: http://127.0.0.1:8090/snapshot/shoulder.jpg
+  http_timeout_s: 10.0
