@@ -4,21 +4,8 @@ import cv2
 import numpy as np
 import pytest
 
-from camera.overlay import (
-    DetectionStabilizer,
-    detection_metadata,
-    target_zone_metadata,
-    workspace_boundary_metadata,
-)
+from camera.overlay import DetectionStabilizer, workspace_boundary_metadata
 from camera.client import fetch_snapshot_with_metadata
-from camera.server import (
-    CrossCalibration,
-    DEFAULT_OVERLAY_CONFIG,
-    FrameRecorder,
-    parse_args,
-)
-from camera.vision_worker import VisionWorker
-from camera.web_ui import render_camera_page
 from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig
 from perception import (
     BlockDetection,
@@ -28,7 +15,6 @@ from perception import detector
 from runners import run_task
 
 
-from pathlib import Path
 from core_helpers import _calibration, _block
 
 

@@ -18,7 +18,7 @@ class AnthropicProvider:
 
     def __init__(self, model: str, *, max_tokens: int, client: Any = None):
         if client is None:
-            import anthropic  # lazy: AGENTS.md §2
+            import anthropic  # lazy import
 
             client = anthropic.Anthropic()
         self._client = client

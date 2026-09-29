@@ -1,8 +1,0 @@
-# Keep generated documents, images and archives byte-for-byte.
-*.pdf binary
-*.pptx binary
-*.docx binary
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.zip binary

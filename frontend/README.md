@@ -13,6 +13,8 @@ The stylesheet preserves semantic red for STOP/errors and camera detection colou
 
 Browser regression: `tests/keyboard-check.py` uses Playwright against a dedicated
 hardware-free preview on localhost:8110 and intercepts all motion/STOP requests.
+Start the preview with
+`PYTHONPATH=src python -m uvicorn tools.preview_agent_web:app --port 8110`.
 It checks held-key updates, direction changes, release, delayed startup,
 repeat/typing/busy guards, blur disarming and Escape.
 Do not point the preview fixture at a real robot session.

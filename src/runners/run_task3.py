@@ -54,7 +54,7 @@ from data.episode_recorder import (
     remove_empty_dataset,
     resolve_dataset_root,
 )
-from fsm.flows import build_task3_states
+from fsm.flows import build_task1_states
 from fsm.machine import StateMachine, TransitionLogger
 from fsm.states import RunContext
 from perception import PlaneCalibration, detect_blocks
@@ -172,7 +172,7 @@ def run(cfg: AppConfig, run_id: str, *, resume: bool = False) -> dict:
     calib_path = Path(cfg.perception.calibration_path)
     if not calib_path.exists():
         raise FileNotFoundError(
-            f"Venue calibration not found: {calib_path}. Run tools/calibrate_homography.py first."
+            f"Venue calibration not found: {calib_path}. Run tools/calibration/calibrate_homography.py first."
         )
     calib = PlaneCalibration.load(calib_path)
     if not calib.zone_polygon_mm:
@@ -209,22 +209,18 @@ def run(cfg: AppConfig, run_id: str, *, resume: bool = False) -> dict:
                 motion = MotionController(robot, poses, cfg.motion, cfg.sensing)
                 motion.validate_poses(required=[cfg.motion.home_pose])
 
-                # make_pick_state reads grasp_z_mm_mean from calib itself and
-                # raises a pointed error if the calibration predates it.
                 shared_ik = TopDownIK(cfg.ik, project_root=".")
                 pick_state = make_pick_state(
-                    "cv_ik",
                     robot=robot,
                     motion=motion,
                     cfg=cfg,
                     calib=calib,
-                    retreat_pose=None,
                     radial_tilt_extra_key="task1_pick_radial_tilt_deg",
                     max_grasp_attempts=cfg.task3.max_grasp_attempts,
                     ik=shared_ik,
                 )
                 planner = Task1TransportPlanner(calib, cfg, shared_ik)
-                states = build_task3_states(
+                states = build_task1_states(
                     robot=robot,
                     motion=motion,
                     perceive=make_task1_perceive(calib, cfg),

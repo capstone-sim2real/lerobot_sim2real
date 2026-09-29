@@ -18,7 +18,7 @@ class OpenAIProvider:
 
     def __init__(self, model: str, *, max_tokens: int, client: Any = None):
         if client is None:
-            import openai  # lazy: AGENTS.md §2
+            import openai  # lazy import
 
             client = openai.OpenAI()
         self._client = client

@@ -1,15 +1,14 @@
-"""Cartesian top-down IK for the CV+IK pick path (AGENTS.md §7).
+"""Cartesian top-down IK for the CV+IK pick path.
 
 Placo's IK is seed-sensitive: seeded from the current/actual pose it can
 converge 200-350mm off target for a lateral move, because copying the
 current orientation demands a pose the 5-DOF arm cannot reach. Seeded from
 a pre-computed top-down configuration instead, the same solver converges to
-millimeter-level error (in the URDF model — AGENTS.md §6 documents the
-larger, position-dependent error the real arm's FK carries beyond that).
+millimeter-level error in the URDF model. The real arm adds the calibration
+error recorded in the venue calibration ``meta``.
 
-``lerobot``/``placo`` are imported lazily inside methods so that importing
-this module (and therefore ``pick_stack``) never requires them (AGENTS.md
-§2/§14) — only constructing a ``TopDownIK`` does.
+``lerobot``/``placo`` are imported lazily: only constructing a ``TopDownIK``
+requires them.
 """
 
 from __future__ import annotations
@@ -92,8 +91,7 @@ def gripper_frame_offset(
     """Nudge a target in the gripper's own frame rather than the base frame.
 
     At the neutral yaw the jaw plane is carried entirely by ``shoulder_pan``
-    (``wrist_roll`` stays within +-3.7 deg across the workspace, AGENTS.md
-    §7), so "away from the base" is the radial direction and the gripper's
+    (``wrist_roll`` stays within +-3.7 deg across the workspace), so "away from the base" is the radial direction and the gripper's
     own left is the tangential one. Near the middle of the board these line
     up with the board axes; toward either side they rotate with the arm,
     which is why a fixed base-frame nudge drifts diagonally there.
@@ -140,8 +138,8 @@ class TopDownIK:
     """Solves (x_mm, y_mm, z_mm, yaw_deg) -> arm joint angles (degrees).
 
     ``yaw_deg`` is the desired jaw-plane rotation in the robot base frame
-    (e.g. the detected block angle, folded mod 90 for a square block —
-    AGENTS.md §9). Excludes the gripper joint; callers set that separately.
+    (e.g. the detected block angle, folded mod 90 for a square block).
+    Excludes the gripper joint; callers set that separately.
     """
 
     def __init__(self, cfg: IkConfig, project_root: Path | str = "."):
@@ -242,7 +240,7 @@ class TopDownIK:
     def forward_position_mm(self, joints: dict[str, float]) -> tuple[float, float, float]:
         """Gripper target-frame position for measured arm joints (degrees).
 
-        The same conversion ``tools/live_fk_overlay.py`` draws with; the
+        The same conversion ``tools/hardware/live_fk_overlay.py`` draws with; the
         gripper joint is ignored.
         """
         k = self._load_kinematics()
@@ -363,7 +361,7 @@ class TopDownIK:
     ) -> IkResult:
         """Best-effort top-down IK solve. Check ``position_error_mm`` /
         ``tilt_error_deg`` against config thresholds before trusting the
-        result (AGENTS.md §6/§7 — this can fail gracefully out-of-reach).
+        result.
 
         ``yaw_deg=None`` picks the neutral (radial) yaw for this position —
         the sane default. Pass an explicit yaw only when the jaw plane must

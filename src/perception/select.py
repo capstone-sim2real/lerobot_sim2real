@@ -1,6 +1,4 @@
-"""Target selection: deterministic nearest-first, matching the teleop
-demonstration convention (EPISODE.md) so the policy and the FSM agree on
-which block is "next".
+"""Target selection: deterministic nearest-first.
 
 Blocks inside (or within ``zone_margin_mm`` of) the target zone polygon are
 treated as already placed and never selected again.
@@ -45,7 +43,7 @@ def select_target(
 ) -> SelectionResult:
     if calib.base_xy_mm is None:
         raise ValueError(
-            "Calibration has no robot base position; rerun tools/calibrate_homography.py with --base-px"
+            "Calibration has no robot base position; rerun tools/calibration/calibrate_homography.py with --base-px"
         )
     if cfg.rule != "nearest_first":
         raise ValueError(f"Unknown selection rule: {cfg.rule!r}")

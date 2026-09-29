@@ -2,11 +2,7 @@
 
 import subprocess
 import sys
-import threading
 
-import runners.run_task as run_task
-import runners.run_task3 as run_task3
-import session.factories as factories
 
 
 def test_runners_import_in_either_order_without_a_cycle():

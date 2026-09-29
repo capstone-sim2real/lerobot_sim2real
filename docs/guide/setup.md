@@ -1,0 +1,277 @@
+# SO-101 세팅 가이드
+
+이 문서는 SO-101 리더/팔로워 로봇팔을 LeRobot으로 세팅하고, 캘리브레이션과 기본 텔레오퍼레이션을 실행하는 방법을 정리한 팀용 가이드입니다.
+
+## 1. 폴더 구조
+
+졸업과제 작업은 아래 폴더에서 진행합니다.
+
+```text
+~/lerobot_sim2real
+```
+
+LeRobot 소스는 프로젝트에 고정된 Git submodule입니다.
+
+```text
+~/lerobot_sim2real/third_party/lerobot
+```
+
+LeRobot 캘리브레이션 파일은 프로젝트 폴더가 아니라 아래 경로에 저장됩니다.
+
+```text
+~/.cache/huggingface/lerobot/calibration/
+```
+
+## 2. 처음 환경 만들기
+
+팀원 초기세팅은 submodule을 초기화한 뒤 루트 `uv.lock` 기준으로 프로젝트
+`.venv`에 LeRobot·Feetech·PlacO를 함께 설치합니다. 별도 setup 스크립트나
+`~/lerobot` 가상환경은 사용하지 않습니다.
+
+저장소를 처음 받습니다.
+
+```bash
+git clone --recurse-submodules <REPOSITORY_URL> ~/lerobot_sim2real
+cd ~/lerobot_sim2real
+```
+
+`uv` 명령이 없다면 먼저 설치합니다.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+uv --version
+```
+
+SO-101 USB serial 장치를 일반 사용자로 열 수 있도록 `dialout` 그룹에 현재 사용자를 추가합니다.
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+이 명령 뒤에는 로그아웃 후 다시 로그인해야 합니다. 다시 로그인한 뒤 아래 출력에 `dialout`이 있는지 확인합니다.
+
+```bash
+id
+```
+
+그다음 LeRobot 환경을 준비합니다.
+
+```bash
+cd ~/lerobot_sim2real
+uv sync --python 3.12 --extra hardware --extra dev
+```
+
+현재 팀 고정 LeRobot commit:
+
+```text
+8a74e0ac6d01706d67fddfed682a09d694d9c8c0
+```
+
+## 3. 기본 환경
+
+Python CLI는 `uv sync`가 만든 `.venv`를 사용합니다. 직접 패키지 명령을 실행해야 할 때만 아래처럼 활성화합니다.
+
+```bash
+cd ~/lerobot_sim2real
+source .venv/bin/activate
+```
+
+설치 확인:
+
+```bash
+python - <<'PY'
+import lerobot, serial
+print("lerobot", lerobot.__version__)
+print("pyserial", serial.VERSION)
+PY
+```
+
+fish shell을 쓰는 경우에는 bash용 `activate`가 아니라 fish용 파일을 source합니다.
+
+```fish
+cd ~/lerobot_sim2real
+source .venv/bin/activate.fish
+```
+
+가상환경을 켜지 않고 직접 실행해도 됩니다.
+
+```bash
+uv run lerobot-find-cameras
+```
+
+설치된 `so101-*` 명령은 프로젝트 `.venv`가 활성화된 셸에서 실행하거나
+`uv run so101-...` 형식으로 실행합니다. 이 저장소의 Python 모듈이 스스로
+가상환경을 활성화하지는 않습니다.
+
+## 4. USB 포트
+
+현재 장비에서 쓰는 안정적인 USB serial 경로입니다.
+
+```text
+리더:
+/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6085435-if00
+
+팔로워:
+/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00
+```
+
+장치 확인:
+
+```bash
+ls -l /dev/serial/by-id/* /dev/ttyACM*
+lsusb
+```
+
+권한은 보통 아래처럼 `root dialout`으로 보입니다.
+
+```text
+crw-rw---- 1 root dialout ... /dev/ttyACM1
+```
+
+`Permission denied`가 나면 현재 사용자가 `dialout` 그룹에 없는 것입니다. 아래를 실행한 뒤 로그아웃 후 다시 로그인합니다.
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+주의: `/dev/ttyACM0`, `/dev/ttyACM1` 번호는 재부팅이나 재연결 후 바뀔 수 있습니다. 코드나 명령어에는 가능하면 `/dev/serial/by-id/...` 경로를 사용합니다.
+
+## 5. 모터 응답 확인
+
+USB serial이 잡혀도 모터 전원이나 서보 케이블에 문제가 있으면 모터가 응답하지 않을 수 있습니다. 텔레오퍼레이션이 안 되면 먼저 모터 스캔을 합니다.
+
+간단 실행:
+
+```bash
+cd ~/lerobot_sim2real
+so101-scan-motors
+```
+
+정상 결과는 각 팔에서 모터 ID 1-6이 모두 보이는 것입니다.
+
+```text
+{1000000: [1, 2, 3, 4, 5, 6]}
+```
+
+결과가 `{}` 이거나 일부 ID가 빠지면 아래를 확인합니다.
+
+```text
+1. 로봇팔 전원
+2. 서보 데이지체인 케이블
+3. USB serial 어댑터 연결
+4. 보드와 첫 번째 모터 사이 케이블
+5. 다시 모터 스캔
+```
+
+## 6. 캘리브레이션 다시 하기
+
+기존 캘리브레이션을 지우고 다시 하려면 아래 순서로 실행합니다.
+
+```bash
+cd ~/lerobot_sim2real
+so101-robot-calibrate all --reset
+```
+
+각 캘리브레이션에서 해야 할 일:
+
+1. 팔을 관절 범위의 대략 중간 자세로 둡니다.
+2. Enter를 누릅니다.
+3. `wrist_roll`을 제외한 모든 관절을 천천히 전체 범위로 움직입니다.
+4. 다시 Enter를 눌러 저장합니다.
+
+직접 명령어로 실행하려면 아래를 사용합니다.
+
+리더 캘리브레이션:
+
+```bash
+lerobot-calibrate \
+  --teleop.type=so101_leader \
+  --teleop.port=/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6085435-if00 \
+  --teleop.id=my_leader
+```
+
+팔로워 캘리브레이션:
+
+```bash
+lerobot-calibrate \
+  --robot.type=so101_follower \
+  --robot.port=/dev/serial/by-id/usb-1a86_USB_Single_Serial_5AE6086462-if00 \
+  --robot.id=my_follower
+```
+
+## 7. CV/IK 실행 경로
+
+현재 프로젝트의 기본 실행 경로는 리더-팔로워 텔레오퍼레이션이나 VLA 학습이 아니라, 고정 카메라 기반 CV/IK임. 카메라 서버를 띄운 뒤 `so101-run`을 사용함.
+
+```bash
+so101-camera
+# 다른 터미널에서
+so101-run --task 1 --dry-run
+so101-run --task 1
+```
+
+`pick_lift_lower`는 전체 Task 1이 아니라 블록 하나를 집어 올렸다가 같은 위치에
+내려놓는 smoke flow입니다.
+
+```bash
+so101-run --task 1 --flow pick_lift_lower --color green
+```
+
+## 8. 카메라 확인
+
+```bash
+cd ~/lerobot_sim2real
+uv run lerobot-find-cameras
+```
+
+fish shell에서는 아래처럼 실행합니다.
+
+```fish
+cd ~/lerobot_sim2real
+uv run lerobot-find-cameras
+```
+
+현재 production CV/IK 경로는 기본적으로 shoulder 탑 카메라 하나만 사용합니다.
+장치 번호는 재연결 후 바뀔 수 있으므로 `lerobot-find-cameras` 출력으로 확인합니다.
+
+```text
+/dev/video0
+```
+
+원격으로 카메라 영상을 보려면 [remote-camera.md](./remote-camera.md)를 참고합니다. 설치나 실행 중 막히면 [troubleshooting.md](./troubleshooting.md)를 먼저 확인합니다.
+
+브라우저로 기본 shoulder 카메라를 확인하려면 다음을 실행합니다.
+
+```bash
+cd ~/lerobot_sim2real
+so101-camera
+```
+
+다른 PC에서는 Jetson/Orin의 LAN IP 또는 Tailscale IP로 접속합니다.
+
+```text
+http://JETSON_IP:8090
+```
+
+wrist 카메라는 기본으로 열지 않습니다. 필요한 별도 실험에서만
+`so101-camera --wrist-device /dev/video2`처럼 명시합니다.
+
+## 9. 현재 주요 Python CLI
+
+```text
+실행       so101-run, so101-camera, so101-detect
+로봇       so101-scan-motors, so101-robot-calibrate, so101-keyboard,
+           so101-torque-off, so101-gripper, so101-gripper-move
+기구학     so101-fk, so101-ik
+캘리브레이션
+           so101-calibrate, so101-zone-calibrate,
+           so101-record-calibration-point, so101-capture-calibration-point
+세션       so101-teleop-session, so101-capture-teleop-points, so101-live-fk
+```
+
+정확한 전체 목록은 `pyproject.toml`의 `[project.scripts]`가 기준이며 각 명령의
+옵션은 `--help`로 확인합니다.
+
+리더 없이 팔로워를 원격으로 움직이는 방법은 [teleoperation.md](./teleoperation.md)를 참고합니다.

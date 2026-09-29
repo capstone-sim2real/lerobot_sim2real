@@ -1,6 +1,5 @@
 """HTTP surface of so101-agent (skipped when the agent extra is not installed)."""
 
-import re
 
 import pytest
 

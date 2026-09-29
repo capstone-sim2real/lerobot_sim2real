@@ -68,7 +68,7 @@ class LeRobotEpisodeSink:
     """:class:`EpisodeSink` backed by a real ``LeRobotDataset``.
 
     lerobot is imported inside ``__init__`` on purpose: importing this module
-    must not require lerobot, torch, or ffmpeg (AGENTS.md §13).
+    must not require lerobot, torch, or ffmpeg.
     """
 
     def __init__(self, dataset: Any):
@@ -96,7 +96,7 @@ def dataset_features(cameras: dict[str, str], width: int, height: int) -> dict[s
     """Build the LeRobot feature dict for the SO-101 plus recorded cameras.
 
     ``robot.observation_features`` cannot be used: ``robot.cameras`` is empty
-    because ``camera.server`` owns the devices (AGENTS.md §8), so the camera
+    because ``camera.server`` owns the devices, so the camera
     features are declared here from the configured streams instead.
     """
     from lerobot.utils.constants import ACTION, OBS_STR
@@ -137,8 +137,7 @@ def create_dataset(cfg: Task3Config, repo_id: str, root: Path | str | None, *, r
         use_videos=True,
         image_writer_processes=0,
         image_writer_threads=4 * max(1, len(cfg.cameras)),
-        # Real-time encoding steals CPU from the control loop on the Orin
-        # (docs/guide/SO101_데이터수집_관리.md §3).
+        # Real-time encoding steals CPU from the control loop on the Orin.
         streaming_encoding=False,
         rgb_encoder=RGBEncoderConfig(vcodec=cfg.video_codec),
     )
@@ -433,9 +432,6 @@ class RecordingRobotIO(BaseRobotIO):
 
     def read_joints(self) -> dict[str, float]:
         return self._inner.read_joints()
-
-    def read_observation(self) -> dict[str, Any]:
-        return self._inner.read_observation()
 
     def read_loads(self) -> dict[str, int]:
         return self._inner.read_loads()

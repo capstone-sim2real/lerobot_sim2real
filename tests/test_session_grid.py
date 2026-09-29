@@ -5,17 +5,13 @@ import math
 import numpy as np
 import pytest
 
-from agent.service import places_payload
-from agent_helpers import make_skills
 from config import AppConfig
 from perception.homography import PlaneCalibration
 from perception.detector import point_in_workspace, workspace_radius_at_angle
 from session.grid import (
     BoardGrid,
-    axis_aligned,
     bounds,
     build_grid,
-    cells_in_view,
     cells_in_workspace,
     default_anchor_mm,
     in_base_keepout,

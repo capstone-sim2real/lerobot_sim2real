@@ -4,13 +4,8 @@ import math
 
 import pytest
 
-from agent.sim import SimRobotIO
-from agent.tools import ToolRegistry
-from agent.provider.types import ToolCall
-from fsm import ik_handler
-from session.cancel import Cancelled
 
-from agent_helpers import FakeIk, fast_cfg, make_skills
+from agent_helpers import make_skills
 
 
 def _slot_xy(skills, index):

@@ -1,14 +1,12 @@
 """Vendor adapters against stand-in clients: request shape and event parsing."""
 
-import json
 from types import SimpleNamespace as NS
 
 import pytest
 
-from agent.provider.anthropic_provider import AnthropicProvider
-from agent.provider.fallback import FallbackProvider, ProviderFallbackError
+from agent.provider.fallback import FallbackProvider
 from agent.provider.openai_provider import OpenAIProvider
-from agent.provider.types import Message, TextDelta, ToolCall, ToolCallEvent, ToolResult, ToolSpec, TurnEnd
+from agent.provider.types import Message, TextDelta, ToolCall, ToolCallEvent, ToolResult, ToolSpec
 
 SPEC = ToolSpec("pick_block", "pick", {"type": "object", "properties": {"color": {"type": "string"}},
                                         "required": ["color"], "additionalProperties": False})

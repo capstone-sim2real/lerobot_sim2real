@@ -1,13 +1,12 @@
 """FSM vocabulary: state names, run context, and the state handler base class.
 
-Task flow (AGENTS.md §3):
+Task flow:
 
     SELECT → PICK → VERIFY → TRANSPORT → PLACE → (blocks left && time left) → SELECT
                ↑______fail (retry / skip)____|
 
-Task 1 and Task 2 differ only in which PLACE handler is injected; every other
-state is shared. Concrete handlers arrive in later PRs — this module defines
-the contract they implement so the machine and tests are stable from day one.
+Task 2 reuses Task 1's SELECT/PICK/VERIFY/TRANSPORT and swaps the destination
+and PLACE handler.
 """
 
 from __future__ import annotations

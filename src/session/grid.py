@@ -7,8 +7,8 @@ millimetre point and back.
 
 Two things this is **not**:
 
-- It is not a coordinate frame. AGENTS.md §6 stands: every command still
-  travels as robot-base mm. A cell is an *address* that is resolved here,
+- It is not a coordinate frame: every command still travels as robot-base
+  mm. A cell is an *address* that is resolved here,
   once, before any motion is planned.
 - It is not a reachability claim. ``cells_in_workspace`` only applies the
   detector's sector gate and the same radial band the named table regions
@@ -19,7 +19,7 @@ axes: ``+x`` is image-right, ``+y`` is away from the robot (image-up). In the
 robot base frame that is ``u = -y`` and ``v = +x`` -- see ``axis_aligned``.
 
 The lattice itself comes from ``PlaneCalibration.board_grid`` when
-``tools/calibrate_board_grid.py`` has measured it; otherwise the axis-aligned
+``tools/calibration/calibrate_board_grid.py`` has measured it; otherwise the axis-aligned
 fallback below is used, which is right only if the board happens to be
 square with the robot.
 """
@@ -157,8 +157,7 @@ def in_base_keepout(xy_mm: XY, base_xy_mm: XY, cfg: BoardGridConfig) -> bool:
     """Whether a point falls in the unusable pocket around the robot itself.
 
     Not a radius: the arm cannot take a top-down pose in a narrow corridor
-    straight ahead of the base (the gripper sits ~27mm off the pan axis,
-    AGENTS.md §7), yet it reaches points the same distance away once they
+    straight ahead of the base (the gripper sits ~27mm off the pan axis), yet it reaches points the same distance away once they
     are off that axis. A single inner radius big enough to exclude the
     corridor would throw away every near cell to the left and right, which
     are perfectly pickable.

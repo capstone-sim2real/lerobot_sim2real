@@ -7,7 +7,7 @@
 <p align="center">
   <a href="#5-설치-및-실행-방법"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12"></a>
   <a href="docs/architecture.md"><img src="https://img.shields.io/badge/control-CV%20%2B%20IK-6A5ACD" alt="CV와 IK 제어"></a>
-  <a href="docs/guide/SO101_LLM_에이전트.md"><img src="https://img.shields.io/badge/interface-Web%20%2B%20LLM-00897B" alt="웹 및 LLM 인터페이스"></a>
+  <a href="docs/guide/web-agent.md"><img src="https://img.shields.io/badge/interface-Web%20%2B%20LLM-00897B" alt="웹 및 LLM 인터페이스"></a>
 </p>
 
 자연어 명령을 LLM 툴 콜링으로 해석하고, 고전 컴퓨터 비전(CV)과 역기구학(IK)으로 SO-101 로봇팔을 제어해 블록을 옮기고 쌓는 프로젝트입니다. 웹에서 색상별 블록 이동이나 체스판 칸 좌표 배치를 요청할 수 있습니다. Task 1/2 미션은 같은 CV+IK 제어 경로로 LLM 없이도 실행됩니다.
@@ -71,7 +71,7 @@ flowchart LR
     CS --> D
 ```
 
-카메라는 카메라 서버 한 프로세스가 소유합니다. `so101-run`, `so101-collect`, `so101-agent` 중 **로봇 시리얼 버스를 사용하는 프로그램은 한 번에 하나만 실행**합니다. 웹 오버레이는 관찰용입니다. 구성과 제어 경계는 [현재 아키텍처](docs/architecture.md)에 정리했습니다.
+카메라는 카메라 서버 한 프로세스가 소유합니다. `so101-run`, `so101-collect`, `so101-agent`, `so101-panel` 중 **로봇 시리얼 버스를 사용하는 프로그램은 한 번에 하나만 실행**합니다. 웹 오버레이는 관찰용입니다. 구성과 제어 경계는 [현재 아키텍처](docs/architecture.md)에 정리했습니다.
 
 ### 3.2. 사용 기술
 
@@ -153,11 +153,12 @@ Task 1의 완료는 배치 명령 횟수가 아니라 **홈 위치에서 다시 
 │   ├── session/      로봇 세션, 버스 잠금, 스킬
 │   ├── agent/        웹 UI, LLM 도구 호출, 수동 조작
 │   ├── data/         에피소드 기록
-│   ├── runners/      Task CLI
-│   ├── policy/       보존된 선택적 ACT 경로
-│   └── tools/        캘리브레이션, 진단 CLI
-├── frontend/         웹 프런트엔드 빌드 소스
-├── docs/             가이드, 아키텍처, 보고서, 발표 자료
+│   ├── runners/      so101-run, so101-collect
+│   ├── config/       설정 dataclass (값은 configs/*.yaml)
+│   ├── configs/      기본 설정, 캘리브레이션, 프롬프트
+│   └── tools/        calibration/, hardware/, yoloe/ 보조 CLI
+├── frontend/         웹 UI 빌드 소스
+├── docs/             설계·아키텍처·가이드, 보고서, 발표 자료 (docs/README.md)
 ├── experiments/      실험 기록과 결과
 ├── tests/            하드웨어 없는 회귀 테스트
 ├── third_party/      SO-101 자산과 LeRobot submodule
@@ -179,7 +180,7 @@ Task 1의 완료는 배치 명령 횟수가 아니라 **홈 위치에서 다시 
 
 ### 5.1. 설치절차 및 실행 방법
 
-**준비물:** Linux, Python 3.12, `uv`, SO-101 팔로워와 전원, USB 시리얼, 고정 탑 카메라. 실제 동작 전 [장비 세팅 가이드](docs/guide/SO101_세팅가이드.md)에 따라 서보 ID, 캘리브레이션, 전원, 카메라 고정을 확인하세요.
+**준비물:** Linux, Python 3.12, `uv`, SO-101 팔로워와 전원, USB 시리얼, 고정 탑 카메라. 실제 동작 전 [장비 세팅 가이드](docs/guide/setup.md)에 따라 서보 ID, 캘리브레이션, 전원, 카메라 고정을 확인하세요.
 
 ```bash
 git clone --recurse-submodules https://github.com/pnucse-capstone2026/capstone-2026-team-25.git ~/lerobot_sim2real
@@ -190,7 +191,7 @@ uv sync --python 3.12 --extra hardware --extra dev
 uv run so101-scan-motors
 ```
 
-> **Jetson Orin 기존 환경:** JetPack용 PyTorch 휠을 보존해야 하는 장비에서는 무조건 `uv sync`로 기존 가상환경을 갈아엎지 않습니다. 현재 인터프리터 경로를 확인하고 필요한 선택 의존성만 `uv pip install --python /path/to/existing-venv/bin/python ...`으로 설치하세요. 이 저장소의 Orin worktree는 가상환경이 worktree 밖에 있으므로 아래 `.venv/bin/...` 명령을 그대로 실행할 수 없습니다. [설치 가이드](docs/guide/SO101_세팅가이드.md)와 [데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)를 참고하세요.
+> **Jetson Orin 기존 환경:** JetPack용 PyTorch 휠을 보존해야 하는 장비에서는 무조건 `uv sync`로 기존 가상환경을 갈아엎지 않습니다. 현재 인터프리터 경로를 확인하고 필요한 선택 의존성만 `uv pip install --python /path/to/existing-venv/bin/python ...`으로 설치하세요. 이 저장소의 Orin worktree는 가상환경이 worktree 밖에 있으므로 아래 `.venv/bin/...` 명령을 그대로 실행할 수 없습니다. [설치 가이드](docs/guide/setup.md)와 [데이터 수집 가이드](docs/guide/task3-data-collection.md)를 참고하세요.
 
 카메라 서버는 별도 터미널에서 먼저 실행하거나 runner가 기존 서버를 재사용하게 둡니다. **같은 카메라 장치를 두 프로세스에서 열지 않습니다.**
 
@@ -202,7 +203,7 @@ uv run so101-run --task 2 --dry-run    # 층별 IK 확인
 uv run so101-run --task 2              # Task 2 실기
 ```
 
-ACT·SmolVLA용 데이터 수집과 웹 조작은 아래 명령으로 실행합니다. `so101-run`, `so101-collect`, `so101-agent`는 **한 번에 하나만 실행합니다.**
+ACT·SmolVLA용 데이터 수집과 웹 조작은 아래 명령으로 실행합니다. `so101-run`, `so101-collect`, `so101-agent`, `so101-panel`은 **한 번에 하나만 실행합니다.**
 
 ```bash
 uv run so101-collect --dry-run         # Task 3 입력, 슬롯 확인
@@ -217,19 +218,17 @@ so101-agent --sim --provider fake      # 장비, API 키 없는 웹 리허설
 so101-agent                            # 웹 UI 기본 :8099
 ```
 
-Task 1/2 실행과 primitive 제어를 제공하는 웹 패널은 별도 진입점 `tools.agent_server`를 사용합니다. 이 서버도 로봇 버스를 단독 소유하므로 `so101-agent`와 함께 실행하지 않습니다. 기존 Orin 환경에서는 `SO101_PY`에 **이미 설치된** Python 경로를 지정하세요.
+Task 1/2 실행 버튼과 수동 조작을 제공하는 웹 패널은 `so101-panel`입니다. 이 서버도 로봇 버스를 단독 소유하므로 `so101-agent`와 함께 실행하지 않습니다.
 
 ```bash
-SO101_PY=/absolute/path/to/existing-venv/bin/python
-PYTHONPATH="$PWD/src" "$SO101_PY" -m tools.agent_server \
-  --env-file .env --output experiments/llm_free_missions/live --port 8109
+so101-panel --env-file .env --output experiments/llm_free_missions/live   # 기본 :8109
 ```
 
 | 서비스 | 기본 포트 | 역할 |
 |---|---:|---|
 | `so101-camera` | 8090 | 카메라 영상, 스냅샷, 오버레이 |
 | `so101-agent` | 8099 | 기본 채팅, 수동 조작, 상태 API; `--port`로 변경 가능 |
-| `tools.agent_server` | 8109 | Task 1/2 실행, primitive 제어 패널 |
+| `so101-panel` | 8109 | Task 1/2 실행, 수동 조작, 보정 도구 |
 
 Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 장비의 LAN/Tailscale 주소로 접속합니다. 로봇 제어 서버를 공인 인터넷에 직접 공개하지 마세요. 기본 카메라, 로봇 설정은 [default.yaml](src/configs/default.yaml)을 확인하고 실험값은 `--set key.path=value`로 덮을 수 있습니다. 180초 제한을 적용하는 정식 평가는 외부 supervisor로 실행 시간을 관리합니다.
 
@@ -237,14 +236,14 @@ Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 �
 
 | 증상 | 먼저 확인할 것 |
 |---|---|
-| `RobotBusBusy` | 다른 `so101-run`, `so101-collect`, `so101-agent`가 시리얼 버스를 점유했는지 확인하고 한 실행만 남기기 |
+| `RobotBusBusy` | 다른 `so101-run`, `so101-collect`, `so101-agent`, `so101-panel`이 시리얼 버스를 점유했는지 확인하고 한 실행만 남기기 |
 | `Missing motor IDs` | 로봇 전원, 서보 데이지체인 케이블, `/dev/serial/by-id/…`, 모터 ID 스캔 확인 |
 | 카메라 프레임 지연, 누락 | `:8090/health`에서 프레임 age와 장치 상태 확인; 중복 카메라 서버를 열지 않기 |
 | `ik_gate`, 도달 실패 | `--dry-run`과 목표 좌표, 캘리브레이션, 작업 영역 확인; 무리하게 제한값만 높이지 않기 |
-| `ModuleNotFoundError: tools` | 프로젝트 루트에서 설치된 CLI로 실행하거나 `PYTHONPATH="$PWD/src" .venv/bin/python -m tools.agent_server`처럼 실행 |
+| `ModuleNotFoundError` | 프로젝트 루트에서 설치된 `so101-*` CLI로 실행하거나 `PYTHONPATH="$PWD/src"`를 지정 |
 | Orin에서 Torch/CUDA 오류 | JetPack 호환 휠을 확인하고 일반 `uv sync`로 교체하지 않기 |
 
-더 자세한 진단은 [문제해결 가이드](docs/guide/SO101_문제해결.md)에 있습니다.
+더 자세한 진단은 [문제해결 가이드](docs/guide/troubleshooting.md)에 있습니다.
 
 ## 6. 소개 자료 및 시연 영상
 
@@ -252,7 +251,7 @@ Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 �
 
 - [최종보고서 PDF](docs/report/최종보고서/final_report.pdf) / [최종보고서 근거, 해석 범위](docs/report/최종보고서/SOURCES.md)
 - [세미나 발표자료 PPTX](docs/report/졸과%20세미나%20발표자료.pptx)
-- [시스템 아키텍처](docs/architecture.md) / [CV+IK 파지, 운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
+- [시스템 아키텍처](docs/architecture.md) / [CV+IK 파지, 운반 가이드](docs/guide/cv-ik-pick-place.md)
 
 실제 시연에서 촬영한 시작, 이동, 배치 장면입니다.
 
@@ -322,8 +321,8 @@ ACT와 SmolVLA 실험을 분석하면서 장비와 데이터 조건에 맞는 �
 1. International Federation of Robotics, [*World Robotics 2025: Industrial Robots — Executive Summary*](https://ifr.org/img/worldrobotics/Executive_Summary_WR_2025_Industrial_Robots.pdf). 2024년 세계 설치 수치와 한국 시장 맥락.
 2. International Federation of Robotics, [*World Robotics 2025 발표: 국가별 산업용 로봇 설치*](https://ifr.org/news/global-robot-demand-in-factories-doubles-over-10-years/1st-quarterly-newsletter-2010). 한국 2024년 설치 수치.
 3. Hugging Face, [LeRobot 문서](https://huggingface.co/docs/lerobot/main/index) 및 [SO-101 가이드](https://huggingface.co/docs/lerobot/so101). 기본 플랫폼, 장비 정보.
-4. 프로젝트 [설계 규칙](AGENTS.md), [현재 아키텍처](docs/architecture.md), [실험 기록](experiments/README.md).
+4. 프로젝트 [설계 규칙](docs/design.md), [현재 아키텍처](docs/architecture.md), [실험 기록](experiments/README.md).
 5. 프로젝트 [최종보고서](docs/report/최종보고서/final_report.pdf)와 [집계, 증거 해석 범위](docs/report/최종보고서/SOURCES.md). 팀 역할, 멘토링 및 평가의 근거.
 6. 삼성중공업 이재민, [서면 자문의견서](docs/report/25_%28Sim2Real%29삼성중공업_이재민_자문의견서.pdf), 2026-08-03.
 
-과거 ACT와 SmolVLA 실험은 [당시 데이터 수집 기록](docs/guide/SO101_데이터수집_관리.md), [학습, 추론 기록](docs/guide/SO101_학습_추론.md)에 보존되어 있습니다. 현재 실행 방법은 위 설치 절과 운영 가이드를 참고하세요.
+과거 ACT와 SmolVLA 실험은 [당시 데이터 수집 기록](docs/legacy/act-data-collection.md), [학습, 추론 기록](docs/legacy/act-smolvla-training.md)에 보존되어 있습니다. 현재 실행 방법은 위 설치 절과 운영 가이드를 참고하세요.

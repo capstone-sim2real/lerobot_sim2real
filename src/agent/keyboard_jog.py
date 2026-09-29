@@ -4,7 +4,6 @@ import threading
 import time
 import secrets
 
-from .jog_ramp import JogRamp
 
 
 class JogReleased(Exception):

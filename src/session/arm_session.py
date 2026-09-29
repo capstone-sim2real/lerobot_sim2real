@@ -191,7 +191,7 @@ class ArmSession:
         calib_path = Path(cfg.perception.calibration_path)
         if not calib_path.exists():
             raise FileNotFoundError(
-                f"Venue calibration not found: {calib_path}. Run tools/calibrate_homography.py first."
+                f"Venue calibration not found: {calib_path}. Run tools/calibration/calibrate_homography.py first."
             )
         calib = PlaneCalibration.load(calib_path)
         if not calib.zone_polygon_mm:
@@ -285,7 +285,6 @@ class ArmSession:
                 motion=self.motion,
                 cfg=self.cfg,
                 grasp_z_mm=self.grasp_z_mm,
-                retreat_pose=None,
                 retreat_after_grasp=True,
                 radial_tilt_extra_key=PICK_TILT_KEY,
                 ik=self.ik,
@@ -421,9 +420,9 @@ class ArmSession:
             from session.factories import make_task1_perceive
 
             return make_task1_perceive(self.calib, self.cfg)
-        if self._scene_fn is None:
-            from fsm.task1 import Task1Perception
+        from fsm.task1 import Task1Perception
 
+        if self._scene_fn is None:
             def perceive_selected() -> Task1Perception:
                 scene = self.observe()
                 return Task1Perception(
@@ -432,7 +431,6 @@ class ArmSession:
                 )
 
             return perceive_selected
-        from fsm.task1 import Task1Perception
 
         counter = {"seq": 0}
 

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from config import AppConfig
-from tools.calibration_pixels import complete_pixel_pair, detect_pixel_candidate, make_pixel_preview
+from tools.calibration.calibration_pixels import complete_pixel_pair, make_pixel_preview
 
 
 def scene(count=1):

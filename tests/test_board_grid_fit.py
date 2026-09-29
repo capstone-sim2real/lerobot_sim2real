@@ -1,15 +1,12 @@
 """Fitting the chessboard lattice: exact on a synthetic board, sane on a real frame."""
 
 import math
-from pathlib import Path
 
-import cv2
 import numpy as np
 import pytest
 
-from perception.board import detect_corners
-from perception.homography import PlaneCalibration, calibrate_from_chessboard
-from tools.calibrate_board_grid import MIN_CORNERS, fit_lattice, orient, screen_axes_mm
+from perception.homography import PlaneCalibration
+from tools.calibration.calibrate_board_grid import fit_lattice
 
 
 def _lattice(angle_deg: float, pitch: float, offset, size: int = 9) -> np.ndarray:

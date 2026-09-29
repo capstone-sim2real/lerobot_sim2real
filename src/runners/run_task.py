@@ -1,29 +1,14 @@
-"""Task entrypoint: wire everything and run the FSM.
+"""so101-run: Task 1 (gather into the zone) and Task 2 (stack) on the CV+IK FSM.
 
-    # Task 1 (transport into the zone)
-    # CV+IK (default; no policy server required)
-    python -m runners.run_task --task 1 --pick-mode cv_ik
+    so101-run --task 1 --dry-run        # zone slots, IK and detections; no robot
+    so101-run --task 1
+    so101-run --task 2 --dry-run        # tower ladder: how many levels are reachable
+    so101-run --task 2 --set task2.max_levels=1
+    so101-run --task 3                  # alias for so101-collect
+    so101-run --task 1 --flow pick_lift_lower --color green   # one-block grasp smoke test
 
-    # Legacy ACT path
-    python -m runners.run_task --task 1 --pick-mode act \
-        --set policy.server_address=100.99.252.112:8080 \
-        --set policy.pretrained_name_or_path=/home/user/.../pretrained_model
-
-    # Task 2 (stack every block at one point in the zone)
-    python -m runners.run_task --task 2 --dry-run      # read the ladder FIRST
-    python -m runners.run_task --task 2 --set task2.max_levels=1
-
-    # Task 3 (alias for the dedicated ACT dataset collector)
-    python -m runners.run_task --task 3 --dry-run
-    python -m runners.run_task --task 3
-
-    # One-block CV+IK grasp smoke test; no destination poses required
-    python -m runners.run_task --task 1 --flow pick_lift_lower --color green
-
-Preconditions (fail fast otherwise):
-  - venue calibration JSON exists (tools/calibrate_homography.py)
-  - required poses recorded (tools/record_pose.py)
-  - ACT mode only: policy_server reachable and model path valid on the server machine
+Requires the venue calibration (so101-calibrate, so101-zone-calibrate) and a
+recorded home pose (tools.hardware.record_pose).
 """
 
 from __future__ import annotations
@@ -42,19 +27,13 @@ from control import MotionController, PoseRegistry, So101RobotIO
 from control.ik import TopDownIK
 from control.task1_transport import Task1TransportPlanner
 from control.task2_stack import Task2StackPlanner
-from fsm.flows import (
-    build_pick_lift_lower_states,
-    build_task1_states,
-    build_task2_stack_states,
-    build_task2_states,
-)
+from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_stack_states
 from fsm.ik_handler import CvIkSelectState
 from fsm.machine import StateMachine, TransitionLogger
 from fsm.states import RunContext
 from perception import PlaneCalibration, detect_blocks, select_target
 from perception.zone import point_in_zone
-from policy import ActPolicyClient, GrpcPolicyTransport
-from session.factories import make_pick_state, make_task1_perceive  # noqa: F401 - re-exported
+from session.factories import make_pick_state, make_task1_perceive
 from session.report import print_detections, print_slot_table
 
 logger = logging.getLogger("run")
@@ -76,14 +55,13 @@ def run(
     cfg: AppConfig,
     run_id: str,
     *,
-    pick_mode: str = "cv_ik",
     flow: str = "task",
     target_color: str | None = None,
 ) -> RunContext:
     calib_path = Path(cfg.perception.calibration_path)
     if not calib_path.exists():
         raise FileNotFoundError(
-            f"Venue calibration not found: {calib_path}. Run tools/calibrate_homography.py first."
+            f"Venue calibration not found: {calib_path}. Run so101-calibrate first."
         )
     calib = PlaneCalibration.load(calib_path)
     poses = PoseRegistry.load(cfg.motion.poses_path)
@@ -96,69 +74,41 @@ def run(
 
     robot = So101RobotIO(cfg.robot)
     robot.connect()
-    client = None
     motion = None
     try:
         motion = MotionController(robot, poses, cfg.motion, cfg.sensing)
-        # Tasks 1 and 2 share the whole CV+IK gather pipeline; only the
-        # destination and the release differ (AGENTS.md §3 §4).
-        zone_task = task in (1, 2) and flow == "task"
-        task1_gather = zone_task and task == 1
-        if zone_task:
-            if pick_mode != "cv_ik":
-                raise ValueError(f"Task {task} zone flow currently requires --pick-mode cv_ik")
-            if not calib.zone_polygon_mm:
-                raise ValueError(f"Task {task} requires zone_polygon_mm; run so101-zone-calibrate --write")
-            motion.validate_poses(required=[cfg.motion.home_pose])
-            retreat_pose = None
-        elif flow == "pick_lift_lower":
-            if pick_mode != "cv_ik":
-                raise ValueError("pick_lift_lower flow requires --pick-mode cv_ik")
-            if not target_color:
-                raise ValueError("pick_lift_lower flow requires --color <detected-colour>")
-            motion.validate_poses(required=[cfg.motion.home_pose])
-            retreat_pose = None
-        else:
-            motion.validate_poses(task=task)
-            retreat_pose = poses.get(cfg.motion.retreat_pose)
+        motion.validate_poses(required=[cfg.motion.home_pose])
+        smoke_test = flow == "pick_lift_lower"
+        task1_gather = task == 1 and not smoke_test
+        if smoke_test and not target_color:
+            raise ValueError("pick_lift_lower flow requires --color <detected-colour>")
+        if not smoke_test and not calib.zone_polygon_mm:
+            raise ValueError(f"Task {task} requires zone_polygon_mm; run so101-zone-calibrate --write")
 
-        if pick_mode == "act":
-            client = ActPolicyClient(robot, GrpcPolicyTransport(robot.robot, cfg.policy), cfg.policy)
-            client.connect()  # server loads the model here, once per session
-
-        shared_ik = TopDownIK(cfg.ik, project_root=".") if zone_task else None
+        shared_ik = TopDownIK(cfg.ik, project_root=".")
         pick_state = make_pick_state(
-            pick_mode,
             robot=robot,
             motion=motion,
             cfg=cfg,
             calib=calib,
-            retreat_pose=retreat_pose,
-            retreat_after_grasp=flow != "pick_lift_lower",
-            radial_tilt_extra_key="task1_pick_radial_tilt_deg" if zone_task else None,
-            client=client,
+            retreat_after_grasp=not smoke_test,
+            radial_tilt_extra_key=None if smoke_test else "task1_pick_radial_tilt_deg",
             ik=shared_ik,
         )
 
-        perceive = make_perceive(calib, cfg, target_color=target_color)
-        # The CV+IK pick opens the jaws itself, so its SELECT homes without
-        # commanding the gripper; the ACT path keeps the recorded home pose
-        # intact so the policy starts in distribution.
-        select_state = CvIkSelectState(motion, perceive) if pick_mode == "cv_ik" else None
-        if flow == "pick_lift_lower":
+        if smoke_test:
+            perceive = make_perceive(calib, cfg, target_color=target_color)
             states = build_pick_lift_lower_states(
                 robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, cfg=cfg,
-                select_state=select_state,
+                select_state=CvIkSelectState(motion, perceive),
             )
         elif task == 1:
-            assert shared_ik is not None
-            planner = Task1TransportPlanner(calib, cfg, shared_ik)
             states = build_task1_states(
                 robot=robot, motion=motion, perceive=make_task1_perceive(calib, cfg),
-                pick_state=pick_state, cfg=cfg, calib=calib, planner=planner,
+                pick_state=pick_state, cfg=cfg, calib=calib,
+                planner=Task1TransportPlanner(calib, cfg, shared_ik),
             )
-        elif zone_task:  # task == 2
-            assert shared_ik is not None
+        else:
             stack_planner = Task2StackPlanner(calib, cfg, shared_ik)
             logger.info(
                 "Task-2 tower at x=%.1f y=%.1f (reach %.0fmm): %d of %d levels reachable",
@@ -169,11 +119,6 @@ def run(
             states = build_task2_stack_states(
                 robot=robot, motion=motion, perceive=make_task1_perceive(calib, cfg),
                 pick_state=pick_state, cfg=cfg, calib=calib, planner=stack_planner,
-            )
-        else:
-            states = build_task2_states(
-                robot=robot, motion=motion, perceive=perceive, pick_state=pick_state, sensing_cfg=cfg.sensing,
-                select_state=select_state,
             )
 
         log_dir = Path(cfg.logging.log_dir)
@@ -191,19 +136,16 @@ def run(
             if task1_gather
             else f"budget {cfg.fsm.time_budget_s:.0f}s"
         )
-        logger.info("Task %d / %s starting with %s PICK (run %s, %s)", task, flow, pick_mode, run_id, budget)
+        logger.info("Task %d / %s starting (run %s, %s)", task, flow, run_id, budget)
         machine.run()
         return ctx
     finally:
-        # best-effort safe shutdown, also on exceptions mid-run
         if motion is not None:
             try:
                 motion.open_gripper()
                 motion.go_home()
             except Exception as e:
                 logger.warning("Safe-shutdown motion failed: %s", e)
-        if client is not None:
-            client.close()
         robot.disconnect()
         if camera_proc is not None:
             camera_proc.stop()
@@ -301,7 +243,6 @@ def dry_run_task2(cfg: AppConfig) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--task", type=int, choices=[1, 2, 3], required=True)
-    parser.add_argument("--pick-mode", choices=["cv_ik", "act"], default="cv_ik")
     parser.add_argument("--flow", choices=["task", "pick_lift_lower"], default="task")
     parser.add_argument("--color", help="Only select this colour (required by pick_lift_lower)")
     parser.add_argument("--config", default="src/configs/default.yaml")
@@ -312,8 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
     if args.task == 3:
-        if args.pick_mode != "cv_ik" or args.flow != "task" or args.color is not None:
-            parser.error("Task 3 uses its fixed CV+IK collection flow; omit --pick-mode, --flow and --color")
+        if args.flow != "task" or args.color is not None:
+            parser.error("Task 3 uses its fixed collection flow; omit --flow and --color")
         from runners.run_task3 import main as collect_main
 
         collect_argv = ["--config", args.config]
@@ -327,8 +268,8 @@ def main(argv: list[str] | None = None) -> int:
     run_id = time.strftime(f"task{args.task}_%Y%m%d_%H%M%S")
 
     if args.dry_run:
-        if not (args.task in (1, 2) and args.flow == "task" and args.pick_mode == "cv_ik"):
-            parser.error("--dry-run is supported for the default Task 1 / Task 2 CV+IK flows")
+        if not (args.task in (1, 2) and args.flow == "task"):
+            parser.error("--dry-run is supported for the Task 1 / Task 2 flows")
         try:
             return dry_run_task1(cfg) if args.task == 1 else dry_run_task2(cfg)
         except Exception as e:
@@ -336,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     try:
-        ctx = run(args.task, cfg, run_id, pick_mode=args.pick_mode, flow=args.flow, target_color=args.color)
+        ctx = run(args.task, cfg, run_id, flow=args.flow, target_color=args.color)
     except Exception as e:
         logger.error("Run aborted: %s", e)
         return 1

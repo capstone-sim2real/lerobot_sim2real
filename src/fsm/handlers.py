@@ -1,17 +1,10 @@
-"""Concrete FSM state handlers.
+"""Shared FSM states. Handlers receive their dependencies; they construct nothing.
 
-Wiring rules:
-  - handlers receive only interfaces (perceive callable, policy client,
-    MotionController, BaseRobotIO) + config — no construction inside;
-  - PLACE is a strategy seam: Task 1 injects SlotPlaceStrategy, Task 2
-    injects StackPlaceStrategy, and a future policy-driven stack-align can
-    slot in behind the same interface (AGENTS.md §4);
-  - HARD RULE: VERIFY never advances to TRANSPORT without a confirmed grasp.
+VERIFY never advances to TRANSPORT without a confirmed grasp.
 """
 
 from __future__ import annotations
 
-import abc
 import logging
 from typing import Callable
 
@@ -39,8 +32,7 @@ class SelectState(State):
         self._next_state = next_state
 
     def enter(self, ctx: RunContext) -> None:
-        # home first: consistent policy start pose AND the arm clears the
-        # top camera's view of the board
+        # home first so the arm is out of the top camera's view
         self._motion.go_home()
 
     def step(self, ctx: RunContext) -> StateName | None:
@@ -128,55 +120,3 @@ class ReleaseState(State):
     def step(self, ctx: RunContext) -> StateName | None:
         self._motion.open_gripper()
         return self._next_state
-
-
-class TransportState(State):
-    name = StateName.TRANSPORT
-
-    def __init__(self, motion: MotionController):
-        self._motion = motion
-
-    def step(self, ctx: RunContext) -> StateName | None:
-        self._motion.transport_to_zone()
-        return StateName.PLACE
-
-
-class PlaceStrategy(abc.ABC):
-    """Seam for the PLACE stage (rule-based now, policy-driven later)."""
-
-    @abc.abstractmethod
-    def place(self, ctx: RunContext) -> None: ...
-
-
-class SlotPlaceStrategy(PlaceStrategy):
-    """Task 1: drop into pre-recorded slot #placed_count."""
-
-    def __init__(self, motion: MotionController):
-        self._motion = motion
-
-    def place(self, ctx: RunContext) -> None:
-        self._motion.place_in_slot(ctx.placed_count)
-
-
-class StackPlaceStrategy(PlaceStrategy):
-    """Task 2: contact-based descent onto the tower."""
-
-    def __init__(self, motion: MotionController):
-        self._motion = motion
-
-    def place(self, ctx: RunContext) -> None:
-        contact = self._motion.stack_place()
-        ctx.extras.setdefault("stack_contacts", []).append(contact)
-
-
-class PlaceState(State):
-    name = StateName.PLACE
-
-    def __init__(self, strategy: PlaceStrategy):
-        self._strategy = strategy
-
-    def step(self, ctx: RunContext) -> StateName | None:
-        self._strategy.place(ctx)
-        ctx.placed_count += 1
-        ctx.last_note = f"placed_count={ctx.placed_count}"
-        return StateName.SELECT

@@ -1,6 +1,5 @@
 """CV+IK grasp planning and motion safety contracts."""
 
-import math
 
 import pytest
 
@@ -8,8 +7,14 @@ from config import AppConfig, MotionConfig, SensingConfig
 from control import MockRobotIO, TrajectoryPlayer, check_grasp, interpolate
 from control.sensing import GraspCheck
 from control import grasp as grasp_mod
-from control.grasp import GraspAttempt, GraspOutcome, GraspPlan, biased_grasp_xy, grasp_candidate_points, highest_reachable_hover, plan_grasp_attempts, run_grasp_attempts
-from control.ik import IkResult, gripper_frame_offset, tangent_square_grasp_yaw_deg
+from control.grasp import (
+    GraspAttempt,
+    GraspOutcome,
+    GraspPlan,
+    plan_grasp_attempts,
+    run_grasp_attempts,
+)
+from control.ik import IkResult
 
 
 class StubIk:

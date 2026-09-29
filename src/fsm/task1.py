@@ -43,9 +43,8 @@ def corrected_pick_xy(
 ) -> tuple[float, float]:
     """Push ultra-near picks outward and leave every other reach raw.
 
-    The oblique-camera far-reach ramp and the P1-9 front-row offsets that
-    used to stack here both over-corrected on hardware, so neither survives.
-    What is left is one flat boost inside pick_near_boost_max_radius_mm, cut
+    Far-reach ramps and per-row offsets over-corrected on hardware, so this
+    is one flat boost inside pick_near_boost_max_radius_mm, cut
     hard at that radius: of the measured points only P1 (157 mm) falls in it,
     and that is the band where the arm still visibly under-reaches.
     """
@@ -101,7 +100,7 @@ def block_priority(
 class Task1SelectState(State):
     """HOME, then select an outside-zone block or prove 5 s of absence.
 
-    Task 2 stacks with this same state (AGENTS.md §3): the two class
+    Task 2 stacks with this same state: the two class
     attributes below name the plan keys it publishes, and
     ``_active_detections`` is where a subclass drops detections it must not
     target. The ``task1_*`` bookkeeping keys are shared with Task 2 on
@@ -159,9 +158,8 @@ class Task1SelectState(State):
         """Handle a frame in which every visible block is deferred.
 
         Task 1 deliberately starts another sweep so a physical block is
-        never abandoned. Task 2 overrides this hook: repeatedly planning an
-        unreachable last block cannot improve the scene and used to spin at
-        roughly 1Hz until the global time budget or emergency stop.
+        never abandoned. Task 2 overrides this hook: re-planning an
+        unreachable last block cannot improve the scene, so it stops instead.
         """
         self._archive_round_attempts(ctx, colors)
         return None

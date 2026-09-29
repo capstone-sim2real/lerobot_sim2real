@@ -11,14 +11,10 @@ from pathlib import Path
 from typing import Any
 
 
-from camera.http import (
-    CameraServer,
-    CameraRequestHandler as CameraRequestHandler,
-    BOUNDARY as BOUNDARY,
-)
+from camera.http import CameraServer
 from camera.cross_calibration import CrossCalibration
 from camera.recorder import FrameRecorder
-from camera.stream import CameraStream, FrameCallback as FrameCallback
+from camera.stream import CameraStream
 
 DEFAULT_OVERLAY_CONFIG = (
     Path(__file__).resolve().parents[1] / "configs" / "default.yaml"

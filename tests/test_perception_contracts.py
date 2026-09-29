@@ -6,18 +6,9 @@ import cv2
 import numpy as np
 import pytest
 
-from camera.overlay import (
-    reject_metadata,
-)
 from config import AppConfig, PerceptionConfig
 from perception import detector
-from perception import (
-    BlockDetection,
-    PlaneCalibration,
-    calibrate_from_pairs,
-    detect_blocks,
-    detect_blocks_with_rejects,
-)
+from perception import BlockDetection, PlaneCalibration, calibrate_from_pairs, detect_blocks
 
 
 from core_helpers import _block_bgr, _calibration

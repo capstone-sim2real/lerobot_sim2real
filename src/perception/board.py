@@ -5,9 +5,9 @@ board and the robot are both bolted to the table, so their relative geometry
 never changes. Only the camera can move. That makes the detected corner set
 the reference for two things:
 
-  - drift detection (tools/camera_drift_check.py), and
+  - drift detection (tools/calibration/camera_drift_check.py), and
   - re-fitting the pixel->robot homography when the camera has shifted,
-    without redoing the manual FK point procedure (AGENTS.md §6, §8).
+    without redoing the manual FK point procedure.
 
 ``findChessboardCornersSB`` only returns a *complete rectangular* grid, so the
 arm parked in the camera's view splits the board and costs every corner below
@@ -104,7 +104,7 @@ def match_corners(
     Returns ``(ref_matched, cur_matched)``. Pairs further apart than
     ``max_match_px`` are dropped: beyond roughly half a chessboard square the
     nearest neighbour may be the *wrong* corner, because a chessboard repeats
-    every two squares and so has no globally unique origin (AGENTS.md §6).
+    every two squares and so has no globally unique origin.
     """
     if len(reference_px) == 0 or len(current_px) == 0:
         empty = np.empty((0, 2), dtype=np.float64)

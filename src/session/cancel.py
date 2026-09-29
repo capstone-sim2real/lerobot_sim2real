@@ -93,9 +93,6 @@ class CancellableRobotIO(BaseRobotIO):
     def read_joints(self) -> dict[str, float]:
         return self._inner.read_joints()
 
-    def read_observation(self) -> dict[str, Any]:
-        return self._inner.read_observation()
-
     def send_joints(self, positions: dict[str, float]) -> dict[str, float]:
         self._token.raise_if_set()
         return self._inner.send_joints(positions)
@@ -107,7 +104,7 @@ class CancellableRobotIO(BaseRobotIO):
         self._inner.set_torque(enabled)
 
     def __getattr__(self, name: str) -> Any:
-        # e.g. So101RobotIO.robot for the ACT policy client
+        # expose the wrapped IO's extras (e.g. So101RobotIO.robot)
         if name.startswith("_"):
             raise AttributeError(name)
         return getattr(self._inner, name)

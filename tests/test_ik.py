@@ -1,18 +1,17 @@
 """TopDownIK tests against the real URDF. Needs placo (extra: lerobot[kinematics]),
 so this module is skipped entirely in the lightweight/no-hardware test env
-(AGENTS.md §13) and only runs under ~/lerobot/.venv.
+(docs/design.md §9) and only runs under ~/lerobot/.venv.
 """
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
 pytest.importorskip("placo")
 
 from config import IkConfig  # noqa: E402
-from control.ik import ARM_JOINTS, TopDownIK  # noqa: E402
+from control.ik import TopDownIK
 from control.grasp import approach_hover_xy  # noqa: E402
 
 

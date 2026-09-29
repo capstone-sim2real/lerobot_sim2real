@@ -1,10 +1,5 @@
-"""CV+IK implementation of the FSM PICK state.
-
-This adapter owns only the pick phase.  It turns the block selected by
-``SelectState`` into a pre-solved grasp plan, runs the guarded retry loop,
-and retreats while keeping the gripper closed.  VERIFY, TRANSPORT, and PLACE
-remain the shared FSM handlers.
-"""
+"""CV+IK PICK state: pre-solve grasp attempts for the selected block, run them,
+and lift with the gripper closed. VERIFY decides whether the grasp held."""
 
 from __future__ import annotations
 
@@ -16,7 +11,6 @@ from config import AppConfig
 from control.grasp import GraspAttempt, plan_grasp_attempts, run_grasp_attempts
 from control.ik import TopDownIK
 from control.motion import MotionController
-from control.poses import Pose
 from control.robot_io import BaseRobotIO
 from control.trajectory import TrajectoryPlayer
 from fsm.handlers import SelectState
@@ -27,12 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class CvIkPickState(State):
-    """Pick the selected block through deterministic top-down IK.
-
-    ``grasp_z_mm`` comes from the venue calibration metadata: the calibration
-    plane is the top of a block, not the table.  The optional IK/player
-    injections keep this state unit-testable without placo or hardware.
-    """
+    """Top-down IK pick. ``grasp_z_mm`` is the calibrated block-top plane."""
 
     name = StateName.PICK
 
@@ -43,7 +32,6 @@ class CvIkPickState(State):
         motion: MotionController,
         cfg: AppConfig,
         grasp_z_mm: float,
-        retreat_pose: Pose | None,
         retreat_after_grasp: bool = True,
         radial_tilt_extra_key: str | None = None,
         max_grasp_attempts: int | None = None,
@@ -55,7 +43,6 @@ class CvIkPickState(State):
         self._motion = motion
         self._cfg = cfg
         self._grasp_z_mm = grasp_z_mm
-        self._retreat_pose = retreat_pose
         self._retreat_after_grasp = retreat_after_grasp
         self._radial_tilt_extra_key = radial_tilt_extra_key
         # None keeps the one rotated retry. Task 3 pins this to 1 so a
@@ -74,20 +61,9 @@ class CvIkPickState(State):
             ctx.last_note = f"cv_ik_{reason}_retry"
         return StateName.SELECT
 
-    def _retreat_with_block(self, held: GraspAttempt) -> None:
-        # ``attempt_grasp`` leaves a successful grasp at the low pick pose.
-        # Lift vertically first, then follow the pre-recorded retreat using
-        # arm joints only: a recorded pose may contain an open gripper value.
+    def _lift(self, held: GraspAttempt) -> None:
+        # A successful grasp ends at the low pick pose; lift straight up.
         self._player.move_to(held.hover.joints, tol=self._cfg.motion.transit_arrival_tol)
-        if self._retreat_pose is None:
-            return
-        retreat_arm = {joint: value for joint, value in self._retreat_pose.items() if joint != "gripper"}
-        if retreat_arm:
-            self._player.move_to(
-                retreat_arm,
-                max_step=1.0,
-                tol=self._cfg.motion.transit_arrival_tol,
-            )
 
     def step(self, ctx: RunContext) -> StateName | None:
         selection = ctx.extras.get("selection")
@@ -115,9 +91,7 @@ class CvIkPickState(State):
         )
         ctx.extras["grasp_plan"] = plan
 
-        # The centre point is preferred, but a calibration/IK miss at that
-        # exact point must not discard nearby grasp points that are solvable.
-        # ``run_grasp_attempts`` filters the unreachable entries itself.
+        # run_grasp_attempts skips unreachable entries; give up only if none solve.
         if not any(attempt.reachable for attempt in plan.attempts):
             reach = math.hypot(x_mm, y_mm)
             worst = min(a.grasp.position_error_mm for a in plan.attempts)
@@ -142,7 +116,7 @@ class CvIkPickState(State):
                 return self._retry_or_skip(ctx, "empty")
             ctx.extras["ik_pick_attempt"] = held
             if self._retreat_after_grasp:
-                self._retreat_with_block(held)
+                self._lift(held)
         except TimeoutError as exc:
             logger.warning("CV+IK PICK motion timed out: %s", exc)
             return self._retry_or_skip(ctx, "motion_timeout")
@@ -152,14 +126,7 @@ class CvIkPickState(State):
 
 
 class CvIkSelectState(SelectState):
-    """SELECT that homes the arm without commanding the jaws.
-
-    The recorded home pose carries a nearly-closed gripper value, so the
-    stock SELECT closes the jaws on the way home and the next pick attempt
-    immediately reopens them — a visible open/close on every retry that
-    achieves nothing. The CV+IK pick opens the jaws itself as its first
-    action, so it does not need home to set them.
-    """
+    """SELECT that homes without touching the gripper; the pick opens it anyway."""
 
     def enter(self, ctx: RunContext) -> None:
         self._motion.go_home(include_gripper=False)

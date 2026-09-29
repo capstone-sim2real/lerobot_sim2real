@@ -53,7 +53,7 @@ class YoloeOverlayClient:
                 json.dump(self.cfg.to_dict(), handle)
             self._config_path = Path(handle.name)
         process = subprocess.Popen(
-            [str(_resolve(self.root, self.cfg.yoloe.worker_python)), "-m", "tools.yoloe_worker",
+            [str(_resolve(self.root, self.cfg.yoloe.worker_python)), "-m", "tools.yoloe.worker",
              "--config", str(self._config_path),
              "--calibration", str(_resolve(self.root, self.cfg.perception.calibration_path))],
             cwd=self.root, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,

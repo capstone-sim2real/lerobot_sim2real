@@ -1,7 +1,7 @@
 """Where a released block actually lands, against where it was told to.
 
 The pixel->mm calibration is not what limits placement accuracy here. Its
-own residuals are RMS ~5mm / worst ~14mm (AGENTS.md §6), while placements
+own residuals are RMS ~5mm / worst ~14mm, while placements
 miss by tens of millimetres, and the reason is written into
 ``motion.arrival_tol``: ``release_at`` opens the jaws once every joint is
 within the configured tolerance (currently 4 degrees). At 283mm reach, this

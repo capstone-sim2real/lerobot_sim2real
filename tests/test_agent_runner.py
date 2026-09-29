@@ -1,7 +1,7 @@
 """The LLM loop, driven by scripted providers (no network, no API key)."""
 
-from agent.provider.fake import RuleBasedFakeProvider, ScriptedProvider
-from agent.provider.types import Message, TextDelta, ToolCall, ToolCallEvent, TurnEnd
+from agent.provider.fake import ScriptedProvider
+from agent.provider.types import TextDelta, ToolCall, ToolCallEvent, TurnEnd
 from agent.runner import AgentRunner
 from agent.tools import ToolRegistry
 from config import AppConfig
