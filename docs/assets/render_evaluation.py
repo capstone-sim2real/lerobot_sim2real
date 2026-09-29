@@ -1,4 +1,4 @@
-"""Render README evaluation cards from the preserved report aggregate."""
+"""Render README evaluation cards from the report and the latest team update."""
 import json
 from pathlib import Path
 import matplotlib
@@ -10,6 +10,7 @@ from matplotlib.patches import FancyBboxPatch
 HERE = Path(__file__).resolve().parent
 DATA = HERE.parent / 'report/최종보고서/evidence/20260914/team_results.json'
 data = json.loads(DATA.read_text())
+update = json.loads((HERE / 'evaluation-update.json').read_text())
 font = FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc')
 bold = FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc')
 fig = plt.figure(figsize=(12, 7.3), facecolor='#f3f6fa')
@@ -25,7 +26,7 @@ def rect(x, y, w, h, color):
                               facecolor=color, edgecolor='none'))
 
 text(42, 680, 'SO-101  /  실기 평가', 24, weight=True)
-text(42, 640, '최종보고서 팀 집계 · 집계 확인 2026.09.14', 12, '#5c6f83')
+text(42, 640, 'Task 1: 최종보고서 집계  /  Task 2·파지: 최신 팀 집계', 12, '#5c6f83')
 rect(34, 205, 554, 390, '#ffffff'); rect(612, 205, 554, 390, '#ffffff')
 t1, t2 = data['task1'], data['task2']
 n, success = t1['mission_attempts'], t1['mission_successes']
@@ -39,24 +40,23 @@ text(62, 291, f'성공 {success}회', 12, '#008975')
 text(552, 291, f'실패 {t1["mission_failures"]}회', 12, '#bc5650', ha='right')
 text(62, 246, '실패 원인: 파지 중 블록이 사거리 밖으로 밀려 시간 초과', 10, '#5c6f83')
 text(640, 555, 'TASK 2  ·  블록 탑쌓기', 17, weight=True)
-text(640, 515, '같은 20회 시행에서 도달한 최대 높이 · 누적', 12, '#5c6f83')
-for level, y, color in [('3',443,'#4e81ed'), ('4',369,'#4e81ed'), ('5',295,'#a8b6ca')]:
-    count = t2['cumulative_height_reach_counts'][level]
-    total = t2['mission_attempts']
-    text(640,y+19,f'{level}단 이상',13,weight=True)
-    text(1136,y+19,f'{count/total:.0%}  ·  {count}/{total}회',12,ha='right')
-    rect(640,y-15,496,16,'#edf1f7')
-    if count: rect(640,y-15,496*count/total,16,color)
-text(640, 238, '5단 도달 0회 · 종료 시 높이 / 5초 유지 여부 미집계', 11, '#5c6f83')
+text(640, 515, '블록 수별 적층 성공률', 12, '#5c6f83')
+for label, rate, y in [
+    ('5블록 적층', update['task2']['five_block_stack_success_rate'], 425),
+    ('4블록 적층', update['task2']['four_block_stack_success_rate'], 325),
+]:
+    text(640, y+25, label, 15, weight=True)
+    text(1136, y+25, f'{rate:.0%}', 24, '#376bd7', True, ha='right')
+    rect(640, y-15, 496, 20, '#edf1f7')
+    rect(640, y-15, 496*rate, 20, '#4e81ed')
+text(640, 238, '팀 제공 성공률 · 시행 횟수 및 5초 유지 조건 미제공', 11, '#5c6f83')
 rect(34, 56, 1132, 127, '#e5ecf5')
-text(62, 148, '파지 성공률', 14, weight=True)
-text(62, 111, '재시도를 포함한 전체 파지 시도 기준', 11, '#5c6f83')
-for name, item, x in [('Task 1', t1, 485), ('Task 2', t2, 830)]:
-    good, total = item['grasp_successes'], item['grasp_attempts_including_retries']
-    text(x,146,name,12,'#5c6f83',True)
-    text(x,103,f'{good/total:.1%}',25,weight=True)
-    text(x+125,103,f'{good}/{total}회',12,'#5c6f83')
-text(42, 27, '출처: 최종보고서 team_results.json  ·  현재 커밋 재평가 결과가 아닌 보고서 집계', 10, '#5c6f83')
+text(62, 148, '단일 블록 파지 성공률', 16, weight=True)
+text(62, 105, 'Task 구분 없이 집계', 12, '#5c6f83')
+grasp = update['single_block_grasp']
+text(700, 116, f"{grasp['successes']/grasp['attempts']:.0%}", 36, '#008975', True)
+text(865, 116, f"{grasp['attempts']}회 중 {grasp['successes']}회 성공", 17, weight=True)
+text(42, 27, '출처: 최종보고서 team_results.json + README 갱신 시 제공한 팀 평가 집계', 10, '#5c6f83')
 fig.savefig(HERE/'evaluation-results.png', dpi=160, facecolor=fig.get_facecolor())
 fig.savefig(HERE/'evaluation-results.svg', facecolor=fig.get_facecolor())
 plt.close(fig)

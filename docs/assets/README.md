@@ -7,7 +7,8 @@
 
 ## 실기 평가 그래프
 
-- `evaluation-results.png` / `.svg`: 최종보고서의 2026-09-14 확인 팀 집계 시각화.
-- 원자료: `../report/최종보고서/evidence/20260914/team_results.json`.
+- `evaluation-results.png` / `.svg`: Task 1 보고서 집계와 Task 2·단일 파지 최신 팀 집계 시각화.
+- Task 1 원자료: `../report/최종보고서/evidence/20260914/team_results.json`.
+- Task 2·파지 원자료: `evaluation-update.json` (README 수정 대화에서 사용자가 제공).
 - 재생성: 프로젝트 루트에서 `python3 docs/assets/render_evaluation.py` (Matplotlib, Noto Sans CJK 필요).
-- Task 2는 같은 20회의 최대 높이 누적 도달률이며 미션 완료율이나 5초 유지율이 아니다.
+- Task 2 시행 횟수와 5초 유지 조건, 파지 재시도 포함 여부는 제공되지 않았다.

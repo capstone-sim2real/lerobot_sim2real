@@ -1,0 +1,16 @@
+{
+  "source": "Team update supplied by user in README revision conversation",
+  "reported_on": "2026-09-29",
+  "task2": {
+    "five_block_stack_success_rate": 0.67,
+    "four_block_stack_success_rate": 1.0,
+    "attempt_counts": null,
+    "five_second_hold_verified": null
+  },
+  "single_block_grasp": {
+    "successes": 99,
+    "attempts": 100,
+    "scope": "task-independent",
+    "retry_policy": null
+  }
+}
