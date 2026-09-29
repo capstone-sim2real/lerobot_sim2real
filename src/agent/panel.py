@@ -1,23 +1,32 @@
-"""Robot-agent web server with guarded primitives and calibration tools."""
+"""so101-panel: web control panel with Task 1/2 buttons, guarded primitives and calibration tools.
+
+    so101-panel --env-file .env --output experiments/llm_free_missions/live --port 8109
+
+Owns the robot serial bus like so101-agent; never run the two together.
+"""
+
 import argparse
-import json
 import logging
+import os
 import time
+from dataclasses import replace
 from pathlib import Path
-from config import load_config
+
+from agent.calibration_manual_tools import build_calibration_manual_tools
+from agent.provider import build_provider
+from agent.provider.types import ToolSpec
 from agent.server import API_KEY_ENV, EventHub, create_app, load_env_file, make_skills_factory
 from agent.service import AgentService
-from agent.tools import ToolDef, _obj, _mm
-from agent.provider.types import ToolSpec
-from agent.provider import build_provider
-from session.cancel import CancelToken
+from agent.tools import ToolDef, _mm, _obj
+from config import load_config
 from session.calibration_motion import CalibrationMotion
+from session.cancel import CancelToken
 from session.primitives import PrimitiveSkills
-
 
 
 class CalibrationSkills(CalibrationMotion, PrimitiveSkills):
     pass
+
 
 def definitions(cfg):
     return [
@@ -70,12 +79,9 @@ WEB_MANUAL_TOOLS = frozenset({
 
 
 def configure_manual_tools(service, cfg):
-    from dataclasses import replace
-
-    from agent.calibration_manual_tools import build_calibration_manual_tools
     defs = definitions(cfg) + build_calibration_manual_tools(cfg)
     primitive_names = frozenset(service.registry._tools)
-    # Compatibility adapters must not replace canonical primitive schemas.
+    # Calibration adapters never replace the canonical primitive schemas.
     for definition in defs:
         service.registry._tools.setdefault(definition.spec.name, definition)
     allowed = primitive_names | WEB_MANUAL_TOOLS | frozenset(d.spec.name for d in defs)
@@ -101,90 +107,72 @@ def configure_manual_tools(service, cfg):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output",required=True)
-    parser.add_argument("--port",type=int,default=8109)
-    parser.add_argument("--dry-run",action="store_true")
-    parser.add_argument("--set",action="append",default=[],dest="overrides")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--output", required=True, help="directory for transcripts and calibration records")
+    parser.add_argument("--port", type=int, default=8109)
+    parser.add_argument("--set", action="append", default=[], dest="overrides", help="key.path=value")
     parser.add_argument("--provider", choices=["anthropic", "openai", "gemini", "fake"])
     parser.add_argument("--model")
     parser.add_argument("--env-file")
-    args=parser.parse_args()
-    root=Path(__file__).resolve().parents[2]
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parents[2]
     load_env_file(args.env_file)
-    output=Path(args.output).resolve()
-    if args.dry_run:
-        import sys
-        sys.path.insert(0, str(root / "tests"))
-        from agent_helpers import make_skills
-        sk,_,_=make_skills({"green":(180,0)})
-        cal=CalibrationSkills(sk.s,output)
-        assert cal.calibration_prepare("green").ok
-        base=cal.baseline.xy_mm
-        assert cal.calibration_adjust(left_mm=2).ok
-        assert cal.calibration_adjust(left_mm=999).reason=="limit_exceeded"
-        cal.s.cancel.set()
-        from session.cancel import Cancelled
-        try:
-            cal.calibration_adjust(left_mm=1)
-        except Cancelled:
-            pass
-        else:
-            raise AssertionError("STOP failed")
-        assert cal.attempt is None
-        cal.s.cancel.clear()
-        assert cal.calibration_prepare("green").ok
-        result=cal.calibration_grasp()
-        assert result.ok
-        print(json.dumps({"simulation_only":True,"baseline":base,"result":result.to_envelope()}))
-        return
-    cfg=load_config(str(root/"src/configs/default.yaml"),overrides=[
-        "camera.auto_start=false",
-        "agent.lock_path=/home/ehdrms/lerobot_sim2real/local_operations/robot.lock"] + args.overrides)
+    output = Path(args.output).resolve()
+    cfg = load_config(str(root / "src/configs/default.yaml"),
+                      overrides=["camera.auto_start=false", *args.overrides])
     logging.basicConfig(level=logging.INFO)
     # Browser polling is routine traffic; keep the terminal for actions and failures.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
     provider_name = args.provider or cfg.agent.provider
     if args.model:
         cfg.agent.models[provider_name] = args.model
     required = API_KEY_ENV.get(provider_name, [])
-    if required and not any(__import__("os").environ.get(name) for name in required):
+    if required and not any(os.environ.get(name) for name in required):
         parser.error(f"{' / '.join(required)} is required for provider {provider_name}")
     try:
         provider = build_provider(cfg.agent, provider=provider_name)
     except (ImportError, ValueError) as exc:
         parser.error(f"cannot initialize provider {provider_name}: {exc}")
     logging.info("agent server provider=%s model=%s", provider.name, provider.model)
-    hub=EventHub()
+
     from agent.yoloe_overlay import PerceptionBackendController
-    perception_backend=PerceptionBackendController(cfg,root)
+
+    hub = EventHub()
+    perception_backend = PerceptionBackendController(cfg, root)
+
+    def build_calibration(session):
+        from session.calibration_joint_limit import CalibrationJointLimitIO
+        from session.cancel import CancellableRobotIO
+
+        assert isinstance(session.robot, CancellableRobotIO)
+        session.robot._inner = CalibrationJointLimitIO(session.robot._inner, cfg.agent.calibration_clearance)
+        return CalibrationSkills(session, output)
+
     def service_builder(publish):
-        raw_publish = publish
-        publish = lambda event: raw_publish({**event, "emitted_monotonic_ns": time.monotonic_ns()})
-        cancel=CancelToken()
-        def build_calibration(session):
-            from session.calibration_joint_limit import CalibrationJointLimitIO
-            from session.cancel import CancellableRobotIO
-            assert isinstance(session.robot,CancellableRobotIO)
-            session.robot._inner=CalibrationJointLimitIO(session.robot._inner,cfg.agent.calibration_clearance)
-            return CalibrationSkills(session,output)
-        skills_factory=make_skills_factory(
-            cfg,cancel,sim=False,skills_builder=build_calibration,
+        def stamped(event):
+            publish({**event, "emitted_monotonic_ns": time.monotonic_ns()})
+
+        cancel = CancelToken()
+        skills_factory = make_skills_factory(
+            cfg, cancel, sim=False, skills_builder=build_calibration,
             perception_backend=perception_backend,
         )
-        service=AgentService(cfg,provider=provider,
-                             skills_factory=skills_factory,cancel=cancel,publish=publish,
-                             transcript_dir=str(output/"transcripts"))
+        service = AgentService(cfg, provider=provider, skills_factory=skills_factory, cancel=cancel,
+                               publish=stamped, transcript_dir=str(output / "transcripts"))
         configure_manual_tools(service, cfg)
         return service
-    app=create_app(cfg,service_builder,hub,perception_backend=perception_backend)
+
     import uvicorn
-    server=uvicorn.Server(uvicorn.Config(
-        app,host="0.0.0.0",port=args.port,timeout_graceful_shutdown=5,access_log=False,
+
+    app = create_app(cfg, service_builder, hub, perception_backend=perception_backend)
+    server = uvicorn.Server(uvicorn.Config(
+        app, host="0.0.0.0", port=args.port, timeout_graceful_shutdown=5, access_log=False,
     ))
-    app.state.uvicorn_server=server
+    app.state.uvicorn_server = server
     server.run()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

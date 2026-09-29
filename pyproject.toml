@@ -52,6 +52,7 @@ agent-gemini = [
 so101-run = "runners.run_task:main"
 so101-collect = "runners.run_task3:main"
 so101-agent = "agent.server:main"
+so101-panel = "agent.panel:main"
 so101-camera = "camera.server:main"
 so101-detect = "tools.view_detect:main"
 so101-calibrate = "tools.calibrate_homography:main"

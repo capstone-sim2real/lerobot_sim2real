@@ -13,7 +13,7 @@ from agent.tools import ToolRegistry
 from agent_helpers import make_skills
 from session.calibration_joint_limit import CalibrationJointLimitIO
 from session.cancel import Cancelled
-from tools.agent_server import configure_manual_tools, definitions, WEB_MANUAL_TOOLS
+from agent.panel import CalibrationSkills, configure_manual_tools, definitions, WEB_MANUAL_TOOLS
 
 
 def configured(sk):
@@ -85,3 +85,18 @@ def test_manual_registration_preserves_pixel_calibration_argument(monkeypatch):
     result = svc.registry.execute(ToolCall("valid", "place_at_pixel", args))
     assert not result.is_error
     place.assert_called_once_with(**args)
+
+
+def test_calibration_prepare_adjust_stop_and_grasp_in_simulation(tmp_path):
+    sk, _, _ = make_skills({"green": (180, 0)})
+    cal = CalibrationSkills(sk.s, tmp_path)
+    assert cal.calibration_prepare("green").ok
+    assert cal.calibration_adjust(left_mm=2).ok
+    assert cal.calibration_adjust(left_mm=999).reason == "limit_exceeded"
+    cal.s.cancel.set()
+    with pytest.raises(Cancelled):
+        cal.calibration_adjust(left_mm=1)
+    assert cal.attempt is None
+    cal.s.cancel.clear()
+    assert cal.calibration_prepare("green").ok
+    assert cal.calibration_grasp().ok

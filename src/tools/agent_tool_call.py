@@ -1,4 +1,7 @@
-"""One synchronous manual API call, with an operator SSE connection and evidence."""
+"""Call one so101-panel manual tool and save camera snapshots and SSE events as evidence.
+
+    python -m tools.agent_tool_call move_to_cell --arguments '{"x": 2, "y": 3}' --output var/evidence
+"""
 import argparse
 import json
 import queue
@@ -7,14 +10,18 @@ import time
 import urllib.request
 from pathlib import Path
 
+from config import load_config
+
 
 def main():
-    ap=argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("tool")
-    ap.add_argument("--arguments",default="{}")
-    ap.add_argument("--output",required=True)
-    ap.add_argument("--base-url",default="http://127.0.0.1:8109")
-    args=ap.parse_args()
+    ap.add_argument("--arguments", default="{}")
+    ap.add_argument("--output", required=True)
+    ap.add_argument("--base-url", default="http://127.0.0.1:8109")
+    ap.add_argument("--camera-url", default="http://127.0.0.1:8090")
+    args = ap.parse_args()
+    cfg = load_config("src/configs/default.yaml")
     out=Path(args.output).resolve()/str(time.time_ns())
     out.mkdir(parents=True)
     headers={"Content-Type":"application/json","x-so101-control-version":"cell-grid-v1"}
@@ -29,8 +36,6 @@ def main():
     dispatch_ns = None
     ready=threading.Event()
     results=queue.Queue()
-    from config import load_config
-    cfg = load_config("src/configs/default.yaml")
     stream=urllib.request.urlopen(urllib.request.Request(args.base_url+"/api/events",headers=headers),timeout=cfg.agent.tool_timeout_s)
     def read():
         try:
@@ -52,10 +57,8 @@ def main():
         raise TimeoutError("SSE not ready")
     def snapshots(phase):
         for camera in ("shoulder","wrist"):
-            b=urllib.request.urlopen("http://127.0.0.1:8090/snapshot/"+camera+".jpg",timeout=5).read()
+            b=urllib.request.urlopen(f"{args.camera_url}/snapshot/{camera}.jpg",timeout=5).read()
             (out/(phase+"-"+camera+".jpg")).write_bytes(b)
-    from config import load_config
-    cfg = load_config("src/configs/default.yaml")
     capture_done = threading.Event()
     def capture():
         i = 0
@@ -77,10 +80,7 @@ def main():
               request("/api/manual",{"tool":args.tool,"arguments":json.loads(args.arguments)}))
         if not sent.get("accepted"):
             raise RuntimeError(str(sent))
-        # Read server's configured timeout, rather than an independent motion limit.
-        from config import load_config
-        timeout=load_config("src/configs/default.yaml").agent.tool_timeout_s
-        result=results.get(timeout=timeout)
+        result=results.get(timeout=cfg.agent.tool_timeout_s)
         if "stream_error" in result:
             raise RuntimeError(str(result))
         (out/"result.json").write_text(json.dumps(result,indent=2))
@@ -94,7 +94,6 @@ def main():
         if capture_thread.is_alive():
             capture_thread.join(timeout=cfg.agent.camera_view.read_timeout_s)
         request("/api/lease/release",{})
-        # Daemon SSE reader exits with this short-lived client.
 
 
 if __name__=="__main__":
