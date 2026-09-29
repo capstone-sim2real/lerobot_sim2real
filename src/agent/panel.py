@@ -30,52 +30,137 @@ class CalibrationSkills(CalibrationMotion, PrimitiveSkills):
 
 def definitions(cfg):
     return [
-        ToolDef(ToolSpec("calibration_probe_positive","Incremental positive wrist range probe, bounded by URDF and load stop.",_obj({})),
-                lambda sk,a:sk.calibration_probe_positive()),
-        ToolDef(ToolSpec("calibration_wrist_clearance_pose","Neutral wrist and gated outward observation cell; no rotation test yet.",_obj({"x":{"type":"integer"},"y":{"type":"integer"}},["x","y"])),
-                lambda sk,a:sk.calibration_wrist_clearance_pose(**a)),
-        ToolDef(ToolSpec("calibration_retry_wrist","Fixed requested wrist angle test after lift, with load guard.",_obj({})),
-                lambda sk,a:sk.calibration_retry_wrist()),
-        ToolDef(ToolSpec("calibration_clearance_status","Read-only scene completeness and target clearance ranking.",_obj({})),
-                lambda sk,a:sk.calibration_clearance_status()),
-        ToolDef(ToolSpec("calibration_pick_guarded","One continuous guarded pick, automatic recording; no retry.",
-                        _obj({"color":{"type":"string","enum":list(cfg.perception.color_prototypes)}},["color"])),
-                lambda sk,a:sk.calibration_pick_guarded(**a)),
-        ToolDef(ToolSpec("calibration_descend_step","Bounded descent then pause for camera inspection; never close.",
-                        _obj({"down_mm":_mm("Positive downward distance",cfg.agent.relative.max_jog_mm)},["down_mm"])),
-                lambda sk,a:sk.calibration_descend_step(**a)),
-        ToolDef(ToolSpec("calibration_descend_guarded","Descend with load guard; leave jaws open.",_obj({})),
-                lambda sk,a:sk.calibration_descend_guarded()),
-        ToolDef(ToolSpec("calibration_close_lift","Close and lift after guarded descent and visual check.",_obj({})),
-                lambda sk,a:sk.calibration_close_lift()),
-        ToolDef(ToolSpec("calibration_prepare_visible","Observe from a gated board cell, then approach CV target.",
-                        _obj({"color":{"type":"string","enum":list(cfg.perception.color_prototypes)},
-                              "x":{"type":"integer"},"y":{"type":"integer"}},["color","x","y"])),
-                lambda sk,a:sk.calibration_prepare_visible(**a)),
-        ToolDef(ToolSpec("calibration_continuous","Production pick_block with zero added offset, no observation pause.",
-                        _obj({"color":{"type":"string","enum":list(cfg.perception.color_prototypes)}},["color"])),
-                lambda sk,a:sk.calibration_continuous(**a)),
-        ToolDef(ToolSpec("calibration_prepare","Home, detect named block, approach baseline hover.",
-                        _obj({"color":{"type":"string","enum":list(cfg.perception.color_prototypes)}},["color"])),
-                lambda sk,a:sk.calibration_prepare(**a)),
-        ToolDef(ToolSpec("calibration_correct_hover","Bounded hover tracking correction; dry-run first.",
-                        _obj({"dry_run":{"type":"boolean"}})),
-                lambda sk,a:sk.calibration_correct_hover(**a)),
-        ToolDef(ToolSpec("calibration_adjust","Bounded residual in fixed baseline axes.",
-                        _obj({k:_mm("Relative mm",cfg.agent.relative.max_jog_mm)
-                              for k in ("forward_mm","left_mm")})),
-                lambda sk,a:sk.calibration_adjust(**a)),
-        ToolDef(ToolSpec("calibration_grasp","One attempt, lift and verify; no automatic retries.",_obj({})),
-                lambda sk,a:sk.calibration_grasp()),
+        ToolDef(
+            ToolSpec(
+                "calibration_probe_positive",
+                "Incremental positive wrist range probe, bounded by URDF and load stop.",
+                _obj({}),
+            ),
+            lambda sk, a: sk.calibration_probe_positive(),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_wrist_clearance_pose",
+                "Neutral wrist and gated outward observation cell; no rotation test yet.",
+                _obj({"x": {"type": "integer"}, "y": {"type": "integer"}}, ["x", "y"]),
+            ),
+            lambda sk, a: sk.calibration_wrist_clearance_pose(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_retry_wrist",
+                "Fixed requested wrist angle test after lift, with load guard.",
+                _obj({}),
+            ),
+            lambda sk, a: sk.calibration_retry_wrist(),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_clearance_status",
+                "Read-only scene completeness and target clearance ranking.",
+                _obj({}),
+            ),
+            lambda sk, a: sk.calibration_clearance_status(),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_pick_guarded",
+                "One continuous guarded pick, automatic recording; no retry.",
+                _obj({"color": {"type": "string", "enum": list(cfg.perception.color_prototypes)}}, ["color"]),
+            ),
+            lambda sk, a: sk.calibration_pick_guarded(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_descend_step",
+                "Bounded descent then pause for camera inspection; never close.",
+                _obj(
+                    {"down_mm": _mm("Positive downward distance", cfg.agent.relative.max_jog_mm)}, ["down_mm"]
+                ),
+            ),
+            lambda sk, a: sk.calibration_descend_step(**a),
+        ),
+        ToolDef(
+            ToolSpec("calibration_descend_guarded", "Descend with load guard; leave jaws open.", _obj({})),
+            lambda sk, a: sk.calibration_descend_guarded(),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_close_lift", "Close and lift after guarded descent and visual check.", _obj({})
+            ),
+            lambda sk, a: sk.calibration_close_lift(),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_prepare_visible",
+                "Observe from a gated board cell, then approach CV target.",
+                _obj(
+                    {
+                        "color": {"type": "string", "enum": list(cfg.perception.color_prototypes)},
+                        "x": {"type": "integer"},
+                        "y": {"type": "integer"},
+                    },
+                    ["color", "x", "y"],
+                ),
+            ),
+            lambda sk, a: sk.calibration_prepare_visible(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_continuous",
+                "Production pick_block with zero added offset, no observation pause.",
+                _obj({"color": {"type": "string", "enum": list(cfg.perception.color_prototypes)}}, ["color"]),
+            ),
+            lambda sk, a: sk.calibration_continuous(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_prepare",
+                "Home, detect named block, approach baseline hover.",
+                _obj({"color": {"type": "string", "enum": list(cfg.perception.color_prototypes)}}, ["color"]),
+            ),
+            lambda sk, a: sk.calibration_prepare(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_correct_hover",
+                "Bounded hover tracking correction; dry-run first.",
+                _obj({"dry_run": {"type": "boolean"}}),
+            ),
+            lambda sk, a: sk.calibration_correct_hover(**a),
+        ),
+        ToolDef(
+            ToolSpec(
+                "calibration_adjust",
+                "Bounded residual in fixed baseline axes.",
+                _obj(
+                    {k: _mm("Relative mm", cfg.agent.relative.max_jog_mm) for k in ("forward_mm", "left_mm")}
+                ),
+            ),
+            lambda sk, a: sk.calibration_adjust(**a),
+        ),
+        ToolDef(
+            ToolSpec("calibration_grasp", "One attempt, lift and verify; no automatic retries.", _obj({})),
+            lambda sk, a: sk.calibration_grasp(),
+        ),
     ]
 
 
 # Generic descent/pick/rotation intentionally stay out: calibration tools own
 # their load/clearance checks. Jog retains the standard height/workspace/IK gates.
-WEB_MANUAL_TOOLS = frozenset({
-    "move_arm", "move_to_cell", "open_gripper", "return_to_home",
-    "place_here", "place_on_table", "place_at_cell", "place_at_slot", "place_at_pixel",
-})
+WEB_MANUAL_TOOLS = frozenset(
+    {
+        "move_arm",
+        "move_to_cell",
+        "open_gripper",
+        "return_to_home",
+        "place_here",
+        "place_on_table",
+        "place_at_cell",
+        "place_at_slot",
+        "place_at_pixel",
+    }
+)
 
 
 def configure_manual_tools(service, cfg):
@@ -91,6 +176,7 @@ def configure_manual_tools(service, cfg):
             continue
         if name in WEB_MANUAL_TOOLS or name in primitive_names or name.startswith("calibration_"):
             run = definition.run
+
             def manual_run(skills, arguments, run=run, name=name):
                 # A jog/open/release invalidates the earlier visually checked
                 # calibration pose, including when the ensuing command fails.
@@ -100,6 +186,7 @@ def configure_manual_tools(service, cfg):
                     skills.attempt = None
                     skills.descent_ready = False
                 return run(skills, arguments)
+
             definition = replace(definition, run=manual_run)
         tools[name] = definition
     service.registry._tools = tools
@@ -107,7 +194,9 @@ def configure_manual_tools(service, cfg):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--output", required=True, help="directory for transcripts and calibration records")
     parser.add_argument("--port", type=int, default=8109)
     parser.add_argument("--set", action="append", default=[], dest="overrides", help="key.path=value")
@@ -119,8 +208,9 @@ def main():
     root = Path(__file__).resolve().parents[2]
     load_env_file(args.env_file)
     output = Path(args.output).resolve()
-    cfg = load_config(str(root / "src/configs/default.yaml"),
-                      overrides=["camera.auto_start=false", *args.overrides])
+    cfg = load_config(
+        str(root / "src/configs/default.yaml"), overrides=["camera.auto_start=false", *args.overrides]
+    )
     logging.basicConfig(level=logging.INFO)
     # Browser polling is routine traffic; keep the terminal for actions and failures.
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -156,20 +246,35 @@ def main():
 
         cancel = CancelToken()
         skills_factory = make_skills_factory(
-            cfg, cancel, sim=False, skills_builder=build_calibration,
+            cfg,
+            cancel,
+            sim=False,
+            skills_builder=build_calibration,
             perception_backend=perception_backend,
         )
-        service = AgentService(cfg, provider=provider, skills_factory=skills_factory, cancel=cancel,
-                               publish=stamped, transcript_dir=str(output / "transcripts"))
+        service = AgentService(
+            cfg,
+            provider=provider,
+            skills_factory=skills_factory,
+            cancel=cancel,
+            publish=stamped,
+            transcript_dir=str(output / "transcripts"),
+        )
         configure_manual_tools(service, cfg)
         return service
 
     import uvicorn
 
     app = create_app(cfg, service_builder, hub, perception_backend=perception_backend)
-    server = uvicorn.Server(uvicorn.Config(
-        app, host="0.0.0.0", port=args.port, timeout_graceful_shutdown=5, access_log=False,
-    ))
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=args.port,
+            timeout_graceful_shutdown=5,
+            access_log=False,
+        )
+    )
     app.state.uvicorn_server = server
     server.run()
 
