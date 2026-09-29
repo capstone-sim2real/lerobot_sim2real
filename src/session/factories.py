@@ -48,7 +48,6 @@ def make_pick_state(
         motion=motion,
         cfg=cfg,
         grasp_z_mm=calibration_grasp_z_mm(calib),
-        retreat_pose=None,
         retreat_after_grasp=retreat_after_grasp,
         radial_tilt_extra_key=radial_tilt_extra_key,
         max_grasp_attempts=max_grasp_attempts,

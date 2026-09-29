@@ -1,6 +1,8 @@
 """FSM budget/verification rules and CV+IK PICK adapter contracts."""
 
 
+import numpy as np
+
 from config import AppConfig, FsmConfig, SensingConfig
 from control import MockRobotIO
 from control.ik import IkResult
@@ -8,8 +10,8 @@ from fsm.handlers import VerifyState
 from fsm.ik_handler import CvIkPickState
 from fsm.machine import StateMachine
 from fsm.states import RunContext, State, StateName
-from perception.detector import BlockDetection
-from perception.select import SelectionResult
+from perception.homography import PlaneCalibration
+from session.factories import make_pick_state
 
 
 class _Select(State):
@@ -97,30 +99,9 @@ class _FakeIk:
         return block_angle_deg, block_angle_deg
 
 
-class _FakePlayer:
-    def __init__(self):
-        self.goals = []
-
-    def move_to(self, goal, **kwargs):
-        self.goals.append(dict(goal))
-
-
-class _FakeMotion:
-    def __init__(self):
-        self.opened = 0
-
-    def open_gripper(self):
-        self.opened += 1
-
-
-def _cv_ik_context():
-    target = BlockDetection("green", (220.0, -20.0), 1600.0, 1.0, 1.0, 1.0, [])
-    ctx = RunContext(fsm=FsmConfig(max_retries_per_block=1))
-    ctx.target_id = "green:6,0"
-    ctx.extras["selection"] = SelectionResult(target, ctx.target_id, 1, [target])
-    return ctx
-
-
-def _cv_ik_state(motion, player):
-    return CvIkPickState(robot=object(), motion=motion, cfg=AppConfig(), grasp_z_mm=8.0,
-                          ik=_FakeIk(), player=player)
+def test_make_pick_state_builds_cv_ik_pick_on_the_calibrated_block_plane():
+    calib = PlaneCalibration(H=np.eye(3), image_size=(10, 10), square_mm=1.0, meta={"grasp_z_mm_mean": 4.0})
+    state = make_pick_state(robot=MockRobotIO(), motion=object(), cfg=AppConfig(), calib=calib, ik=_FakeIk())
+    assert isinstance(state, CvIkPickState)
+    assert state.name is StateName.PICK
+    assert state._grasp_z_mm == 4.0
