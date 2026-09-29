@@ -1,9 +1,4 @@
-"""Composable FSM flows built from the shared state handlers.
-
-The individual states know how to select, pick, verify, or move.  This
-module is the only place that decides *which state follows which*, so a
-hardware smoke test does not need to fork the production Task 1 FSM.
-"""
+"""FSM flows: which state follows which for each task."""
 
 from __future__ import annotations
 
@@ -18,11 +13,8 @@ from control.task2_stack import Task2StackPlanner
 from fsm.handlers import (
     ContextMotionState,
     PerceiveFn,
-    PlaceState,
     ReleaseState,
     SelectState,
-    StackPlaceStrategy,
-    TransportState,
     VerifyState,
 )
 from fsm.states import RunContext, State, StateName
@@ -91,27 +83,6 @@ def build_task1_states(
     }
 
 
-def build_task3_states(
-    *,
-    robot: BaseRobotIO,
-    motion: MotionController,
-    perceive: Task1PerceiveFn,
-    pick_state: State,
-    cfg: AppConfig,
-    calib: PlaneCalibration,
-    planner: Task1TransportPlanner,
-    recorder: EpisodeRecorder,
-    prompt=input,
-    stop_requested: Callable[[], bool] = lambda: False,
-) -> dict[StateName, State]:
-    """Compatibility entry point for the standalone Task 3 runner."""
-    return build_task1_states(
-        robot=robot, motion=motion, perceive=perceive, pick_state=pick_state,
-        cfg=cfg, calib=calib, planner=planner, recorder=recorder,
-        prompt=prompt, stop_requested=stop_requested,
-    )
-
-
 def build_task2_stack_states(
     *,
     robot: BaseRobotIO,
@@ -122,11 +93,7 @@ def build_task2_stack_states(
     calib: PlaneCalibration,
     planner: Task2StackPlanner,
 ) -> dict[StateName, State]:
-    """Stack every block at one point; SELECT/PICK/VERIFY/TRANSPORT are Task 1's.
-
-    The CV+IK Task 2. ``build_task2_states`` below is the earlier
-    recorded-pose generation, kept for the pose-registry path.
-    """
+    """Stack every block at one point; SELECT/PICK/VERIFY/TRANSPORT follow Task 1."""
     if pick_state.name is not StateName.PICK:
         raise ValueError("pick_state must implement the PICK state")
     player = TrajectoryPlayer(robot, cfg.motion)
@@ -137,34 +104,6 @@ def build_task2_stack_states(
         StateName.TRANSPORT: Task2TransportState(planner, player, cfg),
         StateName.PLACE: Task2PlaceState(robot, motion, player, cfg),
     }
-
-
-def build_task2_states(
-    *,
-    robot: BaseRobotIO,
-    motion: MotionController,
-    perceive: PerceiveFn,
-    pick_state: State,
-    sensing_cfg: SensingConfig,
-    select_state: State | None = None,
-) -> dict[StateName, State]:
-    """Production stacking flow: SELECT → PICK → VERIFY → TRANSPORT → PLACE."""
-    states = _common_states(
-        robot=robot,
-        motion=motion,
-        perceive=perceive,
-        pick_state=pick_state,
-        sensing_cfg=sensing_cfg,
-        after_verified=StateName.TRANSPORT,
-        select_state=select_state,
-    )
-    states.update(
-        {
-            StateName.TRANSPORT: TransportState(motion),
-            StateName.PLACE: PlaceState(StackPlaceStrategy(motion)),
-        }
-    )
-    return states
 
 
 def _held_attempt(ctx: RunContext) -> GraspAttempt:

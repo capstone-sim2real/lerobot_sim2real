@@ -285,7 +285,6 @@ class ArmSession:
                 motion=self.motion,
                 cfg=self.cfg,
                 grasp_z_mm=self.grasp_z_mm,
-                retreat_pose=None,
                 retreat_after_grasp=True,
                 radial_tilt_extra_key=PICK_TILT_KEY,
                 ik=self.ik,

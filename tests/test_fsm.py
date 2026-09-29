@@ -7,7 +7,6 @@ from control import MockRobotIO
 from control.grasp import GraspAttempt, GraspPlan
 from control.ik import IkResult
 from fsm import ik_handler
-from fsm.flows import build_pick_lift_lower_states, build_task1_states, build_task2_states
 from fsm.handlers import VerifyState
 from fsm.ik_handler import CvIkPickState
 from fsm.machine import StateMachine
@@ -16,7 +15,6 @@ from fsm.task1 import Task1Perception
 from perception.detector import BlockDetection
 from perception.homography import PlaneCalibration
 from perception.select import SelectionResult
-from runners.run_task import make_pick_state
 
 
 class _Select(State):
@@ -130,4 +128,4 @@ def _cv_ik_context():
 
 def _cv_ik_state(motion, player):
     return CvIkPickState(robot=object(), motion=motion, cfg=AppConfig(), grasp_z_mm=8.0,
-                          retreat_pose={"shoulder_pan": 5.0, "gripper": 2.0}, ik=_FakeIk(), player=player)
+                          ik=_FakeIk(), player=player)

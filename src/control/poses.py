@@ -1,18 +1,11 @@
-"""Named joint pose registry, backed by a YAML file.
+"""Named joint poses (poses.yaml), recorded on the arm with tools.hardware.record_pose.
 
-Poses are recorded on the physical arm with tools/record_pose.py and shared
-by everything that needs a fixed pose: the FSM's scripted motion, the PICK
-policy's retreat-detection, and the episode-recording convention (home /
-retreat must be the *same numbers* during teleop recording and at runtime —
-this file is the single source of truth, EPISODE.md §1).
-
-Values are in the robot's action units (normalized; gripper 0-100), so a
-recalibration invalidates every recorded pose — re-record after calibrating.
+Values are in the robot's normalized action units, so a motor recalibration
+invalidates every recorded pose.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import yaml
@@ -71,16 +64,5 @@ class PoseRegistry:
         missing = [n for n in names if n not in self._poses]
         if missing:
             raise KeyError(
-                f"Missing recorded pose(s): {missing}. Record them with tools/record_pose.py"
+                f"Missing recorded pose(s): {missing}. Record them with tools.hardware.record_pose"
             )
-
-    def ladder(self, prefix: str) -> list[tuple[str, Pose]]:
-        """Poses named ``<prefix>_<int>`` sorted by the numeric suffix
-        (descent keyframes: _0 highest ... _N lowest)."""
-        pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)$")
-        found = []
-        for name in self._poses:
-            m = pattern.match(name)
-            if m:
-                found.append((int(m.group(1)), name))
-        return [(name, self.get(name)) for _, name in sorted(found)]

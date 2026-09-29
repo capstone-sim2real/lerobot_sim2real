@@ -141,11 +141,6 @@ motion:
   move_timeout_s: 10.0
   gripper_action_wait_s: 0.6
   home_pose: home
-  retreat_pose: retreat
-  transport_waypoints: [zone_approach]
-  slot_poses: [slot_0, slot_1, slot_2, slot_3, slot_4]
-  tower_approach_pose: tower_approach
-  tower_ladder_prefix: tower_descent
   contact_backoff_ticks: 1
   place_settle_s: 0.5
   # 최신 9점 캘리브레이션 좌표를 그대로 사용한다. 과거 실기 보정은 비활성.
@@ -188,23 +183,6 @@ ik:
   # 이 한계는 "IK가 못 풀었다"를 걸러내는 것이지, 파지 정확도 자체를 보장하지 않음.
   max_position_error_mm: 20.0
   max_tilt_error_deg: 6.0
-
-policy:
-  server_address: 127.0.0.1:8080     # Tailscale의 policy_server 주소로 변경
-  policy_type: act
-  pretrained_name_or_path: ""        # policy_server가 도는 머신 기준 경로
-  task: "Pick the nearest block, lift it vertically, and move to the fixed retreat pose."
-  policy_device: cuda
-  actions_per_chunk: 50
-  chunk_size_threshold: 0.5
-  aggregate_fn_name: weighted_average
-  aggregate_weight: 0.5
-  fps: 30.0
-  connect_timeout_s: 5.0
-  retreat_tol: 4.0
-  retreat_hold_ticks: 5
-  retreat_check_joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll]
-  pick_timeout_s: 25.0
 
 fsm:
   num_blocks: 5
