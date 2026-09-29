@@ -551,6 +551,8 @@ class Task2Config:
     drop_clearance_mm: float = 15.0
     # Assumed near-edge staging distance outside the tape, pending physical validation.
     route_standoff_mm: float = 35.0
+    # Assumed extra vertical gap above the local tower footprint.
+    tower_path_clearance_mm: float = 15.0
     # Fifth-floor clearance posture; model-only assumptions until hardware trial.
     upper_entry_level: int = 5
     upper_entry_clearance_mm: float = 30.0
@@ -1322,6 +1324,8 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError("task2.upper_entry_radial_tilt_deg must be -45..0")
     if cfg.task2.route_standoff_mm <= 0:
         raise ValueError("task2.route_standoff_mm must be positive")
+    if cfg.task2.tower_path_clearance_mm < 0:
+        raise ValueError("task2.tower_path_clearance_mm must be non-negative")
     if cfg.task2.contact_descent_levels != 0:
         raise ValueError(
             "task2.contact_descent_levels must be 0; Task 2 contact descent is disabled"

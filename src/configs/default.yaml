@@ -265,6 +265,8 @@ task2:
   drop_clearance_mm: 15.0
   # 구역 안쪽을 통과하지 않는 근접 경유점 거리 (실기 확인 전 가정값).
   route_standoff_mm: 35.0
+  # 적층점 주변만 막고, 추정 탑 높이 위에는 이만큼 여유를 둔다 (실기 미검증).
+  tower_path_clearance_mm: 15.0
   # 5층 진입 시 팔꿈치를 접어 높은 경유점에 도달한다 (모델 결과, 실기 미검증).
   upper_entry_level: 5
   upper_entry_clearance_mm: 30.0

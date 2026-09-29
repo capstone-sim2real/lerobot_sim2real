@@ -818,23 +818,48 @@ class PrimitiveSkills(Skills):
                                 retry_advice="ask_operator", placement=placed.data)
         return placed
 
-    def _task2_path_outside_zone(self, start, waypoints) -> bool:
-        """Model-FK preflight of commanded joint sweeps before tower entry."""
-        from perception.zone import point_in_zone
-        previous = start
-        left_zone = not point_in_zone(
-            self.s.ik.forward_position_mm(previous)[:2], self.s.calib
+    def _task2_path_clear_of_tower(self, start, waypoints) -> bool:
+        """Preflight the local tower footprint, allowing travel above its estimated top.
+
+        The top camera only locates blocks in XY. A visible block contributes one
+        floor; prior releases contribute their *planned* floor, not a measured
+        tower height. An empty tower does not obstruct a far-side pick.
+        """
+        tower_xy = self.s.stack.stack_xy_mm
+        radius = self.cfg.agent.place_clear_radius_mm
+        visible = (self._observed_scene is not None and any(
+            math.dist(block.center_mm, tower_xy) < radius
+            for block in self._observed_scene.inside.values()
+        ))
+        occupied_levels = max(
+            (floor + 1 for floor in self._task2_placed_floors), default=0
         )
+        if visible:
+            occupied_levels = max(occupied_levels, 1)
+        if not occupied_levels:
+            return True
+
+        # grasp_z is the first block's top-face plane. The carried block hangs
+        # below the gripper frame, so include its height in the clearance.
+        top_z = self.s.grasp_z_mm + (occupied_levels - 1) * self.cfg.task2.block_height_mm
+        clear_z = top_z + self.cfg.task2.tower_path_clearance_mm
+        if self.s.held is not None:
+            clear_z += self.cfg.task2.block_height_mm
+
+        def blocked(joints):
+            x, y, z = self.s.ik.forward_position_mm(joints)
+            return math.dist((x, y), tower_xy) < radius and z < clear_z
+
+        previous = start
+        left_tower = not blocked(previous)
         for goal in waypoints:
             for command in interpolate(previous, goal, self.cfg.motion.max_step_per_tick):
                 pose = {**previous, **command}
-                inside = point_in_zone(
-                    self.s.ik.forward_position_mm(pose)[:2], self.s.calib
-                )
-                if left_zone and inside:
+                inside = blocked(pose)
+                if left_tower and inside:
                     return False
                 if not inside:
-                    left_zone = True
+                    left_tower = True
             previous = {**previous, **goal}
         return True
 
@@ -966,7 +991,7 @@ class PrimitiveSkills(Skills):
             ("pregrasp", lambda: self.move_to_target(
                 "object", "pregrasp", object_id=object_id,
                 observation_id=observation_id,
-                _route_guard=(self._task2_path_outside_zone
+                _route_guard=(self._task2_path_clear_of_tower
                               if not block.in_zone else None))),
             ("align", lambda: self.align_gripper(object_id, observation_id)),
             ("grasp", lambda: self.move_to_target(
@@ -996,8 +1021,8 @@ class PrimitiveSkills(Skills):
             return self._result(False, action, "ik_gate", str(exc),
                                 retry_advice="ask_operator", t0=t0,
                                 failed_stage="transport", holding=color)
-        # The prior apex_place sat inside the zone. Stay outside until the
-        # final stage-to-hover placement entry, and preflight every joint sweep.
+        # Skip the old inside-zone apex. Only low sweeps through the local
+        # tower footprint are blocked before the final placement entry.
         carry = tuple((name, waypoint) for name, waypoint in transfer.carry
                       if name != "apex_place")
         if any(over_ik_gate(waypoint, self.cfg) for _, waypoint in carry):
@@ -1008,14 +1033,14 @@ class PrimitiveSkills(Skills):
                                 color=color, floor=floor, level=level_number, holding=color)
         current = self.s.robot.read_joints()
         route = tuple(waypoint.joints for _, waypoint in carry) + (outside_stage.joints,)
-        if not self._task2_path_outside_zone(current, route):
-            # The optional pick apex can curve across the zone even when a
-            # direct joint sweep to the outside stage stays on the near side.
-            if self._task2_path_outside_zone(current, (outside_stage.joints,)):
+        if not self._task2_path_clear_of_tower(current, route):
+            # The optional pick apex can sweep low through the tower even
+            # when direct travel to the outside stage stays clear.
+            if self._task2_path_clear_of_tower(current, (outside_stage.joints,)):
                 carry = ()
             else:
                 return self._result(False, action, "limit_exceeded",
-                                    "Task 2 carry would cross the occupied target zone",
+                                    "Task 2 carry would cross the tower below clearance",
                                     retry_advice="ask_operator", t0=t0,
                                     failed_stage="transport", holding=color)
 
@@ -1082,16 +1107,14 @@ class PrimitiveSkills(Skills):
                                 release_fk_mm=list(actual), drop_z_mm=drop_z)
 
         def retreat_outside():
-            # Rise over the tower before any lateral motion. After crossing
-            # the near edge, no joint-interpolated segment may re-enter it.
-            current = self.s.robot.read_joints()
+            # Rise over the tower before lateral travel; reject low re-entry.
             home_joints = {joint: value for joint, value in
                            self.s.poses.get(self.cfg.motion.home_pose).items()
                            if joint != "gripper"}
-            if (not self._task2_path_outside_zone(entry.joints, (outside_stage.joints,))
-                    or not self._task2_path_outside_zone(outside_stage.joints,
+            if (not self._task2_path_clear_of_tower(entry.joints, (outside_stage.joints,))
+                    or not self._task2_path_clear_of_tower(outside_stage.joints,
                                                          (home_joints,))):
-                return self._fail("stack_retreat", "Retreat re-enters the target zone",
+                return self._fail("stack_retreat", "Retreat re-enters the tower below clearance",
                                   "limit_exceeded")
             self.s.player.move_to(entry.joints,
                                   tol=self.cfg.motion.transit_arrival_tol)

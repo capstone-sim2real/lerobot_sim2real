@@ -617,3 +617,34 @@ def test_stop_recovery_uses_direct_home_when_low_path_gate_would_refuse(monkeypa
     result = sk.recover_and_home()
     assert result.ok and result.data["arm_at_home"]
     home.assert_called_once_with(include_gripper=False)
+
+
+def test_task2_route_guard_only_blocks_low_sweep_through_local_tower(monkeypatch):
+    sk, _, robot = fixture()
+    tower_x, tower_y = sk.s.stack.stack_xy_mm
+    grasp_z = sk.s.grasp_z_mm
+    start = {**robot.read_joints(), "shoulder_pan": 0.0}
+    goal = {**start, "shoulder_pan": 100.0}
+    height = grasp_z + 10.0
+    y_offset = 0.0
+
+    def fake_fk(joints):
+        return (tower_x + (joints["shoulder_pan"] - 50.0) * 2.0,
+                tower_y + y_offset, height)
+
+    monkeypatch.setattr(sk.s.ik, "forward_position_mm", fake_fk)
+    guard = sk._task2_path_clear_of_tower
+    assert guard(start, (goal,))  # Empty zone: far-side pick is allowed.
+
+    sk._task2_placed_floors[0] = "yellow"
+    assert not guard(start, (goal,))
+    y_offset = sk.cfg.agent.place_clear_radius_mm + 1.0
+    assert guard(start, (goal,))  # Other parts of the target zone stay open.
+    y_offset = 0.0
+    height = grasp_z + sk.cfg.task2.tower_path_clearance_mm + 1.0
+    assert guard(start, (goal,))  # Cross above one block.
+
+    sk._task2_placed_floors[1] = "red"
+    assert not guard(start, (goal,))  # Second recorded floor raises the wall.
+    height += sk.cfg.task2.block_height_mm
+    assert guard(start, (goal,))
