@@ -108,7 +108,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config, overrides=args.overrides)
-    cfg.robot.cameras = {}  # motor bus only
     robot = So101RobotIO(cfg.robot)
     try:
         robot.connect()

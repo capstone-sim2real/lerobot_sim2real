@@ -9,9 +9,9 @@ from config import AppConfig, load_config
 
 
 def test_config_loads_overrides_and_rejects_unknown_key(tmp_path):
-    cfg = load_config(overrides=["fsm.time_budget_s=180", "robot.cameras={}"])
+    cfg = load_config(overrides=["fsm.time_budget_s=180", "robot.id=bench"])
     assert cfg.fsm.time_budget_s == 180.0
-    assert cfg.robot.cameras == {}
+    assert cfg.robot.id == "bench"
     bad = tmp_path / "bad.yaml"
     bad.write_text("fsm:\n  typo_key: 1\n")
     with pytest.raises(ValueError, match="typo_key"):

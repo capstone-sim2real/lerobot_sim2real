@@ -434,9 +434,6 @@ class RecordingRobotIO(BaseRobotIO):
     def read_joints(self) -> dict[str, float]:
         return self._inner.read_joints()
 
-    def read_observation(self) -> dict[str, Any]:
-        return self._inner.read_observation()
-
     def read_loads(self) -> dict[str, int]:
         return self._inner.read_loads()
 

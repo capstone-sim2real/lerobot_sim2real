@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -16,9 +15,6 @@ class RobotIOConfig:
     # Keep the arm holding its safe pose after a normal task shutdown.
     # Releasing torque must be an explicit manual operation.
     disable_torque_on_disconnect: bool = False
-    # Kept as an escape hatch for legacy ACT experiments. The CV+IK runner
-    # leaves this empty so ``camera.server`` is the sole /dev/video* owner.
-    cameras: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass

@@ -49,7 +49,6 @@ def main(argv: list[str] | None = None) -> int:
     if not args.name:
         parser.error("--name is required unless --list is given")
 
-    cfg.robot.cameras = {}  # motor bus only
     robot = So101RobotIO(cfg.robot)
     try:
         robot.connect()

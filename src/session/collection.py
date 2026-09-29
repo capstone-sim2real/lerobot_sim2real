@@ -78,7 +78,6 @@ class CollectionRobotIO(BaseRobotIO):
     @property
     def is_connected(self): return self.inner.is_connected
     def read_joints(self): return self.inner.read_joints()
-    def read_observation(self): return self.inner.read_observation()
     def read_loads(self): return self.inner.read_loads()
     def set_torque(self, enabled): self.inner.set_torque(enabled)
 
