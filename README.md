@@ -134,6 +134,8 @@ Task 1의 완료는 배치 명령 횟수가 아니라 **홈 위치에서 다시 
 
 ![Task 1 완료율 93.3%, Task 2 5블록 적층 성공률 67%·4블록 적층 성공률 100%, 단일 블록 파지 성공률 99%](docs/assets/evaluation-results.png)
 
+[그래프 PDF](docs/assets/evaluation-results.pdf) · [벡터 SVG](docs/assets/evaluation-results.svg)
+
 | 평가 항목 | 결과 | 집계 기준 |
 |---|---:|---|
 | Task 1 미션 완료율 | **93.3% · 28/30회** | 180초 안에 블록 5개를 지정 구역에 배치; 최종보고서 집계 |
