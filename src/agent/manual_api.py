@@ -43,6 +43,16 @@ def register_manual_api(app, service, *, control_ui_version):
         body = await request.json()
         return reply(service().chat(token_of(request), str(body.get("text", ""))))
 
+    @app.post("/api/mission")
+    async def mission(request: Request):
+        stale = require_current_ui(request)
+        if stale is not None:
+            return stale
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "task must be 1 or 2"}, status_code=400)
+        return reply(service().mission(token_of(request), body.get("task")))
+
     @app.post("/api/jog")
     async def jog(request: Request):
         body = await request.json()

@@ -80,6 +80,24 @@ def far_reach_tilt_deg(
     return -(base_tilt + (maximum - base_tilt) * fraction)
 
 
+def block_priority(
+    center_mm: tuple[float, float],
+    calib: PlaneCalibration,
+    cfg: AppConfig,
+) -> tuple[float, float, float, float]:
+    """Shared Task 1/2 target order: distant reach with a screen-centre bias."""
+    bx, by = calib.base_xy_mm or (0.0, 0.0)
+    image_mid_x = calib.image_size[0] / 2
+    image_half_width = image_mid_x or 1.0
+    pixel_x = float(calib.board_to_pixel([center_mm])[0][0])
+    center_offset = min(1.0, abs(pixel_x - image_mid_x) / image_half_width)
+    return (
+        math.hypot(center_mm[0] - bx, center_mm[1] - by)
+        - cfg.task1.selection_center_bias_mm * center_offset,
+        -center_offset, -center_mm[0], -center_mm[1],
+    )
+
+
 class Task1SelectState(State):
     """HOME, then select an outside-zone block or prove 5 s of absence.
 
@@ -196,22 +214,9 @@ class Task1SelectState(State):
             eligible = detections
 
         bx, by = self._calib.base_xy_mm or (0.0, 0.0)
-        image_mid_x = self._calib.image_size[0] / 2
-        image_half_width = image_mid_x or 1.0
-        centers_px = self._calib.board_to_pixel([d.center_mm for d in eligible])
-        center_offsets = {
-            id(det): min(1.0, abs(float(pixel[0]) - image_mid_x) / image_half_width)
-            for det, pixel in zip(eligible, centers_px)
-        }
         target = max(
             eligible,
-            key=lambda d: (
-                math.hypot(d.center_mm[0] - bx, d.center_mm[1] - by)
-                - self._cfg.task1.selection_center_bias_mm * center_offsets[id(d)],
-                -center_offsets[id(d)],
-                -d.center_mm[0],
-                -d.center_mm[1],
-            ),
+            key=lambda d: block_priority(d.center_mm, self._calib, self._cfg),
         )
         target_id = target.color  # exactly one physical block per colour
         # Slot assignment belongs after VERIFY. A selected block may fail and

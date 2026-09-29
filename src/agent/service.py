@@ -187,6 +187,54 @@ class AgentService:
         self._spawn(turn, "so101-agent-turn")
         return 202, {"accepted": True}
 
+    def mission(self, token: str | None, task: int) -> tuple[int, dict[str, Any]]:
+        """Run the existing composite tools without entering AgentRunner."""
+        if type(task) is not int or task not in (1, 2):
+            return 400, {"error": "task must be 1 or 2"}
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        if not self.gate.try_begin(token, f"task_{task}"):
+            return 409, {"error": "busy", **self.gate.snapshot()}
+        self.cancel.clear()
+
+        def run() -> None:
+            fault = False
+            try:
+                from perception.homography import PlaneCalibration
+                from .primitive_mission import PrimitiveMission
+
+                calib = PlaneCalibration.load(self.cfg.perception.calibration_path)
+
+                def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+                    if self.cancel.is_set():
+                        return {"ok": False, "reason": "cancelled",
+                                "detail": "비상정지로 실행하지 않았습니다."}
+                    call_id = f"mission_{next(self._ids)}"
+                    self._publish({"type": "tool_call", "id": call_id, "name": name,
+                                   "arguments": arguments, "mission": task})
+                    result = self.registry.execute(ToolCall(call_id, name, arguments))
+                    self._publish({"type": "tool_result", "id": call_id, "name": name,
+                                   "result": result.content, "mission": task})
+                    return result.content
+
+                result = PrimitiveMission(
+                    self.cfg, calib, call, stopped=self.cancel.is_set,
+                    emit=self._publish,
+                ).run(task)
+                logger.info("Task %s no-LLM mission ended: %s", task, result)
+                fault = result["status"] in ("needs_recovery", "stopped")
+            except Exception as exc:
+                logger.exception("primitive mission failed")
+                fault = True
+                self._publish({"type": "mission_result", "task": task,
+                               "status": "needs_recovery",
+                               "detail": f"미션 실행 오류: {type(exc).__name__}: {exc}"})
+            finally:
+                self._after_command(fault)
+
+        self._spawn(run, f"so101-task-{task}")
+        return 202, {"accepted": True, "task": task, "mode": "no_llm"}
+
     # Tools the manual control panel may call directly, bypassing the LLM.
     # Everything here is also an ordinary LLM tool (agent.tools.build_tools);
     # this only decides what a physical button on the page is allowed to fire.

@@ -295,6 +295,13 @@ function handleEvent(event) {
       break;
     case "tool_call": if (!event.direct) toolCall(event); break;
     case "tool_result": handleToolResult(event); break;
+    case "mission_step":
+      $("mission-status").textContent = "Task " + event.task + ": " + event.color + " 블록 실행 중…";
+      break;
+    case "mission_result":
+      $("mission-status").textContent = "Task " + event.task + ": " + event.detail;
+      addMessage(["complete", "placed_unverified"].includes(event.status) ? "system" : "error", "Task " + event.task + ": " + event.detail);
+      break;
     case "turn_end": streamingBubble = null; break;
     case "stop_pressed": if (event.effective) addMessage("system", "비상정지 요청됨"); break;
     case "keyboard_jog_end": showToast(event.message,"bad"); break;
@@ -318,6 +325,7 @@ function applyControl(snapshot) {
   const manualControls = [
     $("input"), $("send"), $("mic"), $("reset"), $("jog-step"), $("manual-home"),
     $("observe-now"), $("pick-here"), $("collection-status"), $("open-gripper"),
+    $("mission-task-1"), $("mission-task-2"),
     $("cell-x"), $("cell-y"), $("go-cell"), $("perception-backend"),
     ...document.querySelectorAll(".jog-btn"),
   ];
@@ -386,6 +394,14 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.repea
 $("home-button").addEventListener("click", () => api("/api/home"));
 $("lock-retry").addEventListener("click", acquireLease);
 $("reset").addEventListener("click", () => api("/api/reset"));
+for (const task of [1, 2]) {
+  $("mission-task-" + task).addEventListener("click", async () => {
+    if (!isOperator || control.state !== "idle") return;
+    const { status, data } = await api("/api/mission", { task });
+    if (status === 202) $("mission-status").textContent = "Task " + task + ": 시작 중…";
+    else showToast(data.error || "Task " + task + " 시작 실패 (HTTP " + status + ")", "bad");
+  });
+}
 
 async function directRequest(path, body) {
   if (directPending || control.state !== "idle" || !isOperator) return;
