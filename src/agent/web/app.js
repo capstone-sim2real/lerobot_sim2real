@@ -388,6 +388,7 @@ async function send(text) {
 $("composer").addEventListener("submit", (e) => { e.preventDefault(); send($("input").value); });
 function pressStop() {
   api("/api/stop");
+  $("mission-status").textContent = "정지 후 home 복귀를 시도합니다…";
 }
 $("stop").addEventListener("click", pressStop);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.repeat) pressStop(); });

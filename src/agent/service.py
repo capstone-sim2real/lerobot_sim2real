@@ -93,6 +93,8 @@ class AgentService:
         self.places: dict[str, Any] = {}
         self.started = False
         self._keyboard_jog = None
+        self._auto_home_token: str | None = None
+        self._auto_home_lock = threading.Lock()
         self._telemetry_future = None
         self._telemetry_cache = {}
 
@@ -353,11 +355,26 @@ class AgentService:
             robot_fault = robot_fault or cleanup.robot_fault
         fault = robot_fault or self.cancel.is_set()
         self.gate.finish(robot_fault=fault, message="동작이 중단되었습니다. home 복귀가 필요합니다." if fault else None)
+        with self._auto_home_lock:
+            self._maybe_auto_home_locked()
 
-    def stop(self) -> dict[str, Any]:
-        # STOP only cancels motion. Homing is a separate, deliberate action:
-        # the interrupted pose may be too low for a safe automatic retreat.
-        stopped = self.gate.request_stop()
+    def _maybe_auto_home_locked(self) -> None:
+        token = self._auto_home_token
+        if token is not None and self.gate.try_begin_home(token):
+            self._auto_home_token = None
+            self._spawn(self._home_job, "so101-agent-auto-home")
+
+    def stop(self, token: str | None = None) -> dict[str, Any]:
+        # STOP cancels an active motion first. A valid operator's STOP then
+        # starts one home recovery after that motion has fully unwound.
+        with self._auto_home_lock:
+            state = self.gate.state
+            stopped = self.gate.request_stop()
+            if stopped and state.value != "homing" and self.gate.check(token):
+                self._auto_home_token = token
+                self._maybe_auto_home_locked()
+            elif state.value == "homing":
+                self._auto_home_token = None
         self._publish({"type": "stop_pressed", "effective": stopped})
         return {"stopped": stopped, **self.gate.snapshot()}
 

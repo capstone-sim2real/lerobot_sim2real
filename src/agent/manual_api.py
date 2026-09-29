@@ -110,8 +110,8 @@ def register_manual_api(app, service, *, control_ui_version):
         return stale or reply(service().direct(token_of(request), name, arguments))
 
     @app.post("/api/stop")
-    async def stop():
-        return service().stop()
+    async def stop(request: Request):
+        return service().stop(token_of(request))
 
     @app.post("/api/home")
     async def home(request: Request):

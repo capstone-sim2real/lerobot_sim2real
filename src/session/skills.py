@@ -1111,7 +1111,11 @@ class Skills:
             s.held = None
             if released is not None:
                 s.last_block_color = released
-        lifted, at_home = s.return_home_safely()
+        # Explicit STOP recovery uses the measured-joint trajectory directly.
+        # The normal low-hover preflight may be unsatisfiable after an
+        # interrupted move; the operator requested home even from that pose.
+        s.motion.go_home(include_gripper=False)
+        lifted, at_home = False, s.arm_at_home()
         ok = at_home and open_error is None
         detail = (
             "그리퍼를 열고 home으로 복귀했습니다." if ok else

@@ -589,3 +589,15 @@ def test_low_home_path_requires_rise_before_lateral_sweep():
         [(250.0, 0.0, 20.0), (220.0, 0.0, 40.0),
          (158.0, 0.0, 8.0)],
         (157.0, 0.0), **common)
+
+
+def test_stop_recovery_uses_direct_home_when_low_path_gate_would_refuse(monkeypatch):
+    sk, _, _ = fixture()
+    monkeypatch.setattr(sk.s, "return_home_safely",
+                        Mock(side_effect=AssertionError("low path gate must not block STOP home")))
+    home = Mock()
+    monkeypatch.setattr(sk.s.motion, "go_home", home)
+    monkeypatch.setattr(sk.s, "arm_at_home", lambda: True)
+    result = sk.recover_and_home()
+    assert result.ok and result.data["arm_at_home"]
+    home.assert_called_once_with(include_gripper=False)

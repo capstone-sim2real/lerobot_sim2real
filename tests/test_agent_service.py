@@ -129,3 +129,20 @@ def test_stop_while_idle_waits_for_explicit_home():
     service.wait_idle()
     assert service.gate.state is ControlState.IDLE and skills.homed == 1
     service.shutdown()
+
+
+def test_operator_stop_automatically_homes_after_active_tool_stops():
+    cfg = AppConfig()
+    service, skills, events = _service(
+        [[ToolCallEvent(ToolCall("a", "close_gripper", {})), TurnEnd("tool_use")]], cfg
+    )
+    token = service.acquire_lease(None)
+    service.chat(token, "미션 1")
+    assert skills.started.wait(5)
+    assert service.stop(token)["stopped"]
+    service.wait_idle()
+    assert skills.homed == 1
+    assert service.gate.state is ControlState.IDLE
+    assert any(event.get("name") == "recover_and_home"
+               for event in events if event.get("type") == "tool_result")
+    service.shutdown()
