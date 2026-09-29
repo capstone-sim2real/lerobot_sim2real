@@ -4,11 +4,11 @@ Placo's IK is seed-sensitive: seeded from the current/actual pose it can
 converge 200-350mm off target for a lateral move, because copying the
 current orientation demands a pose the 5-DOF arm cannot reach. Seeded from
 a pre-computed top-down configuration instead, the same solver converges to
-millimeter-level error (in the URDF model — AGENTS.md §6 documents the
-larger, position-dependent error the real arm's FK carries beyond that).
+millimeter-level error in the URDF model. The real arm adds the calibration
+error recorded in the venue calibration ``meta``.
 
-``lerobot``/``placo`` are imported lazily inside methods so that importing
-this module (and therefore ``pick_stack``) never requires them — only constructing a ``TopDownIK`` does.
+``lerobot``/``placo`` are imported lazily: only constructing a ``TopDownIK``
+requires them.
 """
 
 from __future__ import annotations
@@ -138,8 +138,8 @@ class TopDownIK:
     """Solves (x_mm, y_mm, z_mm, yaw_deg) -> arm joint angles (degrees).
 
     ``yaw_deg`` is the desired jaw-plane rotation in the robot base frame
-    (e.g. the detected block angle, folded mod 90 for a square block —
-    AGENTS.md §9). Excludes the gripper joint; callers set that separately.
+    (e.g. the detected block angle, folded mod 90 for a square block).
+    Excludes the gripper joint; callers set that separately.
     """
 
     def __init__(self, cfg: IkConfig, project_root: Path | str = "."):

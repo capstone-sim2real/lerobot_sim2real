@@ -1,7 +1,7 @@
 """URDF collision-mesh bounds for experimental neighbour screening.
 
 Each mesh keeps its own box. Moving-jaw angles may be supplied for the executed opening/closing segment;
-the legacy default conservatively covers the full URDF range. Mesh boxes
+the default conservatively covers the full URDF range. Mesh boxes
 are conservative, and this is not a full-arm collision checker.
 """
 import math

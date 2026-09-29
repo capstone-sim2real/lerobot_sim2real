@@ -137,8 +137,7 @@ def create_dataset(cfg: Task3Config, repo_id: str, root: Path | str | None, *, r
         use_videos=True,
         image_writer_processes=0,
         image_writer_threads=4 * max(1, len(cfg.cameras)),
-        # Real-time encoding steals CPU from the control loop on the Orin
-        # (docs/guide/SO101_데이터수집_관리.md §3).
+        # Real-time encoding steals CPU from the control loop on the Orin.
         streaming_encoding=False,
         rgb_encoder=RGBEncoderConfig(vcodec=cfg.video_codec),
     )

@@ -89,7 +89,8 @@ class Task2Config:
     """Stack every block at one point; only PLACE differs from Task 1.
 
     SELECT/PICK/VERIFY and the pick corrections are read from ``task1`` --
-    Task 2 *is* Task 1's gather pipeline with a single destination. Tower geometry and release clearance live here.
+    Task 2 *is* Task 1's gather pipeline with a single destination. Tower
+    geometry and release clearance live here.
     """
 
     # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
@@ -200,8 +201,8 @@ class Task3Config:
     # episode is discarded: a gap teaches the policy a jump that never
     # happened.
     max_stale_ticks: int = 10
-    # Assumptions pending measurement of real episode lengths (AGENTS.md
-    # §14.3). The floor exists because ACT's default chunk_size is 100
+    # Assumptions pending measurement of real episode lengths. The floor
+    # exists because ACT's default chunk_size is 100
     # frames; the ceiling catches an arm stuck in a loop.
     min_episode_frames: int = 60
     max_episode_frames: int = 3000

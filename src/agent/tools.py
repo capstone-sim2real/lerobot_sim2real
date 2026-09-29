@@ -5,8 +5,8 @@ bounded millimetre vectors whose limits are written into the schema from
 config, and every enum (colour, zone cell, table region) is generated from
 config, so adding a colour or renaming a cell needs no code change.
 
-Legacy absolute addresses include a *chessboard cell* (``x``/``y`` integers,
-AGENTS.md §16.3): it is discrete, it resolves through the same workspace
+The one absolute address is a *chessboard cell* (``x``/``y`` integers):
+it is discrete, it resolves through the same workspace
 sector and IK gates every other target passes, and it exists because an
 operator pointing at the camera page needs to say "there" without a name
 for it. Millimetres still never arrive from the LLM.

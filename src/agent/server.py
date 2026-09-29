@@ -425,14 +425,10 @@ def create_app(
         service.gate.operator_connected(token)
 
         async def stream():
-            # uvicorn's own shutdown waits for open connections to close
-            # BEFORE it fires the lifespan-shutdown event that runs
-            # hub.close() -- so that alone deadlocks a live server (the
-            # reason Ctrl-C needed a second, forced press). Polling the
-            # Server object's own should_exit here is independent of that
-            # event and closes this connection within one poll interval of
-            # the real SIGINT. Absent under TestClient (no live Server), so
-            # hub.close() from the lifespan handler covers that case instead.
+            # uvicorn waits for open connections before running the lifespan
+            # shutdown that calls hub.close(), so an open SSE stream would
+            # block Ctrl-C. Poll should_exit to close within one interval.
+            # (No live Server under TestClient; hub.close() covers that.)
             server = getattr(request.app.state, "uvicorn_server", None)
             poll_s = min(1.0, cfg.agent.sse_heartbeat_s)
             last_heartbeat = time.monotonic()

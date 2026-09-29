@@ -135,7 +135,7 @@ class CalibrationMotion(Skills):
         return super().return_to_home()
 
     def calibration_continuous(self, color):
-        """Legacy name uses the same clearance gate; never bypass it."""
+        """Alias of calibration_pick_guarded; same clearance gate."""
         return self.calibration_pick_guarded(color)
 
     def calibration_pick_guarded(self, color):

@@ -4,13 +4,12 @@
     python -m tools.hardware.record_pose --name home
 
     # keep torque on and snapshot the current pose (e.g. after teleop)
-    python -m tools.hardware.record_pose --name retreat --keep-torque
+    python -m tools.hardware.record_pose --name home --keep-torque
 
     # list what has been recorded so far
     python -m tools.hardware.record_pose --list
 
-Record home/retreat BEFORE collecting episodes: the same numbers must anchor
-the teleop convention and the runtime FSM.
+Only ``home`` is used at runtime; re-record it after a motor recalibration.
 """
 
 from __future__ import annotations

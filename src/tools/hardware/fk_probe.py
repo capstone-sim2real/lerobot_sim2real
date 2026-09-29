@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Print live FK (x, y, z) at gripper_frame_link while you hand-position the
-arm. Read-only — sends no commands. Use this BEFORE running
-so101_calib_point.sh to check the grip height (z) looks consistent with
-previous points (keep the wrist vertical/top-down each time).
+arm. Read-only — sends no commands. Use it before recording a calibration
+point to check the grip height (z) matches previous points and the wrist is
+at neutral roll.
 
     so101-fk
 """

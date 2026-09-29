@@ -50,14 +50,9 @@ class Task2TransportState(Task1TransportState):
     plan_extra_key = "task2_stack_plan"
 
     def _reserve_slot(self, ctx: RunContext) -> int:
-        # Never memoise per colour the way Task 1 does. If a block is dropped
-        # outside the zone after being assigned level 2, another block is
-        # stacked, and the first is picked up again, a memo would send it back
-        # to level 2 against a taller tower. The tower height is the only
-        # thing that decides the level.
-        # A failed release can leave the same physical block outside the
-        # zone after every pre-solved level has already been attempted. Keep
-        # stacking instead of refusing it: reuse the highest defined pose.
+        # The level comes from the tower height, never from a per-colour memo
+        # (a re-picked block must go on top, not back to its old level).
+        # Past the last planned level, keep reusing the highest one.
         return min(int(ctx.placed_count), len(self._planner.levels) - 1)
 
     def step(self, ctx: RunContext) -> StateName | None:

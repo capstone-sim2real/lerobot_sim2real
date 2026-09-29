@@ -12,7 +12,7 @@ DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/default.yaml"
 
 
 def parse_session_args(parser, argv, defaults):
-    """Apply YAML/--set defaults, with explicit legacy CLI flags taking precedence."""
+    """Apply YAML/--set defaults; explicit CLI flags take precedence."""
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--set", action="append", default=[], dest="overrides")
     bootstrap = argparse.ArgumentParser(add_help=False)

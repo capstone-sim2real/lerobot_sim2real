@@ -46,10 +46,9 @@ class CameraConfig:
     """Camera web UI settings; capture transport stays configured by its CLI."""
 
     overlay: CameraOverlayConfig = field(default_factory=CameraOverlayConfig)
-    # so101-run / so101-collect / so101-agent start camera.server themselves
-    # (as the sole /dev/video* owner) when nothing already answers its
-    # health check, so an operator no longer has to launch so101-camera by
-    # hand first. Set False to require it be started manually, as before.
+    # so101-run / so101-collect / so101-agent start camera.server (the sole
+    # /dev/video* owner) when nothing answers its health check. Set False to
+    # require starting so101-camera by hand.
     auto_start: bool = True
     # Extra camera.server CLI args, e.g. ["--wrist-device", "/dev/video2"].
     extra_args: list[str] = field(default_factory=list)

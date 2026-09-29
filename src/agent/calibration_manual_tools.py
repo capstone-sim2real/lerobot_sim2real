@@ -1,4 +1,4 @@
-"""Legacy manual adapters for the fake-provider calibration server only."""
+"""Manual-panel tool schemas for so101-panel (jog, cell/slot/table placement)."""
 from .tools import ToolDef, _obj, _mm, _cell_span
 from .provider.types import ToolSpec
 
@@ -11,7 +11,7 @@ def build_calibration_manual_tools(cfg):
     offsets={k:_mm('Bounded relative mm',rel.max_shift_mm) for k in ('forward_mm','left_mm')}
     definitions=[]
     def add(name,fields,required,run):
-        definitions.append(ToolDef(ToolSpec(name,'Calibration manual compatibility adapter',_obj(fields,required)),run))
+        definitions.append(ToolDef(ToolSpec(name,'Manual panel action',_obj(fields,required)),run))
     add('move_arm',{k:_mm('Bounded jog mm',rel.max_jog_mm) for k in ('forward_mm','left_mm','up_mm')},[],lambda sk,a:(sk.move_relative(**a) if sk.s.held is not None and hasattr(sk, "move_relative") else sk.move_arm(**a)))
     add('move_to_cell',cell,['x','y'],lambda sk,a:sk.move_to_cell(**a))
     add('place_at_cell',cell,['x','y'],lambda sk,a:sk.place_at_cell(**a))

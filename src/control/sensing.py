@@ -1,14 +1,13 @@
 """Load/position sensing: grasp verification + contact detection.
 
-One utility, two callers:
-  - VERIFY state calls ``check_grasp`` at the retreat pose,
-  - the Task-2 stack descent polls ``ContactMonitor`` between steps.
+  - VERIFY calls ``check_grasp`` after the pick lifts,
+  - guarded descents poll ``ContactMonitor`` between steps.
 
 Everything here is *read-only* on the bus — commanding the gripper or the
 descent is the caller's job. That keeps the sensing thresholds tunable with
 tools/hardware/tune_gripper_load.py without moving the arm.
 
-Never advance to PLACE without ``GraspCheck.grasped`` — hard rule.
+VERIFY never advances to TRANSPORT unless ``GraspCheck.grasped``.
 """
 
 from __future__ import annotations
@@ -119,8 +118,8 @@ class ContactMonitor:
         if self._baseline is None:
             raise RuntimeError("ContactMonitor.check() before start(); capture a baseline first")
         loads = self._robot.read_loads()
-        # Signed torque can reverse during free motion without increasing force.
-        # Legacy task callers retain their original signed-change detector.
+        # Signed torque can reverse during free motion without increasing force,
+        # so magnitude_increase compares |load|; the default compares signed change.
         deltas = {joint: (max(0.0, abs(loads[joint])-abs(self._baseline[joint]))
                          if self._magnitude_increase else abs(loads[joint]-self._baseline[joint]))
                   for joint in self._cfg.contact_joints}

@@ -1,14 +1,10 @@
 """Grasp-point planning and multi-attempt execution for the CV+IK pick path.
 
-Kept out of ``tools/demo_pick_and_place.py`` so that ``fsm/ik_handler.py``
-can reuse it unchanged.
-
-The accuracy this has to survive is measured, not assumed: RMS ~12mm and
-worst ~29mm, and the error is *random per point* rather than a smooth
-function of position — ``docs/report/CV_IK_전환_정리.md`` §4 rejected the
-interpolation hypothesis explicitly. Recalibrating does not shrink it, so
-the response is to try several grasp points inside the +-15mm that the 70mm
-jaws tolerate around a 40mm block, rather than to aim harder at one.
+Calibration error is random per point rather than a smooth function of
+position (see ``meta`` in the venue calibration file for the current RMS and
+leave-one-out numbers), so recalibrating does not remove it. The pick absorbs
+it instead: the jaws open wide, and a failed grasp is retried once with the
+jaw plane rotated 90 degrees.
 
 Every offset here is expressed in the *gripper's* frame, not the board's
 (``ik.gripper_frame_offset``): the arm always aims along base -> target, so
@@ -127,7 +123,7 @@ def _solve_ik(
     yaw_deg: float | None,
     radial_tilt_deg: float,
 ) -> IkResult:
-    """Keep zero-tilt callers and lightweight test doubles backward compatible."""
+    """Only pass ``radial_tilt_deg`` when non-zero, so simple IK doubles need not accept it."""
     if radial_tilt_deg:
         return ik.solve(
             x_mm,
@@ -220,26 +216,18 @@ def biased_grasp_xy(
     which half a block is on is decided from the *detected* position, before
     any bias is applied.
 
-    ``scale`` shrinks the bias where it would cost reachability — but only
-    the RADIAL half of it. Radial is what pushes the aim point past what the
-    arm can hover over; a 10mm tangential nudge changes reach by
-    ``hypot(300, 10) - 300 = 0.17mm``. Scaling it down buys nothing and
-    throws away the whole left-half correction exactly where it is needed,
-    since the left half hits the envelope ~10mm of reach sooner precisely
-    because it carries the extra radial offset.
+    ``scale`` shrinks only the radial part of the bias where it would cost
+    reachability. A 10mm tangential nudge changes reach by ~0.2mm, so
+    scaling it would only throw away the left-half correction.
     """
     radial = cfg.grasp_radial_offset_mm
     tangential = cfg.grasp_tangential_offset_mm
     if y_mm > cfg.left_half_y_mm:
         radial += cfg.left_half_radial_offset_mm
         tangential += cfg.left_half_tangential_offset_mm
-        # Optional ramp on top of the step, growing with distance from the
-        # centre line. Default OFF: the 15 calibration points give a
-        # tangential-residual/y correlation of +0.017, and a smooth
-        # positional correction is hypothesis 4 of the pivot report, which
-        # was tested and rejected (LOO 13.99 -> 14.45mm). This is a knob for
-        # the hands-on observation that the left gets worse further out, not
-        # a model this repo's data supports.
+        # Optional ramp growing with distance from the centre line. Off by
+        # default: a smooth positional correction did not improve the
+        # leave-one-out calibration error.
         from_centre = (y_mm - cfg.left_half_y_mm) / 100.0
         radial += cfg.left_ramp_radial_mm_per_100mm * from_centre
         tangential += cfg.left_ramp_tangential_mm_per_100mm * from_centre
@@ -354,14 +342,10 @@ def _plan_at_scale(
             radial_tilt_deg=radial_tilt_deg,
         )
     ]
-    # Production retry: same XY and Z, jaw plane rotated by 90 degrees.  The
-    # two signs make the same perpendicular jaw line, but they do *not* make
-    # the same arm posture.  Turning across the centre line can put the wrist
-    # into the arm, so choose the outward turn from the detected half of the
-    # fan: +yaw (counter-clockwise/left) on y>centre, -yaw
-    # (clockwise/right) on y<=centre.  Do not silently fall back to the
-    # opposite sign when this posture is unreachable -- that would re-create
-    # the collision-prone motion this rule exists to avoid.
+    # Retry: same XY and Z, jaw plane rotated 90 degrees. Both signs give the
+    # same jaw line but not the same posture; turning across the centre line
+    # can swing the wrist into the arm. So always turn outward (+yaw for
+    # y > centre, -yaw otherwise) and never fall back to the other sign.
     retry_roll = abs(float(cfg.motion.grasp_retry_roll_deg))
     if retry_roll:
         primary_yaw = yaw_deg
@@ -569,8 +553,8 @@ def run_grasp_attempts(
     """Work through the planned grasp points until one holds.
 
     The biased centre remains the first attempt. Production plans then contain
-    exactly one same-position ``roll_90`` attempt. Optional legacy positional
-    candidates, if explicitly configured, retain their configured order.
+    exactly one same-position ``roll_90`` attempt. Positional retries
+    (``motion.grasp_retry_offsets_mm``, empty by default) follow, farthest out first.
     Unreachable candidates are dropped instead of aborting the run.
 
     ``max_attempts`` truncates that queue. Task 3 passes 1 so a recorded
@@ -589,7 +573,7 @@ def run_grasp_attempts(
     log(f"  {len(usable)} of {len(plan.attempts)} grasp points usable")
     centre = [attempt for attempt in usable if attempt.label == "centre"]
     rotated = [attempt for attempt in usable if attempt.label == "roll_90"]
-    legacy_position_retries = sorted(
+    position_retries = sorted(
         (
             attempt
             for attempt in usable
@@ -597,7 +581,7 @@ def run_grasp_attempts(
         ),
         key=lambda attempt: -attempt.offset_mm[0],
     )
-    queue = centre + rotated + legacy_position_retries
+    queue = centre + rotated + position_retries
     if max_attempts is not None:
         dropped = len(queue) - max_attempts
         queue = queue[:max_attempts]

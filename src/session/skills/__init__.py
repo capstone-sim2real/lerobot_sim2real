@@ -5,7 +5,7 @@ These compose the mission code; they do not reimplement it:
 - ``pick_block`` drives the production ``CvIkPickState`` (centre attempt plus
   the one 90-degree gripper-roll retry live inside ``run_grasp_attempts``),
   applies the same ``corrected_pick_xy``/``far_reach_tilt_deg`` Task 1 applies,
-  gates on ``check_grasp`` exactly like VERIFY (AGENTS.md §3 HARD RULE), and
+  gates on ``check_grasp`` exactly like VERIFY, and
   repeats home -> observe -> pick up to ``fsm.max_retries_per_block`` times,
   which is what SELECT -> PICK -> SELECT does in the FSM.
 - Every release uses ``control.task1_transport``'s ``solve_place_point``,

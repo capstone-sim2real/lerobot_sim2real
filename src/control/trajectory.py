@@ -3,8 +3,7 @@
 Two safety nets stack here: interpolation caps the per-tick delta
 (``max_step_per_tick``), and the robot's own ``max_relative_target`` clamp
 inside lerobot's send_action stays on. A trajectory always starts from the
-*measured* current pose, so the NN-retreat -> scripted-motion handoff cannot
-jump even if the policy stopped slightly off-pose.
+*measured* current pose, never the last command, so a move never jumps.
 """
 
 from __future__ import annotations
@@ -140,30 +139,19 @@ class TrajectoryPlayer:
                 check_progress()
 
     def descend(self, goal: Pose) -> tuple[Pose, bool]:
-        """Descend toward ``goal``, and stop the moment the arm stops following.
+        """Descend toward ``goal`` and stop as soon as the arm stops following.
 
-        Unlike ``move_to``, falling short is *returned* rather than raised: a
-        grasp descent that lands on the block instead of beside it is a
-        normal outcome for the caller to retry, not an error.
+        Unlike ``move_to``, falling short is returned rather than raised: a
+        gripper landing on top of the block is a normal outcome to retry.
 
-        The descent watches how far the measured pose trails the pose just
-        commanded. Without that watch, a gripper that lands on top of a block
-        a third of the way down still gets the remaining (deeper) commands,
-        and then the settle loop re-sends an unreachable goal for the whole
-        ``descent_settle_s`` — seconds of servos leaning on the block, which
-        shoves it out of position and binds the arm against it.
+        The signal is how far the measured pose trails the last command. A
+        servo that is still accelerating has a bounded gap; a jammed one's gap
+        only grows. Without this check the remaining deeper commands and the
+        settle loop keep the servos pressing on the block, which pushes it
+        out of place. (``read_loads`` per tick was too slow on the bus.)
 
-        Trailing distance, not per-tick movement, is the signal: a servo
-        accelerating at the start of a descent moves little per tick but its
-        gap to the command stays bounded, whereas a jammed one's gap only
-        grows. (An earlier attempt used a per-tick ``read_loads`` instead;
-        that extra bus round trip slowed the loop enough to strand the arm
-        partway down. ``read_joints`` is the same cost ``move_to``'s settle
-        loop and ``set_gripper`` already pay every tick.)
-
-        Returns ``(measured_pose, blocked)``. ``blocked`` is a hint for
-        ordering retries — it is never a reason to skip closing the jaws,
-        since only closing them establishes whether the block is holdable.
+        Returns ``(measured_pose, blocked)``. ``blocked`` only orders retries;
+        the caller still closes the jaws, because only that proves a grasp.
         """
         max_step = self._cfg.descent_step_per_tick
         tol = self._cfg.arrival_tol

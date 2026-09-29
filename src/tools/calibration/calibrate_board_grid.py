@@ -3,8 +3,8 @@
 The workspace floor is a chessboard, so its squares can address places the
 operator points at ("(3, 4)로 옮겨줘"). Nothing in the repo knew where those
 squares *are*, though: H maps pixels straight to robot millimetres and the
-board's own origin, angle and pitch were never recorded (AGENTS.md §6 keeps
-the board frame out of the control path deliberately). This tool measures
+board's own origin, angle and pitch were never recorded (the board frame is
+kept out of the control path on purpose). This tool measures
 them once and stores them in the calibration file as ``board_grid``, for
 display and addressing only.
 

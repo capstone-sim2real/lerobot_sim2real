@@ -37,20 +37,12 @@ class PerceptionConfig:
     # colour -> list of HSV bands [h_lo, s_lo, v_lo, h_hi, s_hi, v_hi]
     # (OpenCV hue 0-179; red wraps around, hence two bands).
     #
-    # These are deliberately GENEROUS gates, not classifications: they decide
-    # which blobs are worth looking at, and ``color_prototypes`` below decides
-    # what each blob actually is. Overlapping gates are fine and expected —
-    # wood and yellow cannot be separated by any fixed box, because which axis
-    # separates them depends on where the blocks are sitting (measured: in the
-    # dark corners hue splits them and saturation does not; out on the bright
-    # board saturation splits them and hue does not).
-    # NOTE: red/yellow/wood are still the synthetic-fixture values — re-tune
-    # on real frames with tools/hardware/view_detect.py before trusting them.
-    # green/blue were measured on live frames (2026-09-02): near +-85 deg the
-    # table edge is dark enough that a block's V median sits at ~49 while S
-    # dips to ~34 at p25, so the old V>=50 / S>=90 floors cut most of the mask
-    # and the survivors failed the fill/solidity gates.  The hue ceilings were
-    # clipping too (green measured to 90, blue to 135).
+    # Generous gates, not classifications: they pick candidate blobs, and
+    # ``color_prototypes`` names them. Overlap is expected; wood and yellow
+    # separate by hue in dark corners but by saturation on the bright board.
+    # green/blue were measured on live frames (2026-09-02, dark table edge:
+    # V ~49, S down to ~34). red/yellow/wood are still synthetic-fixture
+    # values; re-check them with tools/hardware/view_detect.py.
     hsv_ranges: dict[str, list[list[int]]] = field(
         default_factory=lambda: {
             "red": [[0, 100, 55, 10, 255, 255], [170, 100, 55, 179, 255, 255]],
@@ -65,18 +57,11 @@ class PerceptionConfig:
     # bright-board arrangements. Value is deliberately excluded: it is the
     # channel that moves most with position and carries the least identity.
     #
-    # A blob is named by the nearest point across every colour's list, not by
-    # which gate caught it, and each colour takes at most ``max_per_color``
-    # blobs. Each colour is a LIST of points, not one, because saturation
-    # alone can swing across nearly the whole axis for the same physical
-    # block between a dark corner and full board light (yellow measured
-    # S65-200 across sessions). A single centred point cannot cover that
-    # spread without drifting into wood's territory (wood tops out around
-    # S~105) — averaging the two regimes made a real yellow block closer to
-    # wood's prototype than to its own. Two points, one per regime, keeps
-    # each point tight enough that wood-vs-yellow still resolves correctly in
-    # both: they are far apart in saturation when hue coincides, and far
-    # apart in hue when saturation coincides.
+    # A blob takes the colour of the nearest point across all lists; each
+    # colour takes at most ``max_per_color`` blobs. Saturation of one block
+    # swings widely between a dark corner and full light (yellow S65-200), so
+    # a colour gets one point per lighting regime; a single averaged point
+    # drifted into wood's territory.
     color_prototypes: dict[str, list[list[int]]] = field(
         default_factory=lambda: {
             "red": [[2, 168]],
@@ -179,8 +164,7 @@ class SensingConfig:
     # the servo calibration recorded, not the mechanical stop (the jaws open
     # noticeably further, but that travel is outside the recorded range and
     # is never commanded). 95 was verified against a real block. Only the
-    # FSM's own open/close bookkeeping reads this — the ACT/teleop path
-    # commands the gripper itself and never reads these fields.
+    # FSM's own open/close commands read this.
     gripper_open_pos: float = 95.0
     gripper_close_pos: float = 2.0
     # grasp check thresholds, measured 2026-08-31 (tune_gripper_load.py,
@@ -311,9 +295,9 @@ class MotionConfig:
     # worse further out; turn it on only with a before/after measurement.
     left_ramp_radial_mm_per_100mm: float = 0.0
     left_ramp_tangential_mm_per_100mm: float = 0.0
-    # Optional legacy position retries as (radial, tangential) mm. Production
-    # leaves this empty: PICK retries once at the same XY with the jaw plane
-    # rolled by ``grasp_retry_roll_deg`` instead of searching around the block.
+    # Optional extra grasp points as (radial, tangential) mm. Empty by default:
+    # PICK retries once at the same XY with the jaw plane rolled by
+    # ``grasp_retry_roll_deg`` instead of searching around the block.
     grasp_retry_offsets_mm: list[list[float]] = field(
         default_factory=list
     )
@@ -365,8 +349,8 @@ class IkConfig:
     # candidate converged to 2.4mm, so keep enough branches to cross that
     # discontinuity in the seed table.
     seed_candidate_count: int = 10
-    # pan-offset retries to absorb the gripper's lateral offset from the pan
-    # axis (AGENTS.md §7 measured ~27mm)
+    # pan-offset retries to absorb the gripper's ~27mm lateral offset from
+    # the pan axis
     pan_offset_candidates_deg: list[float] = field(
         default_factory=lambda: [0.0, 6.0, -6.0, 12.0, -12.0]
     )

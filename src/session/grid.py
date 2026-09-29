@@ -7,8 +7,8 @@ millimetre point and back.
 
 Two things this is **not**:
 
-- It is not a coordinate frame. AGENTS.md §6 stands: every command still
-  travels as robot-base mm. A cell is an *address* that is resolved here,
+- It is not a coordinate frame: every command still travels as robot-base
+  mm. A cell is an *address* that is resolved here,
   once, before any motion is planned.
 - It is not a reachability claim. ``cells_in_workspace`` only applies the
   detector's sector gate and the same radial band the named table regions
