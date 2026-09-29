@@ -8,14 +8,14 @@ import sys
 import time
 from pathlib import Path
 
-from tools.calibration_records import (
+from tools.calibration.calibration_records import (
     read_rows,
     completed_points,
     next_attempt_name,
     export_accepted,
 )
-from tools.calibration_pixels import complete_pixel_pair, make_pixel_preview
-from tools.session_io import (
+from tools.calibration.calibration_pixels import complete_pixel_pair, make_pixel_preview
+from tools.calibration.session_io import (
     parse_session_args,
     read_telemetry,
     request_capture,
@@ -84,7 +84,7 @@ def capture_pose(args, index, name):
         args.request, args.output_dir, name, args.timeout, args.settings.poll_interval_s
     )
     subprocess.run(
-        [sys.executable, "-m", "tools.finalize_teleop_capture", str(record)], check=True
+        [sys.executable, "-m", "tools.calibration.finalize_teleop_capture", str(record)], check=True
     )
 
 

@@ -12,9 +12,9 @@ Orin 전용 worktree `~/lerobot_sim2real/worktrees/yoloe-block-segmentation`,
 
 ```bash
 cd ~/lerobot_sim2real/worktrees/yoloe-block-segmentation
-PYTHONPATH=src .venv/bin/python -m tools.yoloe_blocks \
+PYTHONPATH=src .venv/bin/python -m tools.yoloe.blocks \
   --output experiments/yoloe/new-text-run
-PYTHONPATH=src .venv/bin/python -m tools.yoloe_blocks \
+PYTHONPATH=src .venv/bin/python -m tools.yoloe.blocks \
   --visual-prompts experiments/yoloe/visual-reference.json \
   --output experiments/yoloe/new-visual-run --repeats 4
 ```
@@ -118,7 +118,7 @@ JetPack 6.2.1 계열의 시스템 TensorRT 10.3과 CUDA runtime을 직접 사용
 .venv-trt/bin/python -m pip install 'cuda-python>=12.6,<13' \
   'opencv-python-headless==4.13.0.92'
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=src \
-  .venv-trt/bin/python -m tools.yoloe_tensorrt \
+  .venv-trt/bin/python -m tools.yoloe.tensorrt \
   --output experiments/yoloe/tensorrt-new --repeats 20
 ```
 

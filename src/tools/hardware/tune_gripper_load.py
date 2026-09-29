@@ -2,14 +2,14 @@
 
 Grasp trials (label each trial, then read the two distributions apart):
 
-    python -m tools.tune_gripper_load --mode grasp --csv /tmp/grasp.csv
+    python -m tools.hardware.tune_gripper_load --mode grasp --csv /tmp/grasp.csv
 
     각 트라이얼: Enter → 그리퍼 열림 → 블록을 물리거나(held) 빈손으로 두고
     Enter → 닫힘 → 측정값 + 판정 출력 → 실제로 잡혔는지 y/n 입력(정답 라벨)
 
 Passive watch (hand-move the arm, press the gripper on a block, watch loads):
 
-    python -m tools.tune_gripper_load --mode watch --hz 5
+    python -m tools.hardware.tune_gripper_load --mode watch --hz 5
 
 Cameras are not opened — this tool only touches the motor bus, so it can run
 while camera pipelines are being debugged elsewhere.

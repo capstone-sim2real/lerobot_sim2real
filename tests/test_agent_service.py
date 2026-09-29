@@ -5,7 +5,7 @@ import time
 
 from agent.control import ControlState
 from agent.provider.fake import ScriptedProvider
-from agent.provider.types import TextDelta, ToolCall, ToolCallEvent, TurnEnd
+from agent.provider.types import ToolCall, ToolCallEvent, TurnEnd
 from agent.service import AgentService, needs_fresh_scene
 from config import AppConfig
 from session.cancel import Cancelled, CancelToken

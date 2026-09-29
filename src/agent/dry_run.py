@@ -111,7 +111,7 @@ def dry_run(cfg: AppConfig, provider_name: str, fallback_name: str | None = None
         if not calib.board_grid:
             problems.append(
                 "no measured board grid: cells are axis-aligned guesses "
-                "(run tools.calibrate_board_grid --write)"
+                "(run tools.calibration.calibrate_board_grid --write)"
             )
         if not cells:
             problems.append("board grid has no cell inside the workspace")

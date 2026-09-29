@@ -9,17 +9,9 @@ import pytest
 from config import AppConfig
 from control.ik import IkResult
 from control.grasp import GraspAttempt
-from control.task1_transport import Task1TransportPlanner, push_out_from_base
 from fsm.states import RunContext, StateName
-from fsm.task1 import (
-    Task1Perception,
-    Task1SelectState,
-    Task1TransportState,
-    corrected_pick_xy,
-    far_reach_tilt_deg,
-)
-from perception import BlockDetection, PlaneCalibration, detect_blocks, detect_zone_inner_polygon
-from perception.zone import point_in_zone, zone_slot_centres
+from fsm.task1 import Task1Perception, Task1SelectState, Task1TransportState, far_reach_tilt_deg
+from perception import BlockDetection, PlaneCalibration, detect_blocks
 
 
 def _block(color: str, x: float, y: float) -> BlockDetection:

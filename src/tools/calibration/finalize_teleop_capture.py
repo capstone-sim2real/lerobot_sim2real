@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from tools.calibration_records import update_csv
+from tools.calibration.calibration_records import update_csv
 
 
 def parse_args(argv=None):
@@ -35,7 +35,7 @@ def finalize_record(path, kinematics, motors):
 
 def main(argv=None):
     args = parse_args(argv)
-    from tools.record_calibration_point import load_kinematics, DEFAULT_URDF, ARM_MOTORS
+    from tools.calibration.record_calibration_point import load_kinematics, DEFAULT_URDF, ARM_MOTORS
 
     kinematics = load_kinematics(DEFAULT_URDF, "gripper_frame_link")
     print(json.dumps(finalize_record(args.record, kinematics, ARM_MOTORS)))

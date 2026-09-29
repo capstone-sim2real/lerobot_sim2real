@@ -1,10 +1,9 @@
 """Continuous input safety using fake IK and mock motor IO only."""
-import math
 import time
 
 import pytest
 pytest.importorskip("ruckig")
-from agent.keyboard_jog import KeyboardJog, JogReleased
+from agent.keyboard_jog import KeyboardJog
 from agent_helpers import make_skills
 from session.cancel import Cancelled
 

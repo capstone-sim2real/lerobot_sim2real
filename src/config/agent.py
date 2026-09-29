@@ -217,7 +217,7 @@ class PlaceCorrectionConfig:
 class BoardGridConfig:
     """Chessboard-cell addressing over the same sector (``session/grid.py``).
 
-    The lattice itself is measured by ``tools/calibrate_board_grid.py`` and
+    The lattice itself is measured by ``tools/calibration/calibrate_board_grid.py`` and
     stored in the calibration file; only how it is *presented* lives here.
     ``origin_mm`` names the square called (0, 0) -- left unset, the operator
     page anchors it on the ``center``/``near`` table region, i.e. the bottom

@@ -1,13 +1,13 @@
 """Detection debug CLI: run the detector on a frame and save an annotated view.
 
-    python -m tools.view_detect \
+    python -m tools.hardware.view_detect \
         --snapshot http://127.0.0.1:8090/snapshot/shoulder.jpg \
         --calib src/configs/calib/lab.json \
         --out /tmp/detect.png
 
 Use --image for saved frames, --set to try thresholds without editing YAML:
 
-    python -m tools.view_detect --image frame.png --calib lab.json \
+    python -m tools.hardware.view_detect --image frame.png --calib lab.json \
         --set perception.area_mm2_min=800
 """
 
@@ -23,7 +23,7 @@ import numpy as np
 from config import load_config
 from camera.client import DEFAULT_SHOULDER_SNAPSHOT_URL, fetch_snapshot
 from perception import PlaneCalibration, detect_blocks, select_target, target_id_for
-from tools._capture import grab_frame
+from tools.calibration._capture import grab_frame
 
 _COLORS_BGR = {
     "red": (0, 0, 255),

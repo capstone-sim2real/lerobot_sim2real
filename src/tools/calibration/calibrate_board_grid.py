@@ -9,10 +9,10 @@ them once and stores them in the calibration file as ``board_grid``, for
 display and addressing only.
 
 Preview only (default):
-    uv run python -m tools.calibrate_board_grid
+    uv run python -m tools.calibration.calibrate_board_grid
 
 Persist after inspecting the preview:
-    uv run python -m tools.calibrate_board_grid --write
+    uv run python -m tools.calibration.calibrate_board_grid --write
 
 The lattice rides on H, so it dies with H: re-run this after any camera
 move, right after re-running the homography calibration.
@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     if fit["rms_mm"] > args.max_rms_fraction * fit["pitch_mm"]:
         print(f"\nREFUSED: fit RMS is {100 * fit['rms_mm'] / fit['pitch_mm']:.1f}% of a square, "
               f"above the {100 * args.max_rms_fraction:.0f}% gate. The calibration H probably no "
-              "longer matches this camera -- check tools.camera_drift_check and re-run "
+              "longer matches this camera -- check tools.calibration.camera_drift_check and re-run "
               "so101-calibrate. Override with --max-rms-fraction if you accept the error.")
         return 2
 

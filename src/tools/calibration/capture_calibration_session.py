@@ -3,23 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import math
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 from config import load_config
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-from tools.calibration_records import (
-    POINT_NAME,
-    PAIR_FIELDS,
-    read_rows,
-    completed_points,
-    next_attempt_name,
-    export_accepted,
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+from tools.calibration.calibration_records import read_rows, next_attempt_name, export_accepted
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
             command = [
                 sys.executable,
                 "-m",
-                "tools.capture_calibration_point",
+                "tools.calibration.capture_calibration_point",
                 name,
                 "--output-dir",
                 str(args.output_dir),

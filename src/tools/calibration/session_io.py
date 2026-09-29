@@ -8,7 +8,7 @@ from urllib.request import urlopen
 
 from config import load_config
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/default.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/default.yaml"
 
 
 def parse_session_args(parser, argv, defaults):

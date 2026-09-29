@@ -6,13 +6,13 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from tools.session_io import snapshot_bytes
+from tools.calibration.session_io import snapshot_bytes
 
 from config import load_config
-from tools.calibration_pixels import complete_pixel_pair, make_pixel_preview
+from tools.calibration.calibration_pixels import complete_pixel_pair, make_pixel_preview
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,7 +55,7 @@ def main() -> int:
     command = [
         sys.executable,
         "-m",
-        "tools.record_calibration_point",
+        "tools.calibration.record_calibration_point",
         args.name,
         "--output-dir",
         str(args.output_dir),

@@ -52,7 +52,7 @@ so101-run --task 1 --flow pick_lift_lower --color green
 
 | 항목 | 확인 방법 |
 |---|---|
-| 카메라가 흔들리지 않았는가 | `python -m tools.camera_drift_check --watch 600` (p95 < 2px) |
+| 카메라가 흔들리지 않았는가 | `python -m tools.calibration.camera_drift_check --watch 600` (p95 < 2px) |
 | 팔에 토크가 걸려 있는가 | 손으로 밀리면 `so101-torque-off` 의 반대 — 재연결 필요 |
 | 작업영역이 비어 있는가 | 운반 경로에 장애물이 없어야 함 |
 
@@ -482,7 +482,7 @@ uv run --extra hardware --extra dev pytest -q
 
 1. **드리프트 재검사** — 테이프 작업 중 카메라를 건드렸을 수 있음
    ```bash
-   uv run python -m tools.camera_drift_check --watch 600
+   uv run python -m tools.calibration.camera_drift_check --watch 600
    ```
 2. **구역 좌표 등록** — FK 기반 homography를 다시 맞추지 않고 빨강 테이프의
    안쪽 사각형만 등록하는 전용 도구를 사용합니다. 기본 실행은 preview만 만들며,

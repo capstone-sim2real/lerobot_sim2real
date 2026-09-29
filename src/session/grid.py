@@ -19,7 +19,7 @@ axes: ``+x`` is image-right, ``+y`` is away from the robot (image-up). In the
 robot base frame that is ``u = -y`` and ``v = +x`` -- see ``axis_aligned``.
 
 The lattice itself comes from ``PlaneCalibration.board_grid`` when
-``tools/calibrate_board_grid.py`` has measured it; otherwise the axis-aligned
+``tools/calibration/calibrate_board_grid.py`` has measured it; otherwise the axis-aligned
 fallback below is used, which is right only if the board happens to be
 square with the robot.
 """

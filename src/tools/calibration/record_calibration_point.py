@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from config import SessionToolsConfig
-from tools.session_io import snapshot_bytes
+from tools.calibration.session_io import snapshot_bytes
 
 if TYPE_CHECKING:
     from lerobot.model.kinematics import RobotKinematics
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 import numpy as np
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_URDF = PROJECT_ROOT / "third_party/so101/so101.urdf"
 ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
 # Joint angles are recorded alongside the FK position because the position
@@ -30,7 +30,7 @@ ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wris
 # wrist_roll axis, so the same jaw placement yields different recorded xyz
 # depending on wrist_roll, and without the joints that offset cannot be
 # reconstructed or corrected for (AGENTS.md §6/§7).
-from tools.calibration_records import CSV_FIELDS, update_csv
+from tools.calibration.calibration_records import update_csv
 
 
 def parse_args() -> argparse.Namespace:

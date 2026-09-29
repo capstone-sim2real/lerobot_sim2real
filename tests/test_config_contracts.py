@@ -5,7 +5,7 @@ import dataclasses
 import pytest
 
 from camera.server import DEFAULT_OVERLAY_CONFIG
-from config import AppConfig, load_config, validate_ik, validate_perception_colors
+from config import AppConfig, load_config
 
 
 def test_config_loads_overrides_and_rejects_unknown_key(tmp_path):

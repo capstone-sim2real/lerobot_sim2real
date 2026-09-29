@@ -632,7 +632,7 @@ agent:
     max_mm: 60.0
     max_sample_mm: 80.0
   # 부채꼴 안의 체스판 칸에 정수 좌표를 붙인다 (화면 기준 x=오른쪽, y=먼 쪽).
-  # 격자 자체는 tools/calibrate_board_grid.py가 재서 캘리브레이션 파일에 넣는다.
+  # 격자 자체는 tools/calibration/calibrate_board_grid.py가 재서 캘리브레이션 파일에 넣는다.
   board_grid:
     enabled: true
     # 측정된 격자가 없을 때만 쓰는 폴백 칸 크기

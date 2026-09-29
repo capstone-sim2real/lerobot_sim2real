@@ -24,9 +24,9 @@ class RobotIOConfig:
 @dataclass
 class PerceptionConfig:
     """Top-down camera perception. Metric values are in the board frame (mm)
-    defined by the venue calibration JSON (tools/calibrate_homography.py)."""
+    defined by the venue calibration JSON (tools/calibration/calibrate_homography.py)."""
 
-    # venue calibration produced by tools/calibrate_homography.py
+    # venue calibration produced by tools/calibration/calibrate_homography.py
     calibration_path: str = "src/configs/calib/venue_lab.json"
     # camera.server owns the USB device; runner fetches a fresh BGR JPEG here
     # at every SELECT/re-detect rather than opening /dev/video0 itself.
@@ -49,7 +49,7 @@ class PerceptionConfig:
     # dark corners hue splits them and saturation does not; out on the bright
     # board saturation splits them and hue does not).
     # NOTE: red/yellow/wood are still the synthetic-fixture values — re-tune
-    # on real frames with tools/view_detect.py before trusting them.
+    # on real frames with tools/hardware/view_detect.py before trusting them.
     # green/blue were measured on live frames (2026-09-02): near +-85 deg the
     # table edge is dark enough that a block's V median sits at ~49 while S
     # dips to ~34 at p25, so the old V>=50 / S>=90 floors cut most of the mask
@@ -176,7 +176,7 @@ class SensingConfig:
 
     All load values are lerobot's decoded Present_Load (signed int, sign =
     direction). Defaults are placeholders — measure real distributions with
-    tools/tune_gripper_load.py before trusting them.
+    tools/hardware/tune_gripper_load.py before trusting them.
     """
 
     # gripper commands, normalized RANGE_0_100 — 100 is the end of the range
@@ -221,7 +221,7 @@ class SensingConfig:
 class MotionConfig:
     """Scripted motion (TRANSPORT / PLACE / STACK). All joint values are in
     the robot's action units (normalized; gripper 0-100) — poses recorded
-    with tools/record_pose.py are stored in the same units, so they become
+    with tools/hardware/record_pose.py are stored in the same units, so they become
     invalid after recalibration and must be re-recorded."""
 
     poses_path: str = "src/configs/poses.yaml"

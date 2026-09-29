@@ -1,5 +1,4 @@
 """Composed demonstrations with real recorder/decorator and simulated IO only."""
-import json
 import threading
 import time
 from types import SimpleNamespace

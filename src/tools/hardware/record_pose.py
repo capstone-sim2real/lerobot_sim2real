@@ -1,13 +1,13 @@
 """Record named joint poses into poses.yaml by hand-positioning the arm.
 
     # torque off -> move the arm by hand -> Enter -> saved
-    python -m tools.record_pose --name home
+    python -m tools.hardware.record_pose --name home
 
     # keep torque on and snapshot the current pose (e.g. after teleop)
-    python -m tools.record_pose --name retreat --keep-torque
+    python -m tools.hardware.record_pose --name retreat --keep-torque
 
     # list what has been recorded so far
-    python -m tools.record_pose --list
+    python -m tools.hardware.record_pose --list
 
 Record home/retreat BEFORE collecting episodes: the same numbers must anchor
 the teleop convention and the runtime FSM (EPISODE.md §1).

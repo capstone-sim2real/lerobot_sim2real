@@ -45,7 +45,7 @@ def select_target(
 ) -> SelectionResult:
     if calib.base_xy_mm is None:
         raise ValueError(
-            "Calibration has no robot base position; rerun tools/calibrate_homography.py with --base-px"
+            "Calibration has no robot base position; rerun tools/calibration/calibrate_homography.py with --base-px"
         )
     if cfg.rule != "nearest_first":
         raise ValueError(f"Unknown selection rule: {cfg.rule!r}")

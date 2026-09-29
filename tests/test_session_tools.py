@@ -1,14 +1,7 @@
 """Session utilities must be discoverable without connecting to hardware."""
 
-import importlib
-import json
-import subprocess
-import sys
-from concurrent.futures import Future
-from pathlib import Path
 
 import pytest
-from tools._live_capture import LiveCapture
 
 
 class FakeBus:
@@ -59,7 +52,7 @@ class FakeBus:
 
 
 def teleop_arguments(tmp_path, extra=()):
-    from tools.teleop_session import parse_args
+    from tools.calibration.teleop_session import parse_args
 
     return parse_args(
         [
@@ -93,7 +86,7 @@ def teleop_arguments(tmp_path, extra=()):
 def test_teleop_dry_run_reads_without_writing_or_disabling_torque(tmp_path):
     import threading
     from types import SimpleNamespace
-    from tools.teleop_session import run_session
+    from tools.calibration.teleop_session import run_session
 
     follower = SimpleNamespace(bus=FakeBus(1))
     leader = SimpleNamespace(bus=FakeBus(0))
@@ -111,7 +104,7 @@ def test_teleop_dry_run_reads_without_writing_or_disabling_torque(tmp_path):
 def test_teleop_invalid_preflight_never_writes(tmp_path):
     import threading
     from types import SimpleNamespace
-    from tools.teleop_session import run_session
+    from tools.calibration.teleop_session import run_session
 
     follower = SimpleNamespace(bus=FakeBus(1))
     leader = SimpleNamespace(bus=FakeBus(1))

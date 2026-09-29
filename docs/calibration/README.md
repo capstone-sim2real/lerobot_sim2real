@@ -18,7 +18,7 @@ RMS 5.15mm, maximum leave-one-out 13.53mm, grasp-z mean/std 4.06/0.73mm이며,
 `src/configs/calib/venue_lab.pre-recalibration-20260911.json`에 남아 있고, 당시
 상태는 위 2026-09-08 세션 README가 기준이다. 그 숫자를 현재 값으로 인용하지 않는다.
 
-`board_grid`(체스판 칸 좌표용 격자)는 `tools/calibrate_board_grid.py`가 같은 파일에
+`board_grid`(체스판 칸 좌표용 격자)는 `tools/calibration/calibrate_board_grid.py`가 같은 파일에
 기록한다. 프리뷰로 격자선이 실제 칸 위에 얹히는지 확인한 뒤 `--write` 한다.
 homography를 다시 맞췄으면 격자도 다시 잰다.
 

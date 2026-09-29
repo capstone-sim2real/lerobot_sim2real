@@ -10,8 +10,8 @@ from pathlib import Path
 
 from config import RobotIOConfig
 from control.trajectory import interpolate
-from tools._live_capture import LiveCapture
-from tools.session_io import atomic_json, parse_session_args
+from tools.calibration._live_capture import LiveCapture
+from tools.calibration.session_io import atomic_json, parse_session_args
 
 
 def parse_args(argv=None):

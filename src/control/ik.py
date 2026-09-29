@@ -242,7 +242,7 @@ class TopDownIK:
     def forward_position_mm(self, joints: dict[str, float]) -> tuple[float, float, float]:
         """Gripper target-frame position for measured arm joints (degrees).
 
-        The same conversion ``tools/live_fk_overlay.py`` draws with; the
+        The same conversion ``tools/hardware/live_fk_overlay.py`` draws with; the
         gripper joint is ignored.
         """
         k = self._load_kinematics()

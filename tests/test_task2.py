@@ -2,24 +2,20 @@
 
 from __future__ import annotations
 
-import logging
-import math
 
 import numpy as np
 import pytest
 
-from config import AppConfig, load_config, validate_task2
+from config import AppConfig, load_config
 from control.grasp import GraspAttempt
 from control.ik import IkResult
 from control.motion import MotionController
 from control.robot_io import MockRobotIO
-from control.task1_transport import push_out_from_base
 from control.task2_stack import (
     Task2StackPlan,
     Task2StackPlanner,
 )
 from control.trajectory import TrajectoryPlayer
-from fsm.flows import build_task2_stack_states
 from fsm.states import RunContext, StateName
 from fsm.task1 import Task1Perception
 from fsm.task2 import Task2PlaceState, Task2SelectState, Task2TransportState

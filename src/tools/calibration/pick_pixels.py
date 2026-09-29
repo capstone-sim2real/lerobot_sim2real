@@ -7,7 +7,7 @@ tool records the pixel side (u_px, v_px).
 Serve the images, click each one in a browser, and the pixels are written
 back to points.csv:
 
-    python -m tools.pick_pixels
+    python -m tools.calibration.pick_pixels
     # then open http://<host>:8091/
 
 A browser UI rather than cv2.imshow because the team runs opencv-headless
@@ -26,7 +26,7 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-from tools.calibration_records import CSV_FIELDS, read_csv, write_csv
+from tools.calibration.calibration_records import CSV_FIELDS, read_csv, write_csv
 
 
 PAGE = """<!doctype html><meta charset=utf-8><title>calibration pixel picker</title>

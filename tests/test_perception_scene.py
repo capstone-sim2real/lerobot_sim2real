@@ -2,12 +2,10 @@
 
 import cv2
 import numpy as np
-import pytest
 
 from config import AppConfig
-from perception import PlaneCalibration, detect_blocks
-from perception.detector import BlockDetection
-from perception.scene import build_scene, detect_scene
+from perception import PlaneCalibration
+from perception.scene import detect_scene
 
 from core_helpers import _block_bgr
 

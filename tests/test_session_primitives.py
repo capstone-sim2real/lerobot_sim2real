@@ -1,26 +1,14 @@
 """Cancellation, bus lock, relative geometry, and the session lifecycle."""
 
-import copy
 import json
-import threading
 
 import pytest
 
 from config import AppConfig
 from control.robot_io import MockRobotIO
-from control.task1_transport import place_tilt_deg
-from fsm.task1 import far_reach_tilt_deg
 from session.arm_session import ArmSession
 from session.cancel import CancellableRobotIO, Cancelled, CancelToken, guard
 from session.lock import RobotBusBusy, RobotBusLock
-from session.relative import (
-    clamp_vector,
-    decompose_xy,
-    find_free_point,
-    offset_xy,
-    table_region_xy,
-)
-from perception.detector import point_in_workspace
 
 from agent_helpers import HOME, calibration
 

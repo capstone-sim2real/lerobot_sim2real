@@ -44,7 +44,7 @@ class PoseRegistry:
         if name not in self._poses:
             raise KeyError(
                 f"Pose '{name}' not recorded (have: {sorted(self._poses)}). "
-                f"Record it with: python -m tools.record_pose --name {name}"
+                f"Record it with: python -m tools.hardware.record_pose --name {name}"
             )
         return dict(self._poses[name])
 

@@ -158,7 +158,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   (그리퍼를 넉넉히 열기, FSM의 기존 재시도 로직으로 실패 흡수 — 매번 완벽할
   필요는 없다).
 
-**체스판 격자(`board_grid`)는 표시·주소 지정 전용이다.** `tools/calibrate_board_grid.py`가
+**체스판 격자(`board_grid`)는 표시·주소 지정 전용이다.** `tools/calibration/calibrate_board_grid.py`가
 체스판 코너에서 격자의 원점·방향·피치를 재서 캘리브레이션 파일에 넣고,
 `session/grid.py`가 정수 칸 좌표 (x, y)를 로봇 베이스 mm로 바꾼다. 위의 "임의
 체스판 원점 프레임을 쓰지 않는다"는 규칙은 그대로다 — 칸은 **주소**이고, 모션
@@ -195,7 +195,7 @@ H : 픽셀 (u,v)  →  로봇 베이스 프레임 (x_mm, y_mm)
   (`pose_target = pose_actual.copy()`) 측방 이동 시 5-DOF로 불가능한 자세를
   요구하게 되어 실패한다.
 - placo는 **메시를 cwd 기준으로 찾는다.** URDF는 절대경로로 주고 cwd를 URDF의
-  부모 디렉토리로 바꾼 뒤 로드한다 (`tools/ik_move.py:load_kinematics` 참고).
+  부모 디렉토리로 바꾼 뒤 로드한다 (`tools/hardware/ik_move.py:load_kinematics` 참고).
 
 **IK는 소수의 카테시안 웨이포인트에서만 푼다.** 웨이포인트 사이는
 `control/trajectory.py`의 `interpolate()` + `TrajectoryPlayer`로 관절공간
@@ -224,7 +224,7 @@ VERIFY 실패 뒤 HOME→SELECT에서 새 프레임으로 다시 검출한다. �
 - **카메라는 강체로 고정되어야 한다.** 이것이 전체 파이프라인의 선행 조건이다.
   12px 드리프트는 작업영역에서 10~20mm 위치 오차이며 블록 폭(40mm) 대비
   파지 실패를 직접 유발한다.
-- 게이트: `tools/camera_drift_check.py`로 **10분간 p95 드리프트 < 2px.**
+- 게이트: `tools/calibration/camera_drift_check.py`로 **10분간 p95 드리프트 < 2px.**
   실제 드리프트는 강체 운동이라 모든 코너를 함께 움직인다. 코너 하나가 튀는 것은
   검출 노이즈이므로 `max`로 판정하지 않는다(400여 개 코너에서 헛실패가 난다).
   매 세션 시작 시 재검사한다. 미달이면 캘리브레이션을 신뢰하지 않는다.
@@ -239,7 +239,7 @@ VERIFY 실패 뒤 HOME→SELECT에서 새 프레임으로 다시 검출한다. �
   mm 단위이며 카메라 위치와 무관하다.
 - `configs/default.yaml`의 green/blue와 색 prototype은 실장비 프레임에서
   조정했지만 red/yellow/wood HSV gate 일부는 합성 기준이 남아 있다. 세션 조명이
-  바뀌면 `tools/view_detect.py`로 다시 확인한다.
+  바뀌면 `tools/hardware/view_detect.py`로 다시 확인한다.
 - 맞닿은 동색 블록은 컨투어가 병합된다. 면적이 단일 블록의 ~2배인 블롭은
   분할하거나, 다음 사이클 재검출에 맡긴다(FSM이 매 사이클 재검출하므로 한 개를
   치우면 자연 분리된다).
@@ -249,7 +249,7 @@ VERIFY 실패 뒤 HOME→SELECT에서 새 프레임으로 다시 검출한다. �
 - 파지 판정은 `Present_Position`(그리퍼가 완전히 닫혔는가)과 `Present_Load`
   (물체를 물고 있는가)를 함께 본다. 빈 손으로 닫히면 위치가 `gripper_empty_closed_max`
   아래로 내려간다.
-- 임계값은 장비마다 다르다. `tools/tune_gripper_load.py`로 분포를 찍어 실측한다.
+- 임계값은 장비마다 다르다. `tools/hardware/tune_gripper_load.py`로 분포를 찍어 실측한다.
   `default.yaml`의 값은 가정값이다.
 
 ## §11 궤적과 안전

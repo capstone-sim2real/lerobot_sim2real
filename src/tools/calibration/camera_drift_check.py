@@ -6,13 +6,13 @@ tell (AGENTS.md §8). This tool makes that failure visible and gives the
 mount a pass/fail number.
 
     # 1) after bolting the camera down, store the baseline
-    python -m tools.camera_drift_check --save-reference
+    python -m tools.calibration.camera_drift_check --save-reference
 
     # 2) any time later — start of a session, after touching a cable
-    python -m tools.camera_drift_check
+    python -m tools.calibration.camera_drift_check
 
     # 3) prove the mount holds: sample for 10 minutes, log to CSV
-    python -m tools.camera_drift_check --watch 600
+    python -m tools.calibration.camera_drift_check --watch 600
 
 Exits non-zero when drift exceeds --max-drift-px, so it can gate a run.
 """
@@ -30,7 +30,7 @@ import cv2
 import numpy as np
 
 from perception.board import detect_corners, match_corners, median_square_px
-from tools._capture import grab
+from tools.calibration._capture import grab
 
 DEFAULT_REFERENCE = Path("experiments/legacy/calibration/camera_reference.json")
 DEFAULT_SOURCE = "http://127.0.0.1:8090/snapshot/shoulder.jpg"

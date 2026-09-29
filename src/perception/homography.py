@@ -8,7 +8,7 @@ frame* by the calibration tool, and only relative geometry is ever used
 (nearest-first distances, zone membership). Nothing downstream assumes a
 particular origin.
 
-Calibration is per venue: rerun ``tools/calibrate_homography.py`` after any
+Calibration is per venue: rerun ``tools/calibration/calibrate_homography.py`` after any
 camera-mount change or venue move.
 """
 
@@ -61,7 +61,7 @@ class PlaneCalibration:
     base_xy_mm: tuple[float, float] | None = None
     zone_polygon_mm: list[tuple[float, float]] | None = None
     # Chessboard lattice measured on this plane (origin_mm, u_mm, v_mm,
-    # pitch_mm, ...), written by tools/calibrate_board_grid.py. Display and
+    # pitch_mm, ...), written by tools/calibration/calibrate_board_grid.py. Display and
     # addressing only: every command still travels as robot-base mm. It is
     # tied to this H, so a camera move invalidates both together.
     board_grid: dict[str, Any] | None = None

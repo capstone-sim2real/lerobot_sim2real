@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 
-from tools.session_io import atomic_json, parse_session_args, read_telemetry
+from tools.calibration.session_io import atomic_json, parse_session_args, read_telemetry
 
 
 def parse_args(argv=None):
@@ -68,7 +68,7 @@ def publish_loop(args, kinematics, calibration, motors):
 
 def main(argv=None):
     args = parse_args(argv)
-    from tools.record_calibration_point import load_kinematics, DEFAULT_URDF, ARM_MOTORS
+    from tools.calibration.record_calibration_point import load_kinematics, DEFAULT_URDF, ARM_MOTORS
     from perception import PlaneCalibration
 
     kinematics = load_kinematics(DEFAULT_URDF, "gripper_frame_link")

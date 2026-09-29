@@ -6,7 +6,7 @@ One utility, two callers (AGENTS.md §10):
 
 Everything here is *read-only* on the bus — commanding the gripper or the
 descent is the caller's job. That keeps the sensing thresholds tunable with
-tools/tune_gripper_load.py without moving the arm.
+tools/hardware/tune_gripper_load.py without moving the arm.
 
 Never advance to PLACE without ``GraspCheck.grasped`` — hard rule.
 """

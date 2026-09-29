@@ -172,7 +172,7 @@ def run(cfg: AppConfig, run_id: str, *, resume: bool = False) -> dict:
     calib_path = Path(cfg.perception.calibration_path)
     if not calib_path.exists():
         raise FileNotFoundError(
-            f"Venue calibration not found: {calib_path}. Run tools/calibrate_homography.py first."
+            f"Venue calibration not found: {calib_path}. Run tools/calibration/calibrate_homography.py first."
         )
     calib = PlaneCalibration.load(calib_path)
     if not calib.zone_polygon_mm:

@@ -5,7 +5,7 @@ board and the robot are both bolted to the table, so their relative geometry
 never changes. Only the camera can move. That makes the detected corner set
 the reference for two things:
 
-  - drift detection (tools/camera_drift_check.py), and
+  - drift detection (tools/calibration/camera_drift_check.py), and
   - re-fitting the pixel->robot homography when the camera has shifted,
     without redoing the manual FK point procedure (AGENTS.md §6, §8).
 

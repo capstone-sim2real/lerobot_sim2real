@@ -1,6 +1,4 @@
 """Calibration web compatibility without physical hardware or live HTTP servers."""
-from pathlib import Path
-import re
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +11,7 @@ from agent.tools import ToolRegistry
 from agent_helpers import make_skills
 from session.calibration_joint_limit import CalibrationJointLimitIO
 from session.cancel import Cancelled
-from agent.panel import CalibrationSkills, configure_manual_tools, definitions, WEB_MANUAL_TOOLS
+from agent.panel import CalibrationSkills, configure_manual_tools
 
 
 def configured(sk):

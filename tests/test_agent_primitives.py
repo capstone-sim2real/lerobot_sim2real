@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from agent_helpers import make_skills, fast_cfg
-from agent.tools import ToolRegistry, build_tools
+from agent.tools import ToolRegistry
 from agent.provider.types import Message, ToolResult, ToolCall, ToolCallEvent, TurnEnd
 from agent.provider.fake import ScriptedProvider
 from agent.runner import AgentRunner

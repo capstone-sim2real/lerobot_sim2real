@@ -1,4 +1,4 @@
-"""Read-only YOLOE snapshot experiment: python -m tools.yoloe_blocks --help."""
+"""Read-only YOLOE snapshot experiment: python -m tools.yoloe.blocks --help."""
 from __future__ import annotations
 
 import argparse

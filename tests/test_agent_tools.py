@@ -1,18 +1,12 @@
 """Tool schemas, argument validation, zone names, and exception envelopes."""
 
-import concurrent.futures
 import subprocess
 import sys
 
-import pytest
 
-from agent.provider.schema import sanitize_for_gemini, to_anthropic_tools, to_gemini_function_declarations, to_openai_tools
 from agent.provider.types import ToolCall
-from agent.tools import ToolRegistry, build_tools, result_from_exception, validate_arguments
-from agent.zone_names import resolve_slot
-from config import AppConfig, load_config
-from session.cancel import Cancelled
-from session.results import SkillResult
+from agent.tools import ToolRegistry, build_tools, validate_arguments
+from config import AppConfig
 
 
 def _never(_job):

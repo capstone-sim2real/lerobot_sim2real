@@ -1,11 +1,4 @@
-import csv
-
-from tools.capture_calibration_session import (
-    PAIR_FIELDS,
-    completed_points,
-    export_accepted,
-    next_attempt_name,
-)
+from tools.calibration.calibration_records import PAIR_FIELDS
 
 
 def row(name, complete=True):
@@ -17,8 +10,8 @@ def row(name, complete=True):
 
 
 def test_manual_pixel_edit_preserves_recorded_joint_columns(tmp_path):
-    from tools.calibration_records import read_csv, write_csv
-    from tools.pick_pixels import read_rows, write_rows
+    from tools.calibration.calibration_records import read_csv, write_csv
+    from tools.calibration.pick_pixels import read_rows, write_rows
 
     path = tmp_path / "points.csv"
     fields = ["name", "u_px", "v_px", "shoulder_pan", "wrist_roll", "notes"]

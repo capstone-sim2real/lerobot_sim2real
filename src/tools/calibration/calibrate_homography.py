@@ -4,13 +4,13 @@ Run this once per venue/session (and after any camera-mount change), with the
 arm parked at home so it does not occlude the board:
 
     # 1) grab a frame and fit the homography from the chessboard
-    python -m tools.calibrate_homography \
+    python -m tools.calibration.calibrate_homography \
         --camera /dev/video0 --square-mm 25 --venue lab \
         --out src/configs/calib/lab.json
 
     # 2) open the saved <out>.frame.png, read off pixel coords, then re-run
     #    adding the robot base pixel and the 4 zone corner pixels:
-    python -m tools.calibrate_homography \
+    python -m tools.calibration.calibrate_homography \
         --image src/configs/calib/lab.json.frame.png \
         --square-mm 25 --venue lab \
         --base-px 320,470 --zone-px "200,100 400,100 400,200 200,200" \
@@ -34,7 +34,7 @@ from perception.homography import (
     calibrate_from_chessboard,
     calibrate_from_pairs,
 )
-from tools._capture import grab_frame
+from tools.calibration._capture import grab_frame
 
 
 def _parse_xy(text: str) -> tuple[float, float]:

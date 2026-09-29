@@ -1,6 +1,6 @@
 # Named joint poses, recorded on the physical arm:
 #
-#   python -m tools.record_pose --name home
+#   python -m tools.hardware.record_pose --name home
 #
 # 필요한 포즈는 home(시작/복귀 자세)뿐이다. 나머지 목표는 IK로 푼다.
 #

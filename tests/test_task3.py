@@ -12,15 +12,15 @@ import numpy as np
 import pytest
 
 import control.grasp as grasp_mod
-from runners import run_task, run_task3
-from config import AppConfig, validate_task3
+from runners import run_task3
+from config import AppConfig
 from control.grasp import GraspAttempt, GraspOutcome, GraspPlan, run_grasp_attempts
 from control.ik import IkResult
 from control.robot_io import JOINT_NAMES, MockRobotIO
 from data.episode_recorder import EpisodeRecorder, RecordingRobotIO, StopRecording
 from fsm.states import RunContext, StateName
 from fsm.task1 import Task1Perception
-from fsm.task3 import EPISODE_OK_KEY, Task3PlaceState, Task3SelectState
+from fsm.task3 import EPISODE_OK_KEY, Task3SelectState
 from perception import BlockDetection, PlaneCalibration
 
 

@@ -1,19 +1,14 @@
 """FSM budget/verification rules and CV+IK PICK adapter contracts."""
 
-import numpy as np
 
 from config import AppConfig, FsmConfig, SensingConfig
 from control import MockRobotIO
-from control.grasp import GraspAttempt, GraspPlan
 from control.ik import IkResult
-from fsm import ik_handler
 from fsm.handlers import VerifyState
 from fsm.ik_handler import CvIkPickState
 from fsm.machine import StateMachine
 from fsm.states import RunContext, State, StateName
-from fsm.task1 import Task1Perception
 from perception.detector import BlockDetection
-from perception.homography import PlaneCalibration
 from perception.select import SelectionResult
 
 
