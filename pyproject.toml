@@ -77,9 +77,6 @@ lerobot = { path = "third_party/lerobot", editable = true }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools]
-py-modules = ["config"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
