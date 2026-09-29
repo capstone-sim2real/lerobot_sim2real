@@ -476,6 +476,10 @@ agent:
     alignment_tolerance_mm: 25.0
     arrival_error_mm: 15.0
     home_fold_radius_mm: 40.0  # assumed; only for an empty gripper near home
+    home_return_clearance_mm: 55.0
+    home_return_min_clearance_mm: 45.0
+    home_lift_xy_limit_mm: 10.0
+    home_lift_tilt_candidates_deg: [0.0, -5.0, -10.0, -15.0]
     loaded_arrival_error_mm: 30.0
     cartesian_step_mm: 10.0
     contact_step_mm: 2.0

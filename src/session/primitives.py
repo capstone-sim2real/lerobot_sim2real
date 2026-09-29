@@ -30,6 +30,7 @@ class PrimitiveSkills(Skills):
         self._zone_drop_ready = False
         self._zone_drop_xy = None
         self._zone_retreat_joints = None
+        self._zone_home_pending = False
         self._grasp_failed = False
         self._pick_calibration = None
         self._pick_ready = False
@@ -2337,6 +2338,7 @@ class PrimitiveSkills(Skills):
         self._invalidate_pick()
         if self.s.held is not None:
             return self._fail("return_to_home", "Place held block before returning home")
+        post_release = self._zone_retreat_joints is not None or self._zone_home_pending
         if self._zone_retreat_joints is not None:
             # The retreat was recorded while holding the block. Preserve the
             # open jaws after release; only the arm should revisit that pose.
@@ -2353,6 +2355,10 @@ class PrimitiveSkills(Skills):
             self.s.player.move_to(target, max_step=self.cfg.motion.descent_step_per_tick,
                                   tol=self.cfg.motion.transit_arrival_tol)
             self._zone_retreat_joints = None
+            self._zone_home_pending = True
         self._target = None
         self._contact = False
-        return super().return_to_home()
+        result = super().return_to_home(post_release=post_release)
+        if result.ok:
+            self._zone_home_pending = False
+        return result

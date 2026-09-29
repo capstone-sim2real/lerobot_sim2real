@@ -1086,9 +1086,10 @@ class Skills:
         s.last_block_color = None
         return self._result(True, action, "held", "무언가를 집었습니다.", t0=t0, grasp_label=held.label)
 
-    def return_to_home(self) -> SkillResult:
+    def return_to_home(self, *, post_release: bool = False) -> SkillResult:
         t0 = time.monotonic()
-        lifted, at_home = self.s.return_home_safely()
+        lifted, at_home = (self.s.return_home_safely(post_release=True) if post_release
+                           else self.s.return_home_safely())
         return self._result(at_home, "return_to_home", "ok" if at_home else "motion_timeout",
                             "home으로 복귀했습니다." if at_home else "home 자세에 도달하지 못했습니다.",
                             t0=t0, lifted_first=lifted or None, arm_at_home=at_home)

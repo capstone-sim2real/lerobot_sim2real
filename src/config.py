@@ -1013,6 +1013,13 @@ class PrimitiveConfig:
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
     home_fold_radius_mm: float = 40.0  # assumed low-height folding corridor around home XY
+    # Assumed clearance after release: seek 55 mm, require 45 mm before folding home.
+    home_return_clearance_mm: float = 55.0
+    home_return_min_clearance_mm: float = 45.0
+    home_lift_xy_limit_mm: float = 10.0
+    home_lift_tilt_candidates_deg: list[float] = field(
+        default_factory=lambda: [0.0, -5.0, -10.0, -15.0]
+    )
     # Measured loaded-arm endpoint sag is 24-29mm at far slots. This applies
     # only while carrying; empty moves retain arrival_error_mm.
     loaded_arrival_error_mm: float = 30.0
@@ -1533,6 +1540,13 @@ def validate_agent(cfg: AppConfig) -> None:
         if key in seen and seen[key] != index:
             raise ValueError(f"agent.zone_slots alias {alias!r} contradicts a label")
         seen[key] = index
+
+    bounds = agent.primitives
+    if (not 0 < bounds.home_return_min_clearance_mm <= bounds.home_return_clearance_mm
+            or bounds.home_lift_xy_limit_mm <= 0
+            or not bounds.home_lift_tilt_candidates_deg
+            or any(not math.isfinite(angle) for angle in bounds.home_lift_tilt_candidates_deg)):
+        raise ValueError("agent.primitives home return settings are invalid")
 
     rel = agent.relative
     if rel.frame not in ("arm", "base"):

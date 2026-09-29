@@ -447,27 +447,90 @@ class ArmSession:
         self.player.move_to(result.joints, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
         return True
 
-    def return_home_safely(self) -> tuple[bool, bool]:
-        """Lift clear of the blocks if low, then home. Returns (lifted, at_home).
+    def lift_for_home(self) -> bool:
+        """Raise near the current XY before folding home past placed blocks."""
+        joints = self.robot.read_joints()
+        start = self.ik.forward_position_mm(joints)
+        bounds = self.cfg.agent.primitives
+        target_z = self.grasp_z_mm + bounds.home_return_clearance_mm
+        minimum_z = self.grasp_z_mm + bounds.home_return_min_clearance_mm
+        tolerance = bounds.lateral_clearance_tolerance_mm
+        if start[2] >= target_z - tolerance:
+            return False
 
-        Uses the measured pose, never a remembered one: after a STOP the arm
-        may be anywhere between two waypoints.
-        """
-        lifted = False
+        height = bounds.home_return_clearance_mm
+        chosen = None
+        while height >= bounds.home_return_min_clearance_mm:
+            goal_z = self.grasp_z_mm + height
+            for tilt in bounds.home_lift_tilt_candidates_deg:
+                candidate = self.ik.solve_holding_wrist_roll(
+                    *start[:2], goal_z, joints["wrist_roll"], radial_tilt_deg=tilt,
+                )
+                planned = self.ik.forward_position_mm(candidate.joints)
+                if (candidate.position_error_mm > self.cfg.agent.relative.jog_max_ik_error_mm
+                        or planned[2] < minimum_z - tolerance
+                        or math.dist(planned[:2], start[:2]) > bounds.home_lift_xy_limit_mm):
+                    continue
+                trace = [self.ik.forward_position_mm({**joints, **step})
+                         for step in interpolate(
+                             joints, candidate.joints, self.cfg.motion.max_step_per_tick
+                         )]
+                if (not trace
+                        or min(point[2] for point in trace) < start[2] - tolerance
+                        or any(math.dist(point[:2], start[:2]) > bounds.home_lift_xy_limit_mm
+                               for point in trace)):
+                    continue
+                home = {joint: value for joint, value in
+                        self.poses.get(self.cfg.motion.home_pose).items()
+                        if joint != "gripper"}
+                home_xy = self.ik.forward_position_mm(home)[:2]
+                home_trace = [self.ik.forward_position_mm({**candidate.joints, **step})
+                              for step in interpolate(candidate.joints, home,
+                                                      self.cfg.motion.max_step_per_tick)]
+                if not _low_home_path_clear(
+                        planned, home_trace, home_xy, safe_z=minimum_z,
+                        home_radius=bounds.home_fold_radius_mm,
+                        low_lateral_limit=self.cfg.agent.calibration_clearance.block_side_mm / 2,
+                        tolerance=tolerance):
+                    continue
+                chosen = candidate.joints
+                break
+            if chosen is not None:
+                break
+            height -= self.cfg.motion.hover_search_step_mm
+
+        if chosen is None:
+            if start[2] >= minimum_z - tolerance:
+                return False
+            raise TimeoutError("Cannot lift above home return clearance")
+        self.player.move_to(chosen, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
+        measured = self.ik.forward_position_mm(self.robot.read_joints())
+        if measured[2] < minimum_z - tolerance:
+            raise TimeoutError("Measured lift did not reach home return clearance")
+        return True
+
+    def return_home_safely(self, *, post_release: bool = False) -> tuple[bool, bool]:
+        """Raise before home; after a release, verify the entire low path."""
         if self.arm_at_home():
-            # home's tool frame sits near table height by design (measured FK
-            # z ~8mm at x ~157mm); "lifting" there would only unfold the arm
             return False, True
-        try:
-            lifted = self.lift_in_place()
-        except (Cancelled, TimeoutError):
-            raise
-        except Exception as exc:  # noqa: BLE001 - report failed clearance without sweeping low
-            logger.warning("vertical lift before homing failed: %s", exc)
-        safe_z = self.grasp_z_mm + self.cfg.motion.hover_min_clearance_mm
+        lifted = False
+        if post_release:
+            lifted = self.lift_for_home()
+        else:
+            try:
+                lifted = self.lift_in_place()
+            except (Cancelled, TimeoutError):
+                raise
+            except Exception as exc:  # noqa: BLE001 - preserve the guarded preflight
+                logger.warning("vertical lift before homing failed: %s", exc)
+        bounds = self.cfg.agent.primitives
+        safe_z = self.grasp_z_mm + (
+            bounds.home_return_min_clearance_mm
+            if post_release else self.cfg.motion.hover_min_clearance_mm
+        )
         measured_joints = self.robot.read_joints()
         measured = self.ik.forward_position_mm(measured_joints)
-        if measured[2] < safe_z - 1.0:
+        if post_release or measured[2] < safe_z - 1.0:
             home = {joint: value for joint, value in
                     self.poses.get(self.cfg.motion.home_pose).items()
                     if joint != "gripper"}
@@ -477,9 +540,9 @@ class ArmSession:
                                              self.cfg.motion.max_step_per_tick)]
             if (self.held is not None or not _low_home_path_clear(
                     measured, trace, home_xy, safe_z=safe_z,
-                    home_radius=self.cfg.agent.primitives.home_fold_radius_mm,
+                    home_radius=bounds.home_fold_radius_mm,
                     low_lateral_limit=self.cfg.agent.calibration_clearance.block_side_mm / 2,
-                    tolerance=self.cfg.agent.primitives.lateral_clearance_tolerance_mm)):
+                    tolerance=bounds.lateral_clearance_tolerance_mm)):
                 raise TimeoutError("Cannot home through blocks below hover clearance")
         self.go_home()
         return lifted, self.arm_at_home()

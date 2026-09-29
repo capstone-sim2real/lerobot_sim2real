@@ -202,6 +202,10 @@ def test_frame_bytes_match_observation_and_downscale(monkeypatch):
 
 
 def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypatch):
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
     sk, world, _ = fixture()
     monkeypatch.setattr(
         ContactMonitor, "check",
@@ -267,6 +271,10 @@ def test_task1_preplace_can_use_unaligned_yaw_when_aligned_yaw_fails(monkeypatch
 
 
 def test_unreachable_slot_keeps_block_held_for_another_slot(monkeypatch):
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
     sk, world, _ = fixture()
     move_to_target = sk.move_to_target
 
@@ -422,6 +430,10 @@ def test_block_transfer_stops_before_transport_when_grasp_fails(monkeypatch):
 
 
 def test_unverified_transfer_at_source_is_recoverable(monkeypatch):
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
     sk, world, _ = fixture()
     monkeypatch.setattr(
         ContactMonitor, "check",
@@ -561,10 +573,35 @@ def test_zone_retreat_keeps_gripper_open_after_release(monkeypatch):
     monkeypatch.setattr(sk.s.ik, "forward_position_mm", lambda _joints: (0.0, 0.0, 50.0))
     move = Mock()
     monkeypatch.setattr(sk.s.player, "move_to", move)
-    monkeypatch.setattr(sk.s, "return_home_safely", lambda: (False, True))
+    monkeypatch.setattr(sk.s, "return_home_safely", lambda **_kwargs: (False, True))
 
     assert sk.return_to_home().ok
     assert "gripper" not in move.call_args.args[0]
+
+
+def test_post_release_lifts_before_home_and_preserves_open_jaws(monkeypatch):
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=250.0, elbow_flex=35.0, gripper=1.0)
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
+    seen = []
+
+    def home():
+        seen.append(("home", sk.s.arm_position_mm()[2], robot.joints["gripper"]))
+
+    monkeypatch.setattr(sk.s, "go_home", home)
+    lifted, _ = sk.s.return_home_safely(post_release=True)
+    assert lifted
+    assert seen == [("home", 65.0, 1.0)]
+
+
+def test_post_release_rejects_home_path_that_drops_after_high_start(monkeypatch):
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=250.0, elbow_flex=65.0)
+    home = Mock(side_effect=AssertionError("unsafe low home sweep"))
+    monkeypatch.setattr(sk.s, "go_home", home)
+    with pytest.raises(TimeoutError, match="hover clearance"):
+        sk.s.return_home_safely(post_release=True)
+    home.assert_not_called()
 
 
 def test_home_does_not_sweep_low_when_vertical_lift_is_unreachable(monkeypatch):
@@ -677,6 +714,10 @@ def test_task1_zone_guard_is_local_and_height_aware():
 
 
 def test_task1_mission_slot_array_ignores_camera_slot_label(monkeypatch):
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
+    # FakeIk models linear Cartesian joints; real joint-space homing folds near home.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
     sk, _, _ = fixture()
     labels = list(sk.cfg.agent.zone_slots.labels)
     sk._mission_slot_ledger = [None] * len(labels)
