@@ -61,8 +61,6 @@ def test_lease_is_shared_stop_is_open_and_commands_need_the_shared_token():
         assert client.post("/api/lease", headers={"X-Operator-Token": token}).json()["token"] == token
         assert client.post("/api/chat", json={"text": "hi"}).status_code == 403
         assert client.post("/api/home", headers={"X-Operator-Token": token}).status_code == 409
-        stop = client.post("/api/stop").json()
-        assert stop["stopped"] is False and stop["state"] == "idle"
         assert client.post("/api/chat", json={"text": "hi"}, headers={"X-Operator-Token": token}).status_code == 202
         assert client.post("/api/jog", json={"left_mm": "x"}, headers={"X-Operator-Token": token}).status_code == 400
         assert client.post("/api/jog", json={"left_mm": 10}, headers={"X-Operator-Token": token}).status_code == 428
@@ -78,3 +76,6 @@ def test_lease_is_shared_stop_is_open_and_commands_need_the_shared_token():
         )
         assert switched.status_code == 200 and switched.json()["control_backend"] == "yoloe"
         assert client.post("/api/lease/force-release").status_code in (200, 403)
+        stop = client.post("/api/stop").json()
+        assert stop["stopped"] is True and stop["state"] == "stopped"
+        assert client.post("/api/chat", json={"text": "hi"}, headers={"X-Operator-Token": token}).status_code == 409
