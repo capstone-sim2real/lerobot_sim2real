@@ -1241,15 +1241,15 @@ class PrimitiveSkills(Skills):
         return not self._grasp_failed
 
     def _choose_place_yaw(self, xyz, place_tilt):
-        """Keep the held jaw heading when reachable, otherwise use a safe yaw."""
+        """Prefer zone-parallel block alignment with wrist_roll nearest zero."""
         if self._held_block_angle_deg is None or self._held_pick_yaw_deg is None:
             raise ValueError("Held block orientation was not recorded at grasp")
         axis = zone_axis_yaw_deg(self.s.calib.zone_polygon_mm)
         base = self._held_pick_yaw_deg + axis - self._held_block_angle_deg
         neutral = self.s.ik.neutral_yaw_deg(*xyz)
         current_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
-        # A square does not need a quarter-turn to satisfy Task 1. Keep the
-        # held jaw heading when it is reachable at both hover and release.
+        # A square has four equivalent parallel headings. Prefer the one
+        # nearest neutral wrist_roll, then the smaller turn from current yaw.
         aligned = sorted(
             {(base + 90.0 * k + 180.0) % 360.0 - 180.0 for k in range(-3, 4)},
             key=lambda yaw: abs(angle_error_deg(yaw, current_yaw)),
@@ -1272,7 +1272,7 @@ class PrimitiveSkills(Skills):
                     )
                     # Release is above the grasp plane; no need to prove the
                     # wrist can reach the table while holding a block.
-                    self._solve(
+                    release = self._solve(
                         (*xyz[:2], self.s.drop_z_mm), radial_tilt_deg=place_tilt,
                         max_position_error_mm=self.cfg.ik.max_position_error_mm,
                         max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
@@ -1283,17 +1283,18 @@ class PrimitiveSkills(Skills):
                     continue
                 planned_z = self.s.ik.forward_position_mm(hover.joints)[2]
                 if planned_z >= safe_z:
-                    plans.append((abs(angle_error_deg(yaw, current_yaw)),
-                                  abs(angle_error_deg(yaw, neutral)),
+                    plans.append((max(abs(hover.joints["wrist_roll"]),
+                                      abs(release.joints["wrist_roll"])),
+                                  abs(angle_error_deg(yaw, current_yaw)),
                                   hover.position_error_mm, yaw))
             return plans
 
-        unchanged_plans = viable([current_yaw])
-        if unchanged_plans:
-            return unchanged_plans[0][3], False
         aligned_plans = viable(aligned)
         if aligned_plans:
             return min(aligned_plans)[3], True
+        unchanged_plans = viable([current_yaw])
+        if unchanged_plans:
+            return unchanged_plans[0][3], False
         fallback_plans = viable(fallback)
         if fallback_plans:
             return min(fallback_plans)[3], False
