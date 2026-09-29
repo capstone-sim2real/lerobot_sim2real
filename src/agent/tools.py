@@ -112,7 +112,11 @@ def validate_arguments(schema: dict[str, Any], args: Any) -> str | None:
 def result_from_exception(action: str, exc: BaseException) -> SkillResult:
     """Map anything a skill raised to a fault/failure envelope."""
     from session.cancel import Cancelled
+    from session.collection import RecordingQualityError
 
+    if isinstance(exc, RecordingQualityError):
+        return SkillResult(False, action, "task_incomplete",
+                           f"녹화 품질 기준 초과로 이번 에피소드를 폐기했습니다: {exc}", "retry_ok")
     name = type(exc).__name__
     if isinstance(exc, Cancelled) or name == "StopRecording":
         return SkillResult(False, action, "cancelled", "비상정지로 동작을 멈췄습니다.", "do_not_retry")

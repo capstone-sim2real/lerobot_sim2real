@@ -32,6 +32,9 @@ class Skills:
     def close(self):
         pass
 
+    def preserve_pose_on_close(self):
+        pass
+
     def close_gripper(self):
         self.started.set()
         for _ in range(200):
@@ -99,7 +102,7 @@ def test_manual_jog_and_gripper_language_do_not_force_home_observation():
     assert needs_fresh_scene("빨간 블록을 오른쪽으로 20mm 옮겨줘")
 
 
-def test_manual_recovery_is_the_only_recovery_path():
+def test_stop_cancels_a_busy_skill_without_homing():
     cfg = AppConfig()
     service, skills, _events = _service([[ToolCallEvent(ToolCall("a", "close_gripper", {})), TurnEnd("tool_use")]], cfg)
     token = service.acquire_lease(None)
@@ -107,9 +110,39 @@ def test_manual_recovery_is_the_only_recovery_path():
     assert skills.started.wait(5)
     service.stop()
     service.wait_idle()
-    # no automatic recovery: stays STOPPED until the operator clicks it
     assert service.gate.state is ControlState.STOPPED and skills.homed == 0
+    service.shutdown()
+
+
+def test_stop_while_idle_waits_for_explicit_home():
+    service, skills, _events = _service([])
+    token = service.acquire_lease(None)
+    skills.at_home = False
+    assert service.stop()["stopped"]
+    service.wait_idle()
+    assert service.gate.state is ControlState.STOPPED and skills.homed == 0
+    assert service.stop()["stopped"]
+    service.wait_idle()
+    assert service.gate.state is ControlState.STOPPED and skills.homed == 0
+    skills.at_home = True
     assert service.home(token)[0] == 202
     service.wait_idle()
     assert service.gate.state is ControlState.IDLE and skills.homed == 1
+    service.shutdown()
+
+
+def test_operator_stop_automatically_homes_after_active_tool_stops():
+    cfg = AppConfig()
+    service, skills, events = _service(
+        [[ToolCallEvent(ToolCall("a", "close_gripper", {})), TurnEnd("tool_use")]], cfg
+    )
+    token = service.acquire_lease(None)
+    service.chat(token, "미션 1")
+    assert skills.started.wait(5)
+    assert service.stop(token)["stopped"]
+    service.wait_idle()
+    assert skills.homed == 1
+    assert service.gate.state is ControlState.IDLE
+    assert any(event.get("name") == "recover_and_home"
+               for event in events if event.get("type") == "tool_result")
     service.shutdown()

@@ -18,8 +18,8 @@ from typing import Any
 import cv2
 import numpy as np
 
-from config import AppConfig, PerceptionConfig, WorkspaceBoundaryConfig, load_config
-from control.grasp import biased_grasp_xy, grasp_candidate_points
+from config import AppConfig, PerceptionConfig, Task1Config, WorkspaceBoundaryConfig, load_config
+from control.grasp import biased_grasp_xy, grasp_candidate_points, near_vertical_pick_radius_mm
 from control.ik import tangent_square_grasp_yaw_deg
 from perception.detector import workspace_sector_points_mm
 from perception.zone import point_in_zone
@@ -42,6 +42,7 @@ def workspace_boundary_metadata(
     calibration: PlaneCalibration,
     cfg: WorkspaceBoundaryConfig,
     perception: PerceptionConfig,
+    task1: Task1Config | None = None,
 ) -> dict[str, Any] | None:
     """Project the detector's workspace sector into the calibrated image.
 
@@ -59,6 +60,15 @@ def workspace_boundary_metadata(
     radii = np.hypot(points_mm[:, 0] - base_x, points_mm[:, 1] - base_y)
     points_px = calibration.board_to_pixel(points_mm)
     base_px = calibration.board_to_pixel(np.asarray([[base_x, base_y]], dtype=np.float64))
+    near_vertical_arc_px = []
+    if task1 is not None:
+        near_vertical_radius = near_vertical_pick_radius_mm(task1)
+        if near_vertical_radius > 0:
+            near_vertical_mm = workspace_sector_points_mm(
+                perception, (base_x, base_y), cfg.sample_step_deg,
+                radius_limit_mm=near_vertical_radius,
+            )
+            near_vertical_arc_px = _point_list(calibration.board_to_pixel(near_vertical_mm))
     return {
         "kind": (
             "ik_reach_envelope"
@@ -70,6 +80,8 @@ def workspace_boundary_metadata(
         "angle_min_deg": float(lo),
         "angle_max_deg": float(hi),
         "points_px": _point_list(points_px),
+        "near_vertical_arc_px": near_vertical_arc_px,
+        "near_vertical_max_tilt_deg": task1.near_vertical_pick_max_deg if task1 else None,
         # the two radial legs back to the base close the arc into a sector
         "base_px": _point_list(base_px)[0],
     }
@@ -314,6 +326,7 @@ class OverlayAnalyzer:
                 self.calibration,
                 self.cfg.camera.overlay.workspace_boundary,
                 self.cfg.perception,
+                self.cfg.task1,
             ),
             "target_zone": target_zone_metadata(self.calibration),
             "display_only": True,

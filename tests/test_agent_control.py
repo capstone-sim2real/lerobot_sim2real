@@ -34,7 +34,9 @@ def test_multiple_operators_share_a_session_and_only_idle_accepts_commands():
 def test_stop_locks_until_home_is_verified():
     gate, stops, _snaps, _clock = _gate()
     token = gate.acquire_lease()
-    assert not gate.request_stop()  # nothing is moving
+    assert gate.request_stop() and gate.state is ControlState.STOPPED
+    assert gate.try_begin_home(token)
+    gate.finish_home(arm_at_home=True)
     gate.try_begin(token, "chat")
     assert gate.request_stop() and stops == [1] and gate.state is ControlState.STOPPING
     assert not gate.try_begin_home(token)  # the turn has not unwound yet

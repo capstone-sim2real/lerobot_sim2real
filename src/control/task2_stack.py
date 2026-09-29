@@ -19,7 +19,7 @@ from control.grasp import GraspAttempt, highest_reachable_hover
 from control.ik import IkResult, TopDownIK
 from control.task1_transport import over_ik_gate, push_out_from_base, transit_apex
 from perception.homography import PlaneCalibration
-from perception.zone import zone_slot_centres
+from perception.zone import ordered_zone_corners, zone_slot_centres
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class Task2StackPlan:
 class Task2StackPlanner:
     """Solve the whole tower once, up front, and report what is reachable."""
 
-    def __init__(self, calib: PlaneCalibration, cfg: AppConfig, ik: TopDownIK):
+    def __init__(self, calib: PlaneCalibration, cfg: AppConfig, ik: TopDownIK, *, target_xy_mm=None):
         self._calib = calib
         self._cfg = cfg
         self._ik = ik
@@ -69,14 +69,15 @@ class Task2StackPlanner:
             raise ValueError("Calibration metadata is missing grasp_z_mm_mean") from exc
         self._grasp_z = grasp_z
         base = calib.base_xy_mm or (0.0, 0.0)
-        self._raw_xy = zone_slot_centres(calib, [list(cfg.task2.stack_uv)])[0]
+        self._raw_xy = (tuple(target_xy_mm) if target_xy_mm is not None else
+                        zone_slot_centres(calib, [list(cfg.task2.stack_uv)])[0])
         # Command the point further out than we want the block, because the
         # arm under-reaches by about that much. The landing point is what has
         # to be inside zone_polygon_mm -- that is what hides placed blocks
         # from the detector, which is what lets Task 1's empty-timeout
         # completion criterion work here unchanged.
         self._xy = push_out_from_base(
-            self._raw_xy, base, cfg.task2.stack_radial_offset_mm
+            self._raw_xy, base, cfg.task2.stack_radial_offset_mm if target_xy_mm is None else 0.0
         )
         self._levels = self._solve_levels()
 
@@ -227,6 +228,45 @@ class Task2StackPlanner:
                 f"y={self._xy[1]:.1f} ({plans[0].reason}); nothing can be stacked here"
             )
         return tuple(plans)
+
+    def entry_pose(self, level: Task2LevelPlan) -> IkResult:
+        """Higher folded-arm entry for upper floors; nominal release stays bounded."""
+        t2 = self._cfg.task2
+        if level.level < t2.upper_entry_level:
+            return level.hover
+        result = self._ik.solve(
+            *level.xy_mm,
+            level.place_z_mm + t2.upper_entry_clearance_mm,
+            radial_tilt_deg=t2.upper_entry_radial_tilt_deg,
+        )
+        if (result.position_error_mm > t2.hover_gate_mm
+                or abs(result.tilt_error_deg - abs(t2.upper_entry_radial_tilt_deg))
+                > self._cfg.ik.max_tilt_error_deg):
+            raise ValueError("Task 2 upper-floor entry pose fails the IK gate")
+        return result
+
+    def outside_stage(self, level: Task2LevelPlan) -> IkResult:
+        """Near-side pose outside the taped zone at the tower hover height."""
+        base = self._calib.base_xy_mm or (0.0, 0.0)
+        far_left, far_right, near_right, near_left = ordered_zone_corners(
+            self._calib.zone_polygon_mm, base
+        )
+        far = (far_left + far_right) / 2.0
+        near = (near_left + near_right) / 2.0
+        direction = near - far
+        direction /= math.hypot(*direction)
+        xy = near + direction * self._cfg.task2.route_standoff_mm
+        upper = level.level >= self._cfg.task2.upper_entry_level
+        z = (level.place_z_mm + self._cfg.task2.upper_entry_clearance_mm
+             if upper else level.hover_z_mm)
+        tilt = (self._cfg.task2.upper_entry_radial_tilt_deg
+                if upper else level.radial_tilt_deg)
+        result = self._ik.solve(float(xy[0]), float(xy[1]), z,
+                                radial_tilt_deg=tilt)
+        if (result.position_error_mm > self._cfg.task2.hover_gate_mm
+                or over_ik_gate(result, self._cfg, target_tilt_deg=tilt)):
+            raise ValueError("Task 2 outside-zone staging point fails the IK gate")
+        return result
 
     def plan(self, held: GraspAttempt, level_index: int) -> Task2StackPlan:
         if not 0 <= level_index < len(self._levels):

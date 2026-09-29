@@ -67,7 +67,8 @@ def test_workspace_overlay_uses_same_angle_dependent_radii_as_detector():
         workspace_radius_by_angle_mm=[[-90.0, 250.0], [0.0, 320.0], [90.0, 270.0]],
     )
     boundary = workspace_boundary_metadata(
-        calibration, WorkspaceBoundaryConfig(sample_step_deg=90.0), perception
+        calibration, WorkspaceBoundaryConfig(sample_step_deg=90.0), perception,
+        AppConfig().task1,
     )
     assert boundary["kind"] == "ik_reach_envelope"
     assert boundary["label"] == "IK reach"
@@ -76,6 +77,15 @@ def test_workspace_overlay_uses_same_angle_dependent_radii_as_detector():
     )
     for point in boundary["points_px"]:
         assert detector._in_workspace(tuple(point), perception, (0.0, 0.0))
+    # The green nominal near-vertical band is capped at the same 5-degree
+    # threshold used by the post-grasp lift branch.
+    from control.grasp import near_vertical_pick_radius_mm
+    near = near_vertical_pick_radius_mm(AppConfig().task1)
+    assert 280.0 < near < 281.0
+    np.testing.assert_allclose(
+        boundary["near_vertical_arc_px"],
+        [[0.0, -250.0], [near, 0.0], [0.0, 270.0]], atol=1e-6,
+    )
 
 
 def test_runner_perception_uses_http_snapshot_as_bgr(monkeypatch):

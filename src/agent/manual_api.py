@@ -41,7 +41,17 @@ def register_manual_api(app, service, *, control_ui_version):
     @app.post("/api/chat")
     async def chat(request: Request):
         body = await request.json()
-        return reply(service().chat(token_of(request), str(body.get("text", ""))))
+        return reply(service().chat(token_of(request), str(body.get("text", "")), selected_pixel=body.get("selected_pixel")))
+
+    @app.post("/api/mission")
+    async def mission(request: Request):
+        stale = require_current_ui(request)
+        if stale is not None:
+            return stale
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "task must be 1 or 2"}, status_code=400)
+        return reply(service().mission(token_of(request), body.get("task")))
 
     @app.post("/api/jog")
     async def jog(request: Request):
@@ -100,8 +110,8 @@ def register_manual_api(app, service, *, control_ui_version):
         return stale or reply(service().direct(token_of(request), name, arguments))
 
     @app.post("/api/stop")
-    async def stop():
-        return service().stop()
+    async def stop(request: Request):
+        return service().stop(token_of(request))
 
     @app.post("/api/home")
     async def home(request: Request):

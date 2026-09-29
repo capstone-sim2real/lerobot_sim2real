@@ -6,6 +6,8 @@ import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { Badge } from './components/ui/badge';
 import { Input } from './components/ui/input';
+import { NativeSelect } from './components/ui/native-select';
+import { NativeCheckbox } from './components/ui/native-checkbox';
 
 // Static shadcn rendering keeps existing native control IDs and event ownership.
 // No hydration, runtime CDN, or second controller state is introduced.
@@ -20,8 +22,12 @@ function decorate(selector: string, render: (className: string, el: ReturnType<t
 }
 decorate('button', (className,el)=>renderToStaticMarkup(<Button className={className}
   variant={el.attr('id')==='stop'?'destructive':el.hasClass('btn-primary')?'default':el.hasClass('link')?'ghost':'outline'}/>));
-decorate('.panel',className=>renderToStaticMarkup(<Card className={className}/>));
+decorate('.panel,.lock-card',className=>renderToStaticMarkup(<Card className={className}/>));
 decorate('.badge',className=>renderToStaticMarkup(<Badge className={className} variant="secondary"/>));
 decorate('input:not([type=checkbox]):not([type=radio])',className=>renderToStaticMarkup(<Input className={className}/>));
+decorate('select',className=>renderToStaticMarkup(<NativeSelect className={className}/>));
+decorate('input[type=checkbox]',className=>renderToStaticMarkup(<NativeCheckbox className={className}/>));
+decorate('a[href=\"/episodes\"]',className=>renderToStaticMarkup(<Button asChild variant="outline" className={className}><a /></Button>));
+decorate('a#camera-tools-link',className=>renderToStaticMarkup(<Button asChild variant="link" className={className}><a /></Button>));
 $('head').append('<link rel="stylesheet" href="/shadcn.css?v=__SHADCN_CSS_VERSION__">');
 writeFileSync('../src/agent/web/index.html',$.html());

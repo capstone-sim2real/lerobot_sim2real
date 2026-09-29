@@ -83,6 +83,25 @@ def test_load_stop_during_calibrated_descent_cannot_close(tmp_path):
     assert not sk.close_gripper().ok
 
 
+def test_oblique_descent_ignores_transient_load_high_above_block(tmp_path):
+    sk, cal, robot = make_calibration_skills(tmp_path)
+    sk.cfg.motion.descent_step_per_tick = 0.3
+    assert approach(sk).ok
+    read_loads = robot.read_loads
+    count = [0]
+
+    def transient_load():
+        count[0] += 1
+        loads = read_loads()
+        if 6 <= count[0] <= 10:
+            loads["elbow_flex"] = 1000
+        return loads
+
+    robot.read_loads = transient_load
+    result = sk.move_to_target("object", "grasp", "green_1", sk.observation_id)
+    assert result.ok, result
+
+
 def test_observe_invalidates_prepared_descent(tmp_path):
     sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
@@ -253,22 +272,17 @@ def test_preplace_rejects_ik_that_keeps_pick_tilt(tmp_path):
     assert len(robot.sent_actions) == before
 
 
-def test_preplace_rotates_held_block_toward_zone_axis(tmp_path):
-    from control.task1_transport import square_angle_error_deg, zone_axis_yaw_deg
-
+def test_preplace_prefers_parallel_heading_nearest_neutral_wrist(tmp_path):
     sk, cal, robot = make_calibration_skills(tmp_path)
     assert approach(sk).ok
     assert sk.move_to_target("object", "grasp", "green_1", sk.observation_id).ok
     assert sk.close_gripper().ok
-    # The block was picked at an angle; the grasp-to-block yaw offset must
-    # be preserved while the carried jaw turns toward the zone axis.
     sk._held_block_angle_deg = 30.0
-    pick_yaw = sk._held_pick_yaw_deg
-    robot.joints["elbow_flex"] = sk.s.grasp_z_mm + 35.0
+    before_yaw = sk.s.ik.forward_yaw_deg(robot.joints)
+    robot.joints["elbow_flex"] = sk.s.grasp_z_mm + sk.limits.lateral_clearance_mm
     result = sk.move_to_target("slot", "preplace", slot="top-left")
     assert result.ok
-    actual_jaw_yaw = sk.s.ik.forward_yaw_deg(robot.joints)
-    predicted_block_yaw = 30.0 + actual_jaw_yaw - pick_yaw
-    assert abs(square_angle_error_deg(
-        predicted_block_yaw, zone_axis_yaw_deg(sk.s.calib.zone_polygon_mm))) < 1.0
-    assert result.data["zone_aligned_yaw_deg"] == round(sk._place_yaw_deg, 1)
+    assert sk.s.ik.forward_yaw_deg(robot.joints) == before_yaw - 30.0
+    assert robot.joints["wrist_roll"] == -30.0
+    assert not result.data["zone_alignment_fallback"]
+    assert result.data["zone_aligned_yaw_deg"] == -30.0

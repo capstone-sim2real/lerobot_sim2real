@@ -79,18 +79,18 @@ perception:
   # 팔이 닿지도 않고, 판 바깥 나무 바닥 같은 잡동사니가 바로 그 유령 후보의
   # 출처다. 관제 화면의 주황 부채꼴이 이 값을 그대로 그리므로, 그려진 것이
   # 곧 검출 범위다. radius 0이면 비활성.
-  workspace_radius_mm: 380.0
+  workspace_radius_mm: 420.0
   workspace_angle_min_deg: -90.0
   workspace_angle_max_deg: 90.0
-  # 실험 범위: 기울인 파지의 grasp/35mm hover, 기존 grasp bias, 중립±45도
-  # yaw를 정적 IK로 확인한 후 정면 ±30도만 확장했다. 20mm IK 게이트와
-  # 카메라 화각은 통과했지만 실물 턱/블록 간섭은 미검증이다.
-  # detector와 웹 경계가 이 값을 공유하며 실제 파지는 후보별 IK를 다시 검사한다.
+  # 실험 범위: 최대 420mm. 60도 파지와 35mm hover를 정적 IK로 확인했고,
+  # 측면 끝은 캘리브레이션 카메라의 전체 블록 시야에 맞춰 줄인다.
+  # 블록 yaw에 따라 일부 목표는 여전히 실패하므로 후보별 IK gate가 최종 판단한다.
+  # 실물 턱/블록 간섭과 이 원거리 범위의 실제 파지는 미검증이다.
   workspace_radius_by_angle_mm:
-    [[-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-     [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
-     [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
-     [60, 296], [70, 288], [80, 283], [90, 275]]
+    [[-90, 300], [-80, 400], [-70, 420], [-60, 420], [-50, 420],
+     [-40, 420], [-30, 420], [-20, 420], [-10, 420], [0, 420],
+     [10, 420], [20, 420], [30, 420], [40, 420], [50, 420],
+     [60, 420], [70, 400], [80, 380], [90, 300]]
 
 select:
   rule: nearest_first
@@ -174,6 +174,7 @@ motion:
 ik:
   urdf_path: third_party/so101/so101.urdf
   target_frame: gripper_frame_link
+  shoulder_pan_origin_xy_mm: [38.8353, 0.0]  # URDF shoulder_pan joint origin, base XY mm
   seed_step_deg: 3.0
   seed_range_deg: 100.0
   seed_tilt_max_deg: 3.0
@@ -216,6 +217,8 @@ task1:
   empty_timeout_s: 5.0
   scan_interval_s: 0.2
   max_frame_age_s: 1.0
+  # 먼 블록 우선, 화면 가로 가장자리일수록 최대 50mm 감점(가정값).
+  selection_center_bias_mm: 50.0
   # [u, v]: zone 긴 변의 왼쪽->오른쪽, 먼 변->가까운 변. 먼 3개 후 가까운 2개.
   slot_uv: [[0.14, 0.20], [0.50, 0.20], [0.80, 0.20], [0.32, 0.76], [0.68, 0.76]]
   # 목표 구역도 캘리브레이션 좌표를 그대로 사용한다.
@@ -223,21 +226,31 @@ task1:
   # 초근거리 실기 보정 비활성. max radius 값은 boost=0일 때 사용되지 않는다.
   pick_near_boost_max_radius_mm: 175.0
   pick_near_boost_mm: 0.0
-  # 파지는 280~320mm 구간에서 3→30도로 점진적으로 기울인다.
-  # 배치는 운반 중 수평(0도)으로 정렬한다. 30도 파지는 실기 검증 전 실험값이다.
+  # 파지는 280~300mm 구간에서 최대 60도까지 기울이되, IK가 안 풀리면
+  # 더 작은 기울기로 폴백한다. 60도 파지는 실기 검증 전 실험값이다.
+  # 배치는 운반 중 수평(0도)으로 정렬한다.
   # joint 값을 후처리하지 않고 IK 목표축을 기울여 XYZ를 유지한다.
   pick_tilt_start_radius_mm: 280.0
-  pick_tilt_max_radius_mm: 320.0
+  pick_tilt_max_radius_mm: 300.0
   pick_tilt_base_deg: 3.0
-  pick_tilt_max_deg: 30.0
+  pick_tilt_max_deg: 60.0
+  pick_tilt_fallback_deg: [45.0, 30.0, 15.0]
+  near_vertical_pick_max_deg: 5.0
   place_tilt_max_deg: 0.0
+  # Small outward placement tilts; physical performance remains to be measured.
+  place_tilt_candidates_deg: [0, -5, -10, -15, -20, -25, -30]
+  place_ik_error_mm: 5.0
   # 배치 시 모델 FK 수평 오차 한도. 실제 블록 수평은 관찰로 확인해야 한다.
   place_level_tolerance_deg: 3.0
   # 영역 긴 변에 대한 블록 평면 회전의 모델 FK 허용 오차.
   place_yaw_tolerance_deg: 5.0
-  tilted_pick_hover_clearance_mm: 35.0
-  # 실기 확정 전 가정값. 낮게 놓되 테이블을 누르지 않도록 grasp 평면보다 5mm 위.
-  release_clearance_mm: 5.0
+  place_yaw_fallback_offsets_deg: [-15, 15, -30, 30, -45, 45, -60, 60, -75, 75, -90, 90]
+  tilted_pick_hover_clearance_mm: 30.0
+  tilted_pick_pregrasp_clearance_mm: 50.0
+  # 실기 확정 전 가정값. 접촉 탐색 없이 블록 윗면 기준 15mm 위에서 놓는다.
+  release_clearance_mm: 15.0
+  # 적재구역 전체가 아닌 관측된 블록 주변의 낮은 경로만 막는다 (실기 미검증).
+  zone_path_clearance_mm: 15.0
 
 # 2차 미션: 한 좌표에 접촉 기반으로 적층한다. SELECT/PICK/VERIFY와 픽 보정은
 # task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).
@@ -254,7 +267,17 @@ task2:
   # 실기 확정 전 가정값. task1의 5.0보다 작다 — 테이블이 흡수하는 낙하가
   # 타워는 무너뜨린다.
   release_clearance_mm: 2.0
-  # Task 2에서 접촉 탐색 하강은 완전히 비활성화. 모든 층을 계산된 릴리스 높이로 즉시 이동.
+  # primitive 적층은 접촉 센서 대신 이 높이에서 놓는다 (실기 조정 전 가정값).
+  drop_clearance_mm: 15.0
+  # 구역 안쪽을 통과하지 않는 근접 경유점 거리 (실기 확인 전 가정값).
+  route_standoff_mm: 35.0
+  # 적층점 주변만 막고, 추정 탑 높이 위에는 이만큼 여유를 둔다 (실기 미검증).
+  tower_path_clearance_mm: 15.0
+  # 5층 진입 시 팔꿈치를 접어 높은 경유점에 도달한다 (모델 결과, 실기 미검증).
+  upper_entry_level: 5
+  upper_entry_clearance_mm: 30.0
+  upper_entry_radial_tilt_deg: -15.0
+  # Task 2에서 접촉 탐색 하강은 비활성화. FSM은 hover에서, primitive는 drop 높이에서 놓는다.
   contact_descent_levels: 0
   # 실기 확정 전 가정값. 착지를 감지하려면 세 값이 한 순서를 지켜야 한다:
   #   적재 시 정상상태 오프셋 < contact_shortfall < descent_max_lag < overshoot
@@ -329,11 +352,10 @@ task3:
 
   # 데이터셋 카메라 이름 -> camera.server MJPEG URL. /dev/video*의 단독 소유자는
   # camera.server이므로(AGENTS.md §8) 디바이스를 두 번 열지 않고 스트림을 읽는다.
-  # 손목캠을 다시 달면 so101-camera --wrist-device 로 서버에 붙이고 아래 한 줄만
-  # 주석 해제하면 된다 — 코드 변경 없음.
+  # 헤드캠과 손목캠을 같은 녹화 틱에 저장한다.
   cameras:
     top: http://127.0.0.1:8090/video/shoulder.mjpg
-    # wrist: http://127.0.0.1:8090/video/wrist.mjpg
+    wrist: http://127.0.0.1:8090/video/wrist.mjpg
   # ACT는 observation.images.* 여러 개를 카메라 뷰로 보고 shape이 같기를 요구한다.
   image_width: 640
   image_height: 480
@@ -434,19 +456,37 @@ agent:
 
   collection:
     root: datasets/agent
-    # Assumed quality gates; timing failures discard rather than compress time.
+    max_steps: 24
+    max_task_text_chars: 240
+    # Provisional quality bounds: tolerate brief gaps, track cumulative missing motion.
     max_tick_gap_s: 0.1
+    tolerated_missing_ticks: 2
+    max_moving_gap_s: 0.5
+    max_total_missing_motion_s: 1.0
+    max_stationary_drift: 1.0
+    sequence_settle_window_s: 0.3
+    sequence_settle_max_drift: 0.25
+    sequence_settle_timeout_s: 3.0
     max_mean_period_error: 0.1
     idle_poll_s: 0.005
   primitives:
     calibrated_pick: true
     # Assumed bounds: validate on the real arm before deployment.
     target_max_age_s: 120.0
-    approach_clearance_mm: 35.0
-    lateral_clearance_mm: 35.0
+    approach_clearance_mm: 38.0
+    lateral_clearance_mm: 38.0
+    lateral_clearance_tolerance_mm: 2.0
+    zone_release_floor_margin_mm: 2.0
     max_lift_attempts: 4
+    observation_window_s: 2.0
+    observation_fps: 5.0
     alignment_tolerance_mm: 25.0
     arrival_error_mm: 15.0
+    home_fold_radius_mm: 40.0  # assumed; only for an empty gripper near home
+    home_return_clearance_mm: 55.0
+    home_return_min_clearance_mm: 38.0
+    home_lift_xy_limit_mm: 10.0
+    home_lift_tilt_candidates_deg: [0.0, -5.0, -10.0, -15.0]
     loaded_arrival_error_mm: 30.0
     cartesian_step_mm: 10.0
     contact_step_mm: 2.0

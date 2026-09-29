@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -43,7 +44,7 @@ from control.task1_transport import (
     release_at,
     solve_place_point,
 )
-from control.trajectory import TrajectoryPlayer
+from control.trajectory import TrajectoryPlayer, interpolate
 from perception.detector import point_in_workspace
 from perception.homography import PlaneCalibration
 from perception.scene import Scene, detect_scene
@@ -56,6 +57,41 @@ logger = logging.getLogger(__name__)
 
 XY = tuple[float, float]
 PICK_TILT_KEY = "task1_pick_radial_tilt_deg"
+
+
+def _low_home_path_clear(
+    start: tuple[float, float, float],
+    trace: list[tuple[float, float, float]],
+    home_xy: tuple[float, float],
+    *,
+    safe_z: float,
+    home_radius: float,
+    low_lateral_limit: float,
+    tolerance: float,
+) -> bool:
+    """Permit an empty-arm home sweep only if its FK first rises in place.
+
+    The return may descend again only inside the small home column. This is
+    a model preflight, not a visual collision guarantee.
+    """
+    if math.dist(start[:2], home_xy) <= home_radius:
+        return True
+    previous_z = start[2]
+    cleared = False
+    for point in trace:
+        if not cleared:
+            if point[2] + tolerance < previous_z:
+                return False
+            if point[2] + tolerance < safe_z:
+                if math.dist(point[:2], start[:2]) > low_lateral_limit:
+                    return False
+            else:
+                cleared = True
+        elif (point[2] + tolerance < safe_z
+              and math.dist(point[:2], home_xy) > home_radius):
+            return False
+        previous_z = point[2]
+    return cleared
 
 
 class CameraError(RuntimeError):
@@ -294,6 +330,35 @@ class ArmSession:
 
     # ── perception ───────────────────────────────────────────────────
 
+    def observe_window(self) -> Scene:
+        """Aggregate fresh stationary observations, never prior-motion history."""
+        from camera.overlay import DetectionStabilizer
+        from perception.scene import build_scene
+
+        cfg = self.cfg.agent.primitives
+        interval = 1.0 / cfg.observation_fps
+        smoother = DetectionStabilizer(
+            max(1, math.ceil(cfg.observation_window_s * cfg.observation_fps) + 1),
+            self.cfg.camera.overlay.hide_after_misses,
+        )
+        deadline = time.monotonic() + cfg.observation_window_s
+        while True:
+            self.cancel.raise_if_set()
+            tick = time.monotonic()
+            scene = self.observe(after=self._clock())
+            detections = smoother.update("observation", [b.detection for b in scene.all()])
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, max(0.0, interval - (time.monotonic() - tick))))
+        scene = build_scene(
+            detections, detections, self.calib, self.slot_centres,
+            snap_radius_mm=self.cfg.agent.slot_snap_radius_mm,
+            frame_seq=scene.frame_seq, captured_at=scene.captured_at,
+        )
+        self.last_scene = scene
+        return scene
+
     def observe(self, *, after: float | None = None) -> Scene:
         """A fresh scene. ``after``: wall time the frame must be captured after.
 
@@ -406,28 +471,72 @@ class ArmSession:
         target_z = highest_reachable_hover(self.ik, x, y, self.grasp_z_mm, self.cfg, yaw_deg=yaw)
         result = self.ik.solve_holding_wrist_roll(x, y, target_z, joints["wrist_roll"])
         if over_ik_gate(result, self.cfg):
-            logger.warning("vertical lift at x=%.0f y=%.0f misses the IK gate; homing directly", x, y)
+            logger.warning("vertical lift at x=%.0f y=%.0f misses the IK gate", x, y)
             return False
         self.player.move_to(result.joints, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
         return True
 
-    def return_home_safely(self) -> tuple[bool, bool]:
-        """Lift clear of the blocks if low, then home. Returns (lifted, at_home).
+    def lift_for_home(self) -> bool:
+        """Raise near the current XY before folding home past placed blocks."""
+        joints = self.robot.read_joints()
+        start = self.ik.forward_position_mm(joints)
+        bounds = self.cfg.agent.primitives
+        target_z = self.grasp_z_mm + bounds.home_return_clearance_mm
+        minimum_z = self.grasp_z_mm + bounds.home_return_min_clearance_mm
+        tolerance = bounds.lateral_clearance_tolerance_mm
+        if start[2] >= target_z - tolerance:
+            return False
 
-        Uses the measured pose, never a remembered one: after a STOP the arm
-        may be anywhere between two waypoints.
-        """
-        lifted = False
+        height = bounds.home_return_clearance_mm
+        chosen = None
+        while height >= bounds.home_return_min_clearance_mm:
+            goal_z = self.grasp_z_mm + height
+            for tilt in bounds.home_lift_tilt_candidates_deg:
+                candidate = self.ik.solve_holding_wrist_roll(
+                    *start[:2], goal_z, joints["wrist_roll"], radial_tilt_deg=tilt,
+                )
+                planned = self.ik.forward_position_mm(candidate.joints)
+                if (candidate.position_error_mm > self.cfg.agent.relative.jog_max_ik_error_mm
+                        or planned[2] < minimum_z - tolerance
+                        or math.dist(planned[:2], start[:2]) > bounds.home_lift_xy_limit_mm):
+                    continue
+                trace = [self.ik.forward_position_mm({**joints, **step})
+                         for step in interpolate(
+                             joints, candidate.joints, self.cfg.motion.max_step_per_tick
+                         )]
+                if (not trace
+                        or min(point[2] for point in trace) < start[2] - tolerance
+                        or any(math.dist(point[:2], start[:2]) > bounds.home_lift_xy_limit_mm
+                               for point in trace)):
+                    continue
+                chosen = candidate.joints
+                break
+            if chosen is not None:
+                break
+            height -= self.cfg.motion.hover_search_step_mm
+
+        if chosen is None:
+            logger.info("Home lift has no IK candidate; proceeding with joint-space home")
+            return False
+        self.player.move_to(chosen, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
+        # The user requested no additional FK clearance verdict after this move.
+        # Trajectory/servo failures and cancellation still propagate.
+        return True
+
+    def return_home_safely(self, *, post_release: bool = False) -> tuple[bool, bool]:
+        """Attempt a lift then execute home, without additional FK clearance gates."""
         if self.arm_at_home():
-            # home's tool frame sits near table height by design (measured FK
-            # z ~8mm at x ~157mm); "lifting" there would only unfold the arm
             return False, True
-        try:
-            lifted = self.lift_in_place()
-        except (Cancelled, TimeoutError):
-            raise
-        except Exception as exc:  # noqa: BLE001 - FK/IK trouble must not block homing
-            logger.warning("vertical lift before homing skipped: %s", exc)
+        lifted = False
+        if post_release:
+            lifted = self.lift_for_home()
+        else:
+            try:
+                lifted = self.lift_in_place()
+            except (Cancelled, TimeoutError):
+                raise
+            except Exception as exc:  # noqa: BLE001 - preserve the guarded preflight
+                logger.warning("vertical lift before homing failed: %s", exc)
         self.go_home()
         return lifted, self.arm_at_home()
 

@@ -159,7 +159,7 @@ class PerceptionConfig:
     # what produces phantom warm-coloured candidates. The camera page draws
     # this same sector, so what is outlined is what is detected. Radius 0
     # disables the gate.
-    workspace_radius_mm: float = 380.0
+    workspace_radius_mm: float = 420.0
     workspace_angle_min_deg: float = -90.0
     workspace_angle_max_deg: float = 90.0
     # Optional [azimuth_deg, max_raw_block_radius_mm] samples. When present,
@@ -168,10 +168,10 @@ class PerceptionConfig:
     # corrected PICK + grasp-bias + TopDownIK path used by Task 1.
     workspace_radius_by_angle_mm: list[list[float]] = field(
         default_factory=lambda: [
-            [-90, 275], [-80, 285], [-70, 292], [-60, 298], [-50, 301],
-            [-40, 307], [-30, 340], [-20, 360], [-10, 375], [0, 380],
-            [10, 375], [20, 355], [30, 345], [40, 305], [50, 300],
-            [60, 296], [70, 288], [80, 283], [90, 275],
+            [-90, 300], [-80, 400], [-70, 420], [-60, 420], [-50, 420],
+            [-40, 420], [-30, 420], [-20, 420], [-10, 420], [0, 420],
+            [10, 420], [20, 420], [30, 420], [40, 420], [50, 420],
+            [60, 420], [70, 400], [80, 380], [90, 300],
         ]
     )
 
@@ -382,6 +382,8 @@ class IkConfig:
 
     urdf_path: str = "third_party/so101/so101.urdf"
     target_frame: str = "gripper_frame_link"
+    # URDF shoulder_pan joint origin in the robot base XY frame (mm).
+    shoulder_pan_origin_xy_mm: list[float] = field(default_factory=lambda: [38.8353, 0.0])
     # seed table: joint sweep step and range (degrees) per lift/elbow/wrist_flex
     seed_step_deg: float = 3.0
     seed_range_deg: float = 100.0
@@ -465,6 +467,9 @@ class Task1Config:
     scan_interval_s: float = 0.2
     # A frozen/error status JPEG must never count toward the empty timeout.
     max_frame_age_s: float = 1.0
+    # Score outside blocks by base distance minus this penalty at the image edge.
+    # 0 means farthest-first regardless of horizontal position.
+    selection_center_bias_mm: float = 50.0
     # Slot coordinates in the calibrated quadrilateral: u runs left->right
     # along its long edge, v runs far->near. Fill the far row first.
     slot_uv: list[list[float]] = field(
@@ -491,20 +496,34 @@ class Task1Config:
     # +95 deg. Gradually tip the approach axis radially outward so the wrist
     # opens while remaining within ik.max_tilt_error_deg.
     pick_tilt_start_radius_mm: float = 280.0
-    pick_tilt_max_radius_mm: float = 320.0
+    pick_tilt_max_radius_mm: float = 300.0
     # Outward target-axis tilt applied at every Task-1 pick. This opens
     # wrist_flex through IK while preserving the requested Cartesian point;
     # placement keeps its original far-reach-only tilt ramp.
     pick_tilt_base_deg: float = 3.0
-    pick_tilt_max_deg: float = 30.0
+    pick_tilt_max_deg: float = 60.0
+    pick_tilt_fallback_deg: list[float] = field(default_factory=lambda: [45.0, 30.0, 15.0])
+    near_vertical_pick_max_deg: float = 5.0
     place_tilt_max_deg: float = 0.0
+    place_tilt_candidates_deg: list[float] = field(default_factory=lambda: [0.0, -5.0, -10.0, -15.0, -20.0, -25.0, -30.0])
+    place_ik_error_mm: float = 5.0
     # Model-FK tolerance for a held block's level placement approach.
     place_level_tolerance_deg: float = 3.0
     place_yaw_tolerance_deg: float = 5.0
-    tilted_pick_hover_clearance_mm: float = 35.0
-    # Assumption pending hardware measurement: release just above the
-    # calibrated pick plane instead of driving the held block into the table.
-    release_clearance_mm: float = 5.0
+    # Task 1 accepts any flat orientation. If zone-aligned yaw cannot reach
+    # a slot, search bounded yaw alternatives before rejecting placement.
+    place_yaw_fallback_offsets_deg: list[float] = field(
+        default_factory=lambda: [-15.0, 15.0, -30.0, 30.0, -45.0, 45.0,
+                                 -60.0, 60.0, -75.0, 75.0, -90.0, 90.0])
+    tilted_pick_hover_clearance_mm: float = 30.0
+    # Pre-grasp hover is higher at long reach to absorb measured empty-arm
+    # sag; the first lift after closing still stops at the 30 mm value above.
+    tilted_pick_pregrasp_clearance_mm: float = 50.0
+    # Assumption pending hardware measurement: release 15mm above the
+    # calibrated block-top plane, without seeking table contact.
+    release_clearance_mm: float = 15.0
+    # Assumed extra vertical gap above an observed in-zone block.
+    zone_path_clearance_mm: float = 15.0
 
 
 @dataclass
@@ -513,8 +532,7 @@ class Task2Config:
 
     SELECT/PICK/VERIFY and the pick corrections are read from ``task1`` --
     Task 2 *is* Task 1's gather pipeline with a single destination
-    (AGENTS.md §3 §4). Only the tower geometry and the contact descent live
-    here.
+    (AGENTS.md §3 §4). Tower geometry and release clearance live here.
     """
 
     # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
@@ -533,6 +551,17 @@ class Task2Config:
     # Assumption pending hardware measurement: smaller than task1's 5.0mm,
     # because a drop that a table absorbs will topple a tower.
     release_clearance_mm: float = 2.0
+    # Assumption pending physical trials: primitive stack drops this far
+    # above the nominal release plane instead of trusting load-based contact.
+    drop_clearance_mm: float = 15.0
+    # Assumed near-edge staging distance outside the tape, pending physical validation.
+    route_standoff_mm: float = 35.0
+    # Assumed extra vertical gap above the local tower footprint.
+    tower_path_clearance_mm: float = 15.0
+    # Fifth-floor clearance posture; model-only assumptions until hardware trial.
+    upper_entry_level: int = 5
+    upper_entry_clearance_mm: float = 30.0
+    upper_entry_radial_tilt_deg: float = -15.0
     # Task 2 does not use contact-seeking descent. Every level goes straight
     # to the solved release height and opens. Keep this compatibility field
     # fixed at zero so older CLI/config plumbing fails loudly if it tries to
@@ -640,10 +669,12 @@ class Task3Config:
 
     # Dataset camera name -> camera.server MJPEG URL. camera.server is the
     # single owner of /dev/video* (AGENTS.md §8), so recording reads its
-    # stream rather than opening the device a second time. Add the wrist
-    # entry once the camera is remounted and served by so101-camera.
+    # streams rather than opening either device a second time.
     cameras: dict[str, str] = field(
-        default_factory=lambda: {"top": "http://127.0.0.1:8090/video/shoulder.mjpg"}
+        default_factory=lambda: {
+            "top": "http://127.0.0.1:8090/video/shoulder.mjpg",
+            "wrist": "http://127.0.0.1:8090/video/wrist.mjpg",
+        }
     )
     # ACT treats several observation.images.* keys as camera views and
     # requires them to share one shape, so every stream is resized to this.
@@ -978,11 +1009,23 @@ class PrimitiveConfig:
     """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
     calibrated_pick: bool = True  # Same calibrated primitive path as default.yaml.
     target_max_age_s: float = 120.0
-    approach_clearance_mm: float = 35.0
-    lateral_clearance_mm: float = 35.0
+    approach_clearance_mm: float = 38.0
+    lateral_clearance_mm: float = 38.0
+    lateral_clearance_tolerance_mm: float = 2.0  # FK/encoder settling near the lift threshold
+    zone_release_floor_margin_mm: float = 2.0  # calibrated top plane to minimum release FK
     max_lift_attempts: int = 4
+    observation_window_s: float = 2.0
+    observation_fps: float = 5.0
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
+    home_fold_radius_mm: float = 40.0  # assumed low-height folding corridor around home XY
+    # Assumed clearance after release: seek 55 mm, require 38 mm before folding home.
+    home_return_clearance_mm: float = 55.0
+    home_return_min_clearance_mm: float = 38.0
+    home_lift_xy_limit_mm: float = 10.0
+    home_lift_tilt_candidates_deg: list[float] = field(
+        default_factory=lambda: [0.0, -5.0, -10.0, -15.0]
+    )
     # Measured loaded-arm endpoint sag is 24-29mm at far slots. This applies
     # only while carrying; empty moves retain arrival_error_mm.
     loaded_arrival_error_mm: float = 30.0
@@ -1000,7 +1043,16 @@ class PrimitiveConfig:
 class AgentCollectionConfig:
     """Assumed recording quality gates; validate timing on hardware."""
     root: str = "datasets/agent"
+    max_steps: int = 24
+    max_task_text_chars: int = 240
     max_tick_gap_s: float = 0.1
+    tolerated_missing_ticks: int = 2
+    max_moving_gap_s: float = 0.5  # Provisional recording-quality bounds, not motor limits.
+    max_total_missing_motion_s: float = 1.0
+    max_stationary_drift: float = 1.0  # degrees, or normalized gripper percent
+    sequence_settle_window_s: float = 0.3
+    sequence_settle_max_drift: float = 0.25
+    sequence_settle_timeout_s: float = 3.0
     max_mean_period_error: float = 0.1
     idle_poll_s: float = 0.005
 
@@ -1215,6 +1267,10 @@ def validate_perception_colors(cfg: "PerceptionConfig") -> None:
 
 
 def validate_ik(cfg: "IkConfig") -> None:
+    if len(cfg.shoulder_pan_origin_xy_mm) != 2 or not all(
+        math.isfinite(v) for v in cfg.shoulder_pan_origin_xy_mm
+    ):
+        raise ValueError("ik.shoulder_pan_origin_xy_mm must be two finite coordinates")
     if cfg.seed_candidate_count <= 0:
         raise ValueError("ik.seed_candidate_count must be positive")
 
@@ -1250,14 +1306,31 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError(
             "task1.pick_tilt_base_deg must be between zero and pick_tilt_max_deg"
         )
-    if not 0 <= cfg.task1.pick_tilt_max_deg <= 30.0:
-        raise ValueError("task1.pick_tilt_max_deg must be between zero and 30 degrees")
+    if not 0 <= cfg.task1.pick_tilt_max_deg <= 60.0:
+        raise ValueError("task1.pick_tilt_max_deg must be between zero and 60 degrees")
+    if any(not 0 <= angle <= cfg.task1.pick_tilt_max_deg
+           for angle in cfg.task1.pick_tilt_fallback_deg):
+        raise ValueError("task1.pick_tilt_fallback_deg must stay within pick_tilt_max_deg")
+    if not 0 <= cfg.task1.near_vertical_pick_max_deg <= cfg.task1.pick_tilt_max_deg:
+        raise ValueError("task1.near_vertical_pick_max_deg must stay within pick_tilt_max_deg")
+    if any(not math.isfinite(angle) or abs(angle) > cfg.agent.relative.max_gripper_roll_deg
+           for angle in cfg.task1.place_yaw_fallback_offsets_deg):
+        raise ValueError("task1.place_yaw_fallback_offsets_deg exceeds bounded wrist rotation")
+    if cfg.task1.tilted_pick_pregrasp_clearance_mm < cfg.task1.tilted_pick_hover_clearance_mm:
+        raise ValueError("task1.tilted_pick_pregrasp_clearance_mm must cover the first lift")
     if cfg.task1.tilted_pick_hover_clearance_mm < cfg.agent.calibration_clearance.obstacle_height_mm:
         raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
+    if cfg.task1.zone_path_clearance_mm < 0:
+        raise ValueError("task1.zone_path_clearance_mm must be non-negative")
     if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError("task1.place_tilt_max_deg must be within the placement IK tilt gate")
     if not 0 < cfg.task1.place_level_tolerance_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError("task1.place_level_tolerance_deg must be within the IK tilt gate")
+    if (not cfg.task1.place_tilt_candidates_deg
+            or any(not math.isfinite(v) or not -30 <= v <= 0 for v in cfg.task1.place_tilt_candidates_deg)):
+        raise ValueError("Task 1 placement tilts must be between -30 and 0 degrees")
+    if not math.isfinite(cfg.task1.place_ik_error_mm) or not 0 < cfg.task1.place_ik_error_mm <= cfg.ik.max_position_error_mm:
+        raise ValueError("Task 1 placement IK error must be positive and within the general gate")
     if not 0 < cfg.task1.place_yaw_tolerance_deg <= 45.0:
         raise ValueError("task1.place_yaw_tolerance_deg must be in (0, 45]")
 
@@ -1273,12 +1346,22 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError("task2.block_height_mm must be positive")
     if cfg.task2.max_levels < 1:
         raise ValueError("task2.max_levels must be at least one")
+    if cfg.task2.upper_entry_level < 1 or cfg.task2.upper_entry_clearance_mm <= 0:
+        raise ValueError("task2 upper entry level/clearance must be positive")
+    if not -45 <= cfg.task2.upper_entry_radial_tilt_deg <= 0:
+        raise ValueError("task2.upper_entry_radial_tilt_deg must be -45..0")
+    if cfg.task2.route_standoff_mm <= 0:
+        raise ValueError("task2.route_standoff_mm must be positive")
+    if cfg.task2.tower_path_clearance_mm < 0:
+        raise ValueError("task2.tower_path_clearance_mm must be non-negative")
     if cfg.task2.contact_descent_levels != 0:
         raise ValueError(
             "task2.contact_descent_levels must be 0; Task 2 contact descent is disabled"
         )
     if cfg.task2.release_clearance_mm < 0:
         raise ValueError("task2.release_clearance_mm must be non-negative")
+    if not 0 < cfg.task2.drop_clearance_mm <= cfg.task2.block_height_mm:
+        raise ValueError("task2.drop_clearance_mm must be above zero and at most one block height")
     if cfg.task2.place_overshoot_mm <= cfg.task2.release_clearance_mm:
         raise ValueError(
             "task2.place_overshoot_mm must exceed release_clearance_mm so the "
@@ -1385,20 +1468,40 @@ def validate_agent(cfg: AppConfig) -> None:
     agent = cfg.agent
     if not agent.collection.root.strip():
         raise ValueError("agent.collection.root must be set")
-    for name in ("max_tick_gap_s", "max_mean_period_error", "idle_poll_s"):
+    if agent.collection.max_steps < 1 or agent.collection.max_task_text_chars < 1:
+        raise ValueError("agent.collection sequence limits must be positive")
+    for name in ("max_tick_gap_s", "max_moving_gap_s", "max_total_missing_motion_s", "max_stationary_drift", "sequence_settle_window_s",
+                 "sequence_settle_max_drift", "sequence_settle_timeout_s",
+                 "max_mean_period_error", "idle_poll_s"):
         value = getattr(agent.collection, name)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"agent.collection.{name} must be finite and positive")
+    if (type(agent.collection.tolerated_missing_ticks) is not int
+            or not 0 <= agent.collection.tolerated_missing_ticks <= 5):
+        raise ValueError("agent.collection.tolerated_missing_ticks must be in [0, 5]")
+    if agent.collection.max_moving_gap_s < agent.collection.max_tick_gap_s:
+        raise ValueError("max_moving_gap_s must cover max_tick_gap_s")
+    if agent.collection.sequence_settle_max_drift >= agent.collection.max_stationary_drift:
+        raise ValueError("agent.collection.sequence_settle_max_drift must be below max_stationary_drift")
     primitive = agent.primitives
     for name in ("target_max_age_s", "approach_clearance_mm", "lateral_clearance_mm",
+                 "lateral_clearance_tolerance_mm", "zone_release_floor_margin_mm",
                  "alignment_tolerance_mm", "arrival_error_mm", "cartesian_step_mm",
                  "contact_step_mm", "contact_max_descent_mm", "contact_timeout_s",
                  "contact_backoff_mm", "wrist_roll_limit_deg"):
         value = getattr(primitive, name)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"agent.primitives.{name} must be finite and positive")
+    if primitive.lateral_clearance_tolerance_mm >= primitive.lateral_clearance_mm:
+        raise ValueError("primitive lateral clearance tolerance must be smaller than clearance")
+    if primitive.zone_release_floor_margin_mm >= cfg.task1.release_clearance_mm:
+        raise ValueError("primitive release floor margin must be below Task 1 drop clearance")
     if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
         raise ValueError("primitive approach clearance must cover lateral clearance")
+    for name in ("observation_window_s", "observation_fps"):
+        value = getattr(primitive, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.primitives.{name} must be finite and positive")
     if type(primitive.max_lift_attempts) is not int or not 1 <= primitive.max_lift_attempts <= 4:
         raise ValueError("agent.primitives.max_lift_attempts must be in [1, 4]")
     if (type(primitive.image_jpeg_quality) is not int or type(primitive.image_max_width) is not int
@@ -1460,6 +1563,13 @@ def validate_agent(cfg: AppConfig) -> None:
         if key in seen and seen[key] != index:
             raise ValueError(f"agent.zone_slots alias {alias!r} contradicts a label")
         seen[key] = index
+
+    bounds = agent.primitives
+    if (not 0 < bounds.home_return_min_clearance_mm <= bounds.home_return_clearance_mm
+            or bounds.home_lift_xy_limit_mm <= 0
+            or not bounds.home_lift_tilt_candidates_deg
+            or any(not math.isfinite(angle) for angle in bounds.home_lift_tilt_candidates_deg)):
+        raise ValueError("agent.primitives home return settings are invalid")
 
     rel = agent.relative
     if rel.frame not in ("arm", "base"):

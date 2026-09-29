@@ -1,237 +1,284 @@
-# Capstone Sim2Real
+# Sim2Real · SO-101 Pick & Stack
 
-SO-101 로봇팔로 5개 블록을 지정 영역에 옮기고 적층하는 졸업과제 저장소입니다.
-현재 검증·운영 중인 기본 경로는 고정 탑 카메라의 색·형상 검출과 결정론적
-IK를 결합한 **Task 1 CV+IK zone gathering**입니다. Task 2는 동일한
-PICK/VERIFY/TRANSPORT 흐름에 적층 PLACE 전략만 교체하는 목표 구조를 유지합니다.
+<p align="center">
+  <img src="docs/report/최종보고서/figures/demo_060.jpg" alt="SO-101이 체스판 작업대에서 블록을 지정 영역으로 옮기는 실제 시연 장면" width="760">
+</p>
 
-과거 ACT/SmolVLA 실험 문서는 CV+IK로 피벗한 근거를 보존하는 기록입니다. 현재
-실행법은 이 README와 [현재 아키텍처](docs/architecture.md),
-[CV+IK 가이드](docs/guide/SO101_CV_IK_파지운반.md)를 기준으로 합니다.
-자연어 조작이 필요할 때는 같은 CV+IK·안전 게이트를 재사용하는 별도
-`so101-agent` 웹 인터페이스를 사용합니다.
+<p align="center">
+  <a href="#5-설치-및-실행-방법"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12"></a>
+  <a href="docs/architecture.md"><img src="https://img.shields.io/badge/control-CV%20%2B%20IK-6A5ACD" alt="CV와 IK 제어"></a>
+  <a href="docs/guide/SO101_LLM_에이전트.md"><img src="https://img.shields.io/badge/interface-Web%20%2B%20LLM-00897B" alt="웹 및 LLM 인터페이스"></a>
+</p>
 
-LeRobot은 `third_party/lerobot` submodule로 고정하며, 프로젝트 루트의 단일 `uv` 환경에서 함께 실행합니다.
+고정 카메라로 블록을 찾고, 좌표 보정과 역기구학(IK)으로 SO-101 로봇팔을 움직이는 블록 이동·적재 프로젝트입니다. **기본 제어 경로는 LLM 호출 없이 동작하는 CV+IK**입니다. 웹의 자연어 에이전트는 같은 제어 기능을 도구로 호출하는 별도 인터페이스입니다.
 
-## Quick Start
+> **현재 상태** · Task 1(지정 영역으로 블록 모으기)이 기본 운영 경로입니다. Task 2(5단 적재)는 구현·시험 중이며, **5단 적재 후 5초 유지**까지 달성했다고 주장하지 않습니다. 아래 과거 평가 수치는 해당 시점의 팀 집계이며 현재 커밋의 재시험 결과가 아닙니다.
 
-처음 받기:
+[빠른 실행](#5-설치-및-실행-방법) · [아키텍처](docs/architecture.md) · [실험 기록](experiments/README.md) · [최종보고서](docs/report/최종보고서/final_report.pdf)
+
+## 1. 프로젝트 배경
+
+### 1.1. 국내외 시장 현황 및 문제점
+
+국제로봇연맹(IFR)의 *World Robotics 2025*에 따르면 2024년 전 세계 산업용 로봇 신규 설치는 **542,076대**, 한국은 약 **30,600대**였습니다. 이는 자동화 수요의 규모를 보여주지만, 본 과제의 소형 블록 조작 시장 규모나 상용성 검증치로 해석하지 않습니다. 출처: [IFR 산업용 로봇 보고서](https://ifr.org/img/worldrobotics/Executive_Summary_WR_2025_Industrial_Robots.pdf), [IFR 국가별 발표](https://ifr.org/news/global-robot-demand-in-factories-doubles-over-10-years/1st-quarterly-newsletter-2010).
+
+소형 로봇팔에서 단순한 `목표 픽셀 → 목표 관절` 연결만으로 안정적인 파지를 얻기는 어렵습니다. 카메라 위치 변화, 블록 윗면과 캘리브레이션 평면의 높이 차이, 실제 턱 중심과 URDF 기준 프레임의 차이, 팔의 처짐과 그리퍼 정렬 오차가 누적됩니다. 우리 팀의 초기 ACT·SmolVLA 실험도 시작 위치와 카메라 조건이 바뀌면 재수집·재학습 비용이 커지는 문제가 있었습니다. 이 문제 분석은 [CV+IK 전환 기록](docs/report/CV_IK_전환_정리.md)에 남겨 두었습니다.
+
+### 1.2. 필요성과 기대효과
+
+이 프로젝트는 **인식 → 접근 → 파지 확인 → 운반 → 배치 → 재관찰**을 분리해 실패 지점을 알 수 있는 재현 가능한 실험 기반을 만듭니다. 기대효과는 파지 실패의 원인 추적, 좌표·경로 보정의 반복 적용, 수동 시연 없이 성공 동작을 데이터셋으로 수집할 수 있는 기반 확보입니다. 산업 현장의 생산성 향상이나 비용 절감은 이 저장소에서 아직 측정하지 않았습니다.
+
+## 2. 개발 목표
+
+### 2.1. 목표 및 세부 내용
+
+| 미션 | 목표 | 과제 제한 | 현재 범위 |
+|---|---|---:|---|
+| Task 1 | 무작위로 놓인 블록 5개를 20 × 10 cm 지정 영역에 배치 | 180초 | 고정 탑 카메라 CV + 동적 IK 슬롯, 파지 검증·재시도, fresh frame 완료 판정 |
+| Task 2 | 블록을 쌓고 5초 이상 유지 | 300초 | 공통 PICK/VERIFY/TRANSPORT를 재사용하는 적층 경로; 5단·5초 유지 미달성 |
+| Task 3 | 성공한 Task 1 사이클을 학습용 에피소드로 기록 | 별도 수집 기능 | 로봇 I/O와 카메라 스트림을 LeRobot 데이터셋 형식으로 기록 |
+
+설계 목표는 상위 계획 방식을 바꿔도 **실제 동작은 동일한 도달성·관절 제한·파지 확인 게이트**를 거치게 하는 것입니다. 기본 미션에는 신경망이 필요하지 않으며, ACT PICK과 LLM 도구 호출은 선택 경로입니다.
+
+### 2.2. 기존 서비스 대비 차별성
+
+| 접근 | 장점 | 이 프로젝트에서 보완한 지점 |
+|---|---|---|
+| [LeRobot 기본 워크플로](https://huggingface.co/docs/lerobot/main/index) | SO-101 제어, 시연 기록, 정책 학습의 공통 기반 | 대회 규격의 영역 판정·동적 슬롯·파지 확인·실패 복구를 통합 |
+| 엔드투엔드 모방학습 | 시연에서 행동을 학습 | 카메라나 초기 배치 변화 때의 데이터 재수집 부담을 줄이기 위해 CV+IK를 기본 경로로 채택 |
+| **Sim2Real CV+IK** | 단계별 입력·출력과 실패 사유를 확인 가능 | 픽셀→베이스 mm 보정, 블록 방향 정렬, IK 후보 탐색, 센서 VERIFY, 재관찰 및 실행 기록을 하나의 흐름으로 연결 |
+
+이는 상용 제품과의 성능 우위 비교가 아닙니다. 같은 조건의 공개 벤치마크나 비용 비교 자료는 아직 없습니다.
+
+### 2.3. 사회적 가치 도입 계획
+
+SO-101과 오픈소스 소프트웨어를 활용해 실습·연구 진입 장벽을 낮추고, 실패 사례와 측정 조건을 함께 남겨 재현 가능한 교육 자료로 활용하려 합니다. 성공 동작을 자동 기록하는 Task 3은 반복적인 수동 시연 부담을 줄이기 위한 기능입니다. 공개 데이터셋 배포, 전력·폐기물 절감 효과는 아직 실행하거나 정량 평가하지 않았으므로 향후 과제로 둡니다.
+
+## 3. 시스템 설계
+
+### 3.1. 시스템 구성도
+
+```mermaid
+flowchart LR
+    C[고정 탑 카메라] --> CS[카메라 서버<br/>MJPEG · snapshot :8090]
+    CS --> P[색·형상 검출<br/>homography → 베이스 mm]
+    P --> S[Task 1/2 선택·계획]
+    S --> IK[IK 후보·경로 게이트]
+    IK --> V[SO-101 팔·그리퍼]
+    V --> G[위치·부하 센서<br/>파지 VERIFY]
+    G --> S
+    CS --> W[웹 관제 오버레이]
+    A[선택: 웹·LLM 도구 호출<br/>기본 :8099] --> S
+    V --> D[Task 3 에피소드 기록]
+    CS --> D
+```
+
+카메라 장치는 카메라 서버 한 프로세스가 소유합니다. `so101-run`, `so101-collect`, `so101-agent` 중 **로봇 시리얼 버스 소유자는 동시에 하나**입니다. 웹 오버레이는 관찰용이며, 그 표시 결과가 기본 FSM 제어 입력으로 되돌아가지는 않습니다. 자세한 경계는 [현재 아키텍처](docs/architecture.md)를 참고하세요.
+
+### 3.2. 사용 기술
+
+| 영역 | 기술 |
+|---|---|
+| 하드웨어 | SO-101 팔로워, Feetech 서보, 고정 탑 카메라, NVIDIA Jetson Orin 개발 환경 |
+| 비전 | Python, OpenCV, HSV 색·형상 필터, homography, MJPEG |
+| 제어 | PlacO/URDF 기반 IK, 관절 궤적 보간, LeRobot 로봇 I/O, 위치·부하 센싱 |
+| 서버·UI | FastAPI, Uvicorn, 브라우저 HTML/CSS/JavaScript, SSE, 선택적 OpenAI/Gemini/Anthropic 어댑터 |
+| 데이터·품질 | LeRobotDataset, NumPy, PyYAML, `uv`, pytest |
+
+실제 설치 패키지와 버전 범위는 [pyproject.toml](pyproject.toml), 실행 구성은 [기본 설정](src/configs/default.yaml)이 기준입니다.
+
+## 4. 개발 결과
+
+### 4.1. 전체 시스템 흐름도
+
+```mermaid
+flowchart TD
+    O[HOME에서 새 카메라 프레임 관찰] --> S[지정 영역 밖 블록 선택]
+    S --> P[접근·파지 후보 IK 계산]
+    P --> K{IK·간섭 게이트 통과?}
+    K -- 아니오 --> S
+    K -- 예 --> G[그리퍼 닫기]
+    G --> V{위치 + 부하로 파지 확인?}
+    V -- 실패 --> R[재시도 또는 다른 블록 선택]
+    R --> O
+    V -- 성공 --> T[들기·운반]
+    T --> L[Task 1 슬롯 배치 / Task 2 적층 배치]
+    L --> H[그리퍼 해제·홈 복귀]
+    H --> O
+    O --> D{영역 밖 블록이 새 프레임에서 5초간 0개?}
+    D -- 예, Task 1 --> E[완료]
+    D -- 아니오 --> S
+```
+
+Task 1의 완료는 배치 명령 횟수가 아니라 **홈 위치에서 다시 본 장면**으로 판정합니다. 파지가 확인되지 않으면 운반하지 않습니다. Task 2의 층별 해제는 현재 명목 높이 기반이며, 실제 5초 유지 판정은 아직 구현되지 않았습니다.
+
+### 4.2. 기능 설명 및 주요 기능 명세서
+
+| 기능 | 입력 | 출력·판정 | 주요 구현 |
+|---|---|---|---|
+| 카메라·블록 관찰 | MJPEG/snapshot | 색상·중심·방향·영역 안팎 | `src/camera/`, `src/perception/` |
+| 좌표 변환 | 블록 픽셀 좌표, 캘리브레이션 H | 로봇 베이스 프레임의 mm 좌표 | `src/perception/homography.py` |
+| 파지 계획 | 대상 블록, 그리퍼 방향 | 도달 가능한 IK 후보 또는 실패 이유 | `src/control/ik.py`, `src/control/grasp.py` |
+| 파지 검증 | 그리퍼 위치·부하 | 물체 파지 여부, 재시도 결정 | `src/control/sensing.py`, `src/fsm/` |
+| 운반·배치 | 검증된 파지, 슬롯/층 목표 | 궤적 실행, 해제, 재관찰 | `src/control/task1_transport.py`, `src/session/` |
+| 웹·자연어 조작 | 사용자 명령 또는 수동 패널 | 한도가 있는 primitive 실행 결과·상태 | `src/agent/` |
+| 시연 수집 | 성공한 한 사이클의 영상·상태·행동 | LeRobot 에피소드 | `src/data/`, `so101-collect` |
+
+**기록된 평가 범위:** 최종보고서의 당시 팀 집계에서는 Task 1이 30회 중 28회(93.3%) 제한시간 내 완료됐고, Task 2는 20회 중 수행 중 최대 4단 도달 17회·5단 도달 0회였습니다. Task 3 첫 라운드는 5에피소드·2,111프레임을 저장했습니다. 개별 시행 로그와 현재 커밋을 일대일로 연결한 재평가는 없으며, Task 2의 종료 시 높이와 5초 유지 횟수는 집계되지 않았습니다. [집계 근거와 한계](docs/report/최종보고서/SOURCES.md).
+
+### 4.3. 디렉토리 구조
+
+```text
+.
+├── src/
+│   ├── camera/       카메라 단독 소유 서버·프레임 소스
+│   ├── perception/   검출·좌표 변환·장면 분석
+│   ├── control/      IK·궤적·파지·센싱
+│   ├── fsm/          미션 상태 전이
+│   ├── session/      로봇 세션·버스 잠금·스킬
+│   ├── agent/        웹 UI·LLM 도구 호출·수동 조작
+│   ├── data/         에피소드 기록
+│   ├── runners/      Task CLI
+│   ├── policy/       보존된 선택적 ACT 경로
+│   └── tools/        캘리브레이션·진단 CLI
+├── frontend/         웹 프런트엔드 빌드 소스
+├── docs/             가이드·아키텍처·보고서·발표 자료
+├── experiments/      실험 기록과 결과
+├── tests/            하드웨어 없는 회귀 테스트
+├── third_party/      SO-101 자산과 LeRobot submodule
+└── pyproject.toml     패키지·CLI·의존성
+```
+
+### 4.4. 산업체 멘토링 의견 및 반영 사항
+
+2026년 8월 3일 삼성중공업 **이재민 프로**의 서면 자문을 받았습니다. [자문의견서](docs/report/25_%28Sim2Real%29삼성중공업_이재민_자문의견서.pdf)와 [최종보고서 반영 표](docs/report/최종보고서/final_report.pdf)에 상세 내용이 있습니다.
+
+| 자문 요지 | 반영 사항 |
+|---|---|
+| 설계 가정·구현·검증 결과를 구분 | Task 1 집계와 Task 2 미달성 조건을 분리하고, 미측정 성능을 명시 |
+| 후보 접근법의 선정 기준 필요 | ACT/SmolVLA → 하이브리드 → CV+IK 전환 이유와 재수집 부담 기록 |
+| 성공률 외 데이터·구축·유지 비용 고려 | 학습 데이터 수집과 캘리브레이션·규칙 유지의 비용을 정성 비교; 절감액은 미측정 |
+| 반복 평가와 실패 단계 기록 | 파지·운반·배치 단계를 나누어 실패 원인과 재시도를 기록 |
+
+## 5. 설치 및 실행 방법
+
+### 5.1. 설치절차 및 실행 방법
+
+**준비물:** Linux, Python 3.12, `uv`, SO-101 팔로워와 전원·USB 시리얼, 고정 탑 카메라. 실제 동작 전 [장비 세팅 가이드](docs/guide/SO101_세팅가이드.md)에 따라 서보 ID·캘리브레이션·전원·카메라 고정을 확인하세요.
 
 ```bash
 git clone --recurse-submodules <REPOSITORY_URL> ~/lerobot_sim2real
 cd ~/lerobot_sim2real
-```
-
-이미 clone한 뒤 서브모듈만 맞출 때:
-
-```bash
-git submodule update --init --recursive
-```
-
-팀원 초기세팅:
-
-```bash
-sudo usermod -aG dialout "$USER"
-# 로그아웃 후 다시 로그인
-
-cd ~/lerobot_sim2real
+# 이미 clone했다면: git submodule update --init --recursive
+sudo usermod -aG dialout "$USER"  # 로그아웃·재로그인 후 적용
 uv sync --python 3.12 --extra hardware --extra dev
-source .venv/bin/activate
-so101-scan-motors
+uv run so101-scan-motors
 ```
 
-자세한 설치 절차와 `uv`, `fish`, 권한 문제는 [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)를 봅니다.
+> **Jetson Orin 기존 환경:** JetPack용 PyTorch 휠을 보존해야 하는 장비에서는 무조건 `uv sync`로 기존 가상환경을 갈아엎지 않습니다. 현재 인터프리터 경로를 확인하고, 필요한 선택 의존성만 `uv pip install --python /path/to/existing-venv/bin/python ...`으로 설치하세요. 이 저장소의 Orin worktree는 가상환경이 worktree 밖에 있으므로 아래 `.venv/bin/...` 명령을 그대로 실행할 수 없습니다. [설치 가이드](docs/guide/SO101_세팅가이드.md)와 [데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)를 참고하세요.
 
-## 세션 도구와 실험 기록
-
-- [텔레옵·점 기록·실시간 FK 권장 실행법](docs/guide/SO101_세션도구.md)
-- [날짜별 실험 기록](experiments/README.md)
-
-## Common Commands
-
-모터 응답 확인:
+카메라 서버는 별도 터미널에서 먼저 실행하거나 runner가 기존 서버를 재사용하게 둡니다. **같은 카메라 장치를 두 프로세스에서 열지 않습니다.**
 
 ```bash
-so101-scan-motors
+uv run so101-camera                    # 기본 :8090, MJPEG·snapshot·오버레이
+uv run so101-run --task 1 --dry-run    # 팔을 움직이지 않고 슬롯·IK 확인
+uv run so101-run --task 1              # Task 1 실기
+uv run so101-run --task 2 --dry-run    # 층별 IK 확인
+uv run so101-run --task 2              # Task 2 실기; 5초 안정성은 별도 관찰 필요
 ```
 
-캘리브레이션 초기화 및 재실행:
+선택 기능은 다음과 같습니다. `so101-run`, `so101-collect`, `so101-agent`를 **동시에 실행하지 마세요.**
 
 ```bash
-so101-robot-calibrate all --reset
+uv run so101-collect --dry-run         # Task 3 입력·슬롯 확인
+uv run so101-collect                   # 성공 사이클을 에피소드로 기록
+
+cp .env.example .env                   # API 키는 .env에만 저장
+uv pip install --python .venv/bin/python 'fastapi>=0.110' 'uvicorn>=0.29' \
+  'httpx>=0.27' 'ruckig==0.19.4' 'openai>=1.60' 'google-genai>=1.0'
+uv pip install --python .venv/bin/python -e . --no-deps
+so101-agent --dry-run                  # 팔 정지, 설정·카메라·IK 확인
+so101-agent --sim --provider fake      # 장비·API 키 없는 웹 리허설
+so101-agent                            # 웹 UI 기본 :8099
 ```
 
-리더 없이 원격 키보드 조작:
+현재 실험용 primitive·Task 1/2 웹 패널은 별도 진입점 `tools.agent_server`를 사용합니다. 이 서버도 로봇 버스를 단독 소유하므로 `so101-agent`와 함께 실행하지 않습니다. 기존 Orin 환경에서는 `SO101_PY`에 **이미 설치된** Python 경로를 지정하세요.
 
 ```bash
-so101-keyboard --step 1
+SO101_PY=/absolute/path/to/existing-venv/bin/python
+PYTHONPATH="$PWD/src" "$SO101_PY" -m tools.agent_server \
+  --env-file .env --output experiments/llm_free_missions/live --port 8109
 ```
 
-브라우저로 카메라 실시간 확인:
+| 서비스 | 기본 포트 | 역할 |
+|---|---:|---|
+| `so101-camera` | 8090 | 카메라 영상·스냅샷·오버레이 |
+| `so101-agent` | 8099 | 기본 채팅·수동 조작·상태 API; `--port`로 변경 가능 |
+| `tools.agent_server` | 8109 | 실험용 primitive·Task 1/2 웹 패널 |
 
-```bash
-so101-camera
-```
+Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 장비의 LAN/Tailscale 주소로 접속합니다. 로봇 제어 서버를 공인 인터넷에 직접 공개하지 마세요. 기본 카메라·로봇 설정은 [default.yaml](src/configs/default.yaml)을 확인하고, 실험값은 `--set key.path=value`로 덮을 수 있습니다. 평가의 180초 제한은 현재 Task 1 내부 FSM이 강제하지 않으므로, 정식 시간 평가에는 외부 supervisor가 필요합니다.
 
-기본값은 `0.0.0.0:8090`이며 비전 오버레이도 함께 활성화됩니다. 오버레이를
-완전히 끄려면 `so101-camera --no-overlay`를 사용합니다. 화면의 오버레이는
-원본 MJPEG 위에서 브라우저가 합성하므로 영상 스트림을 느리게 만들지 않습니다.
-`so101-run`, `so101-collect`, `so101-agent`는 카메라 health check에 응답이 없으면
-카메라 서버를 자동으로 시작하므로 보통 `so101-camera`를 따로 실행할 필요가 없습니다.
-이미 실행 중인 서버가 있으면 그대로 재사용하며 카메라 장치는 한 프로세스만 소유합니다.
+### 5.2. 오류 발생 시 해결 방법
 
-에이전트 검토용으로 장면이 충분히 달라졌을 때만 프레임을 저장하려면 다음처럼 실행함. 2초마다 직전 비교 프레임과 비교하며, 평균 밝기 차이가 8 이상이거나 10초가 지나면 저장함.
+| 증상 | 먼저 확인할 것 |
+|---|---|
+| `RobotBusBusy` | 다른 `so101-run`·`so101-collect`·`so101-agent`가 시리얼 버스를 점유했는지 확인하고 한 실행만 남기기 |
+| `Missing motor IDs` | 로봇 전원, 서보 데이지체인 케이블, `/dev/serial/by-id/…`, 모터 ID 스캔 확인 |
+| 카메라 프레임 지연·누락 | `:8090/health`에서 프레임 age와 장치 상태 확인; 중복 카메라 서버를 열지 않기 |
+| `ik_gate`·도달 실패 | `--dry-run`과 목표 좌표·캘리브레이션·작업 영역 확인; 무리하게 제한값만 높이지 않기 |
+| `ModuleNotFoundError: tools` | 프로젝트 루트에서 설치된 CLI로 실행하거나 `PYTHONPATH="$PWD/src" .venv/bin/python -m tools.agent_server`처럼 실행 |
+| Orin에서 Torch/CUDA 오류 | JetPack 호환 휠을 확인하고 일반 `uv sync`로 교체하지 않기 |
 
-```bash
-so101-camera \
-  --save-dir /tmp/so101-camera --save-interval-s 2 \
-  --save-on-change --change-threshold 8 --max-save-interval-s 10
-```
+더 자세한 진단은 [문제해결 가이드](docs/guide/SO101_문제해결.md)에 있습니다.
 
-블록 하나를 집었다가 같은 위치에 내려놓는 CV/IK smoke flow 실행:
+## 6. 소개 자료 및 시연 영상
 
-```bash
-so101-run --task 1 --flow pick_lift_lower --color green
-```
+### 6.1. 프로젝트 소개 자료
 
-고정 빨강 테이프 구역은 기존 homography를 보존하는 전용 도구로 한 번 등록함.
+- [최종보고서 PDF](docs/report/최종보고서/final_report.pdf) · [최종보고서 근거·해석 범위](docs/report/최종보고서/SOURCES.md)
+- [세미나 발표자료 PPTX](docs/report/졸과%20세미나%20발표자료.pptx)
+- [시스템 아키텍처](docs/architecture.md) · [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
 
-```bash
-so101-zone-calibrate                         # preview only
-so101-zone-calibrate --write                 # zone_polygon_mm 저장
-uv run python -m tools.calibrate_board_grid  # 체스판 격자 preview
-uv run python -m tools.calibrate_board_grid --write  # board_grid 저장
-so101-run --task 1 --dry-run                 # 모터 연결 없이 슬롯/IK 확인
-so101-run --task 1                           # 외부 블록이 5초간 없을 때까지 수집
-```
+아래 이미지는 보고서에 보존된 **실제 시연 프레임**입니다. 현재 버전의 반복 성공률이나 Task 2 완료를 증명하는 영상은 아닙니다.
 
-`board_grid`는 에이전트가 부채꼴 안의 체스판 칸을 정수 좌표 `(x, y)`로 지칭할 때
-씁니다. 축은 학생이 보는 화면 기준입니다: `x+`는 화면 오른쪽, `y+`는 로봇에서
-멀어지는 쪽이며 `(0, 0)`은 부채꼴 아래-가운데 기준 칸이라 음수 좌표가 정상입니다.
-측정값이 없으면 로봇 축에 정렬한 25 mm 가상 격자로 동작하지만
-`so101-agent --dry-run`이 경고하므로, 카메라를 다시 장착했거나 보드를 옮긴 뒤에는
-위 명령으로 다시 측정합니다. 적합 RMS가 한 칸의 10%를 넘으면 도구가 저장을 거부합니다.
+| 시작 장면 | 이동 중 | 배치 후 |
+|:---:|:---:|:---:|
+| ![작업대와 블록의 시작 배치](docs/report/최종보고서/figures/demo_000.jpg) | ![로봇팔의 블록 이동 장면](docs/report/최종보고서/figures/demo_060.jpg) | ![배치가 진행된 작업대](docs/report/최종보고서/figures/demo_104.jpg) |
 
-오버레이 전환은 **에이전트 화면**(`so101-agent`)에 있습니다. 영상 아래 `부채꼴 | 격자`
-단추로 한 번에 한 층만 띄우며 기본값은 `부채꼴`(이름 붙은 15개 점)입니다. 카메라
-서버 페이지는 종전대로 주황 부채꼴 경계와 검출 결과만 그립니다.
+### 6.2. 시연 영상
 
-Task 1의 검출 범위는 주황 부채꼴 안이면서 보라색 구역 밖인 부분임. PLACE 횟수나
-색상 개수로 종료하지 않고, 홈 자세에서 fresh frame 기준 외부 검출이 5초 동안
-연속 0개일 때만 완료함.
+공개 영상 URL은 아직 등록되지 않았습니다. 보고서 근거 자료에는 과거 순차 배치 영상의 세 시점(시작·이동·배치) 프레임이 보존되어 있습니다. 영상을 공개할 때는 **촬영일, 사용 커밋, 미션 종류, 시작 배치, 성공 판정**을 함께 표기해 위의 과거 프레임과 현재 코드를 혼동하지 않도록 합니다.
 
-현재 Task 1 runner는 이 완료 판정을 위해 내부 FSM 시간 예산을 적용하지 않습니다.
-평가의 180초 제한을 재현할 때는 내부 deadline이 구현될 때까지 외부 supervisor로
-시간을 제한하고 실험 로그에 그 명령을 함께 남깁니다.
+## 7. 팀 구성
 
-자세한 내용은 [CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md).
+### 7.1. 팀원별 소개 및 역할 분담
 
-### Task 3 — ACT 데이터셋 자동 수집
+| 팀원 | 주요 담당 |
+|---|---|
+| **윤민석** | 블록 검출·영역 필터, 파지·적재 보정, 그리퍼 정렬·재시도, Task 1/2 제어 통합, Task 3 수집 |
+| **이동근** | FSM 파지·대체 후보 보완, 카메라 웹 뷰어·오버레이, 캘리브레이션 도구, LeRobot/CLI 환경, 보고서 |
+| **김주환** | ACT·SmolVLA 분석과 CV+IK 전환 근거, 평가 체계·실험 기록, 통합 시험·코드 검토, 발표 자료 |
+| **공동** | 실장비 통합, 데이터 수집, 실패 관찰과 결과 검토 |
 
-Task 1의 수집 루프를 그대로 돌리면서 성공한 사이클 하나를 LeRobot 에피소드로
-녹화합니다. 사람은 블록 5개를 배치하는 일만 합니다.
+역할 범위는 [최종보고서](docs/report/최종보고서/final_report.pdf)의 팀 분담 표를 요약했습니다. 지도교수: **김종덕**.
 
-```bash
-uv pip install --python .venv/bin/python "datasets>=4.7.0,<5.0.0" "av>=15.0.0,<16.0.0"
-so101-collect --dry-run                      # 카메라·슬롯·features 확인, 팔은 정지
-so101-collect                                # Ctrl-C 로 종료
-# 동일한 Task 3 진입점 별칭
-so101-run --task 3 --dry-run
-so101-run --task 3
-```
+### 7.2. 팀원 별 참여 후기
 
-한 에피소드 = `home → 파지 → 운반 → 릴리스 → home 복귀`. 파지는 **1회만**
-시도하고 운반까지 성공한 것만 저장합니다. 지정구역 밖이 비면 재배치를 요청하고
-계속 수집합니다. Ctrl-C는 미완 에피소드만 버리고 나머지는 보존합니다.
+개별 팀원의 1인칭 회고 원문은 저장소에 없어 임의로 작성하지 않았습니다. 각 팀원이 직접 다음 항목을 채우면 이 절에 게시할 수 있습니다.
 
-자세한 내용은 [Task 3 데이터 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md).
+| 팀원 | 참여 후기 작성 항목 |
+|---|---|
+| 윤민석 | 파지·적재 제어에서 가장 어려웠던 점과 실험으로 바꾼 설계 |
+| 이동근 | 카메라·좌표 보정과 웹 관제에서 배운 점 |
+| 김주환 | 학습 방식 평가, CV+IK 전환과 협업에서 배운 점 |
 
-### LLM 에이전트 — 자연어로 조작 (`so101-agent`)
+## 8. 참고 문헌 및 출처
 
-기존 Task 1/2/3 명령은 그대로 두고, 자연어 요청을 LLM 툴 콜링으로 실행하는 웹
-채팅 서버를 따로 띄웁니다. `so101-run`/`so101-collect`와 **동시에 실행하지 않습니다**
-(로봇 버스 락으로 막힘).
+1. International Federation of Robotics, [*World Robotics 2025: Industrial Robots — Executive Summary*](https://ifr.org/img/worldrobotics/Executive_Summary_WR_2025_Industrial_Robots.pdf). 2024년 세계 설치 수치와 한국 시장 맥락.
+2. International Federation of Robotics, [*World Robotics 2025 발표: 국가별 산업용 로봇 설치*](https://ifr.org/news/global-robot-demand-in-factories-doubles-over-10-years/1st-quarterly-newsletter-2010). 한국 2024년 설치 수치.
+3. Hugging Face, [LeRobot 문서](https://huggingface.co/docs/lerobot/main/index) 및 [SO-101 가이드](https://huggingface.co/docs/lerobot/so101). 기본 플랫폼·장비 정보.
+4. 프로젝트 [설계 규칙](AGENTS.md), [현재 아키텍처](docs/architecture.md), [실험 기록](experiments/README.md).
+5. 프로젝트 [최종보고서](docs/report/최종보고서/final_report.pdf)와 [집계·증거 해석 범위](docs/report/최종보고서/SOURCES.md). 팀 역할·멘토링·과거 평가의 근거.
+6. 삼성중공업 이재민, [서면 자문의견서](docs/report/25_%28Sim2Real%29삼성중공업_이재민_자문의견서.pdf), 2026-08-03.
 
-```bash
-# 최초 1회: 의존성 (uv sync 금지 — JetPack torch 휠 보호)
-uv pip install --python .venv/bin/python "fastapi>=0.110" "uvicorn>=0.29" \
-  "openai>=1.60" "google-genai>=1.0"
-uv pip install --python .venv/bin/python -e . --no-deps                       # so101-agent 스크립트 등록
-
-cp .env.example .env && vi .env            # OPENAI_API_KEY와 GEMINI_API_KEY 입력
-
-so101-agent --dry-run                      # 칸·부채꼴 영역·체스판 격자 IK, 조그 높이, API 키, 카메라 확인 (팔 정지)
-so101-agent --sim --provider fake          # 하드웨어·API 키 없이 UI와 툴 흐름 리허설
-
-so101-agent                                # 카메라 자동 시작, 기본 OpenAI / Gemini 폴백
-so101-agent --provider gemini              # 명시하면 Gemini만 사용(폴백 없음)
-```
-
-예: "노란 블록을 적재 구역 좌상단으로 옮겨줘", "초록 블록 다시 밖으로 꺼내줘",
-"5mm만 더 멀리 집어줘", "왼쪽으로 가줘" → "여기 내려놔", "그 블록 20mm만 더 왼쪽으로",
-"파란 블록을 (3, 4)로 옮겨줘", "미션 1 해줘". 화면에서 칸을 누르면 입력창에
-`격자 (3, 4)`가 들어가고, 수동 패널에 x·y를 직접 넣으면 LLM 없이 그 칸 위로 갑니다.
-여러 브라우저가 같은 세션에 참여할 수 있고, 로봇 명령은 한 번에 하나만
-실행됩니다. 명령 하나가 끝날 때까지 입력 잠금, STOP을 누르면
-그리퍼를 열고(들고 있던 블록은 놓고) home 복귀 후 그리퍼를 닫는 것까지 자동으로
-진행되며 그게 확인돼야 다시 입력할 수 있습니다.
-
-놓기 정확도는 캘리브레이션이 아니라 릴리즈 동작이 정합니다. `release_at`은 관절이
-명령에서 3° 안에 들면 그리퍼를 여는데 이 장비 실측으로 3°는 283 mm 리치에서 약
-29 mm이고, 블록을 든 상태의 처짐이 더해집니다. 그래서 배치할 때마다 이미 하던 확인
-관찰로 (명령, 실제) 차이를 재서 다음 명령을 보정합니다(`agent.place_correction`).
-결과에 `miss_mm`과 실제로 놓인 칸이 함께 나오고, 세션에서 수렴한 값을 설정에 적어
-두면 다음 세션은 첫 배치부터 그 값으로 시작합니다.
-
-자세한 내용은 [LLM 에이전트 가이드](docs/guide/SO101_LLM_에이전트.md).
-
-## Repository Layout
-
-```text
-.
-├── docs/
-│   ├── calibration/           캘리브레이션 자료 위치 안내
-│   ├── eval/                  정량 평가 기록 형식
-│   ├── guide/                 현재 운영 가이드와 과거 실험 가이드
-│   └── report/                시점별 제출·피벗 기록(역사 자료)
-├── experiments/               날짜별 실장비 증거와 실패 기록
-├── src/
-│   ├── camera/                단일 소유 카메라 서버, 오버레이, 녹화용 프레임 소스
-│   ├── data/                  Task 3 LeRobot 에피소드 녹화
-│   ├── perception/            homography, 색·형상 검출, 선택
-│   ├── control/               IK, 파지, 궤적, 센싱
-│   ├── fsm/                   Task 흐름과 상태 구현
-│   ├── policy/                보존된 optional ACT PICK 클라이언트
-│   ├── runners/               so101-run 조립·실행
-│   ├── session/               한 번 연결된 팔 세션, 취소·버스 락, 에이전트 스킬
-│   ├── agent/                 so101-agent: LLM 툴·어댑터·대화 루프·웹 UI
-│   └── tools/                 캘리브레이션·진단·세션 CLI
-├── third_party/               SO-101 자산·LeRobot submodule
-└── docker/                    보존된 ACT policy-server 제출 경로
-```
-
-`third_party/lerobot`은 Git submodule이고, `.venv/`는 각 팀원이 `uv sync`로 생성하는 로컬 환경입니다. `uv.lock`과 submodule 커밋을 함께 추적해 같은 드라이버·기구학 버전을 재현합니다.
-
-## Documents
-
-- [현재 아키텍처와 구현 상태](docs/architecture.md)
-- [SO-101 세팅 가이드](docs/guide/SO101_세팅가이드.md)
-- [SO-101 문제해결](docs/guide/SO101_문제해결.md)
-- [SO-101 원격 조작 가이드](docs/guide/SO101_원격조작.md)
-- [SO-101 원격 카메라 연결 가이드](docs/guide/SO101_원격카메라.md)
-- [SO-101 CV+IK 파지·운반 가이드](docs/guide/SO101_CV_IK_파지운반.md)
-- [SO-101 LLM 툴 콜링 에이전트 운영 가이드](docs/guide/SO101_LLM_에이전트.md)
-- [Task 3 ACT 데이터셋 자동 수집 가이드](docs/guide/SO101_TASK3_데이터수집.md)
-- [캘리브레이션 자료 위치](docs/calibration/README.md)
-- [정량 평가 기록](docs/eval/README.md)
-- [과거 ACT/SmolVLA 데이터 수집 기록](docs/guide/SO101_데이터수집_관리.md)
-- [과거 ACT/SmolVLA 학습·추론 기록](docs/guide/SO101_학습_추론.md)
-- [JetBot Vision-Action 착수보고서](docs/report/착수보고서/JetBot_Vision_Action_착수보고서.pdf)
-
-## Notes
-
-- SO-101 실행 전 로봇팔 전원, 서보 데이지체인 케이블, USB serial 연결을 먼저 확인합니다.
-- `/dev/ttyACM0`, `/dev/ttyACM1`은 재부팅이나 재연결 후 바뀔 수 있으므로 가능하면 `/dev/serial/by-id/...` 경로를 사용합니다.
-- 원격 키보드 조작 전에는 카메라로 팔 주변에 충돌 위험이 없는지 확인합니다.
-- 웹 카메라 서버는 LAN 또는 Tailscale 안에서만 열고, 공인 인터넷에는 직접 노출하지 않습니다.
-- 대용량 모델 파일, 빌드 디렉토리, 캐시, 로그 파일은 저장소에 커밋하지 않습니다.
+과거 ACT·SmolVLA 실험은 [당시 데이터 수집 기록](docs/guide/SO101_데이터수집_관리.md), [학습·추론 기록](docs/guide/SO101_학습_추론.md)에 보존되어 있습니다. 이 문서들은 현재 기본 실행 명령의 근거로 사용하지 않습니다.

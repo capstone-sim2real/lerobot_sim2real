@@ -6,7 +6,7 @@ const TOKEN_KEY = "so101_operator_token";
 const CONTROL_UI_VERSION = "cell-grid-v1";
 const TOOL_NAMES = {
   get_state: "상태 확인", observe_scene: "카메라 관찰", describe_places: "장소 확인",
-  move_block_to_slot: "블록 슬롯 배치", stack_next_block: "블록 한 층 적층",
+  move_block_to_slot: "블록 슬롯 배치", stack_block_to_floor: "지정 층 적층",
   move_to_target: "목표 접근", move_relative: "상대 이동", align_gripper: "블록 방향 정렬",
   close_gripper: "닫기·파지 확인", descend_until_contact: "접촉 하강", open_gripper: "그리퍼 열기",
   return_to_home: "home 복귀", recover_and_home: "그리퍼 열기·home 복귀",
@@ -212,7 +212,7 @@ function addMarkdownMessage(text) {
 }
 
 function describeArgs(args) {
-  const parts = Object.entries(args || {}).map(([k, v]) => `${k}=${typeof v === "number" ? Math.round(v * 10) / 10 : v}`);
+  const parts = Object.entries(args || {}).filter(([k]) => k !== "calibration_id").map(([k, v]) => `${k}=${typeof v === "number" ? Math.round(v * 10) / 10 : v}`);
   return parts.length ? `(${parts.join(", ")})` : "";
 }
 
@@ -234,11 +234,15 @@ function toolCall(event) {
 }
 
 function toolResult(event) {
+  if (["record_tool_sequence", "save_episode", "finish_dataset"].includes(event.name)) {
+    window.dispatchEvent(new Event("episodes-updated"));
+  }
+
   let chip = toolChips.get(event.id);
   if (!chip) { toolCall({ id: event.id, name: event.name, arguments: {} }); chip = toolChips.get(event.id); }
   const result = event.result || {};
   const holding = result.state?.holding ?? result.holding;
-  const needsHeldRecovery = ["move_block_to_slot", "stack_next_block"].includes(result.action) && holding != null;
+  const needsHeldRecovery = ["move_block_to_slot", "stack_block_to_floor"].includes(result.action) && holding != null;
   const severity = result.ok ? "ok" : result.severity === "error" || needsHeldRecovery ? "fail" : "warning";
   chip.classList.add(severity);
   const elapsed = typeof chip._startedAt === "number"
@@ -295,6 +299,13 @@ function handleEvent(event) {
       break;
     case "tool_call": if (!event.direct) toolCall(event); break;
     case "tool_result": handleToolResult(event); break;
+    case "mission_step":
+      $("mission-status").textContent = "Task " + event.task + ": " + event.color + " 블록 실행 중…";
+      break;
+    case "mission_result":
+      $("mission-status").textContent = "Task " + event.task + ": " + event.detail;
+      addMessage(["complete", "placed_unverified"].includes(event.status) ? "system" : "error", "Task " + event.task + ": " + event.detail);
+      break;
     case "turn_end": streamingBubble = null; break;
     case "stop_pressed": if (event.effective) addMessage("system", "비상정지 요청됨"); break;
     case "keyboard_jog_end": showToast(event.message,"bad"); break;
@@ -318,6 +329,7 @@ function applyControl(snapshot) {
   const manualControls = [
     $("input"), $("send"), $("mic"), $("reset"), $("jog-step"), $("manual-home"),
     $("observe-now"), $("pick-here"), $("collection-status"), $("open-gripper"),
+    $("mission-task-1"), $("mission-task-2"),
     $("cell-x"), $("cell-y"), $("go-cell"), $("perception-backend"),
     ...document.querySelectorAll(".jog-btn"),
   ];
@@ -372,7 +384,10 @@ async function send(text) {
   text = (text || "").trim();
   if (!text || control.state !== "idle") return;
   $("input").value = "";
-  const { status, data } = await api("/api/chat", { text });
+  const marker = chatPixelTarget && `헤드캠 선택 픽셀 (u=${chatPixelTarget.u}, v=${chatPixelTarget.v})`;
+  const selected_pixel = marker && text.includes(marker) ? chatPixelTarget : null;
+  const { status, data } = await api("/api/chat", { text, selected_pixel });
+  if (status < 400) chatPixelTarget = null;
   if (status === 409) addMessage("system", "로봇이 아직 동작 중입니다.");
   else if (status >= 400 && status !== 403) addMessage("error", data.error || `오류 ${status}`);
 }
@@ -380,12 +395,21 @@ async function send(text) {
 $("composer").addEventListener("submit", (e) => { e.preventDefault(); send($("input").value); });
 function pressStop() {
   api("/api/stop");
+  $("mission-status").textContent = "정지 후 home 복귀를 시도합니다…";
 }
 $("stop").addEventListener("click", pressStop);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.repeat) pressStop(); });
 $("home-button").addEventListener("click", () => api("/api/home"));
 $("lock-retry").addEventListener("click", acquireLease);
 $("reset").addEventListener("click", () => api("/api/reset"));
+for (const task of [1, 2]) {
+  $("mission-task-" + task).addEventListener("click", async () => {
+    if (!isOperator || control.state !== "idle") return;
+    const { status, data } = await api("/api/mission", { task });
+    if (status === 202) $("mission-status").textContent = "Task " + task + ": 시작 중…";
+    else showToast(data.error || "Task " + task + " 시작 실패 (HTTP " + status + ")", "bad");
+  });
+}
 
 async function directRequest(path, body) {
   if (directPending || control.state !== "idle" || !isOperator) return;
@@ -630,9 +654,19 @@ function drawReachPreview(rules) {
   const fill=svgEl('polygon',{points:`${base[0]},${base[1]} ${points}`,class:'reach-fill'});
   const line=svgEl('polyline',{points,class:'reach-arc'});
   svg.append(fill,line);
+  const nearVertical=rules.near_vertical_arc_px;
+  if (Array.isArray(nearVertical) && nearVertical.length>=2) {
+    const nearPoints=nearVertical.map(([x,y])=>`${x},${y}`).join(' ');
+    svg.append(svgEl('polyline',{points:nearPoints,class:'reach-near-vertical'}));
+    const middle=nearVertical[Math.floor(nearVertical.length/2)];
+    const label=svgEl('text',{x:middle[0]+8,y:middle[1]-8,class:'reach-near-vertical-label'});
+    label.textContent=`≤${rules.near_vertical_max_tilt_deg}° pick`;
+    svg.append(label);
+  }
 }
 
 let pixelTarget=null;
+let chatPixelTarget=null;
 let pixelSelectionGeneration=0;
 function enablePixelButtons() {
   const enabled=Boolean(pixelTarget) && selectedCamera()==='shoulder' && control?.state==='idle' && isOperator;
@@ -713,7 +747,15 @@ $('camera-wrap').addEventListener('pointerenter',updateHoverRing);
 $('camera-wrap').addEventListener('pointerleave',hideHoverRing);
 window.addEventListener('blur',hideHoverRing);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)hideHoverRing();});
+let cameraClickFromChat=false;
+$('camera-wrap').addEventListener('pointerdown',event=>{
+  cameraClickFromChat=event.button===0 && document.activeElement===$('input') && !$('input').disabled;
+  if(cameraClickFromChat)event.preventDefault(); // retain draft focus while selecting a point
+});
+$('camera-wrap').addEventListener('pointercancel',()=>{cameraClickFromChat=false;});
 $('camera-wrap').addEventListener('click',async event=>{
+  const insertIntoChat=cameraClickFromChat;
+  cameraClickFromChat=false;
   if(selectedCamera()!=='shoulder')return;
   const image=$('camera');
   if(!image.naturalWidth || !image.naturalHeight)return;
@@ -729,6 +771,7 @@ $('camera-wrap').addEventListener('click',async event=>{
     const target=await checkPixel(params,AbortSignal.timeout(5000));
     if(generation!==pixelSelectionGeneration)return;
     pixelTarget=target;mark.dataset.state='valid';
+    if(insertIntoChat && document.activeElement===$('input'))insertPixelIntoChat();
     $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) · X ${pixelTarget.x_mm.toFixed(1)} / Y ${pixelTarget.y_mm.toFixed(1)} / Z ${pixelTarget.z_mm.toFixed(2)} mm · 블록 윗면 고정. 실행 시 IK 검사`;
     enablePixelButtons();
   } catch(error) {
@@ -741,10 +784,12 @@ function pixelArguments() {
 }
 $('move-pixel').addEventListener('click',()=>{if(pixelTarget)manual('move_to_pixel',pixelArguments());});
 $('place-pixel').addEventListener('click',()=>{if(pixelTarget)manual('place_at_pixel',pixelArguments());});
-$('pixel-to-chat').addEventListener('click',()=>{
-  if(!pixelTarget)return;
-  $('chat-tab').click();insertText(`헤드캠 선택 픽셀 (u=${pixelTarget.u}, v=${pixelTarget.v}), calibration_id=${pixelTarget.calibration_id}`);
-});
+function insertPixelIntoChat() {
+  if(!pixelTarget || $('input').disabled)return;
+  chatPixelTarget = pixelArguments();
+  $('chat-tab').click();insertText(`헤드캠 선택 픽셀 (u=${pixelTarget.u}, v=${pixelTarget.v})`);
+}
+$('pixel-to-chat').addEventListener('click',insertPixelIntoChat);
 
 async function loadConfig() {
   const response = await fetch("/api/config");
@@ -831,14 +876,15 @@ pollHealth();
   document.querySelectorAll('[data-diagnostic-tab]').forEach(button => button.addEventListener('click', () => {
     const tab=button.dataset.diagnosticTab;document.body.dataset.diagnosticTab=tab;
     document.querySelectorAll('[data-diagnostic-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));
-    $('robot-diagnostics').hidden=['detections','history'].includes(tab);
-    $('diagnostic-detections').hidden=tab!=='detections';$('diagnostic-history').hidden=tab!=='history';
+    $('robot-diagnostics').hidden=['detections','history','episodes'].includes(tab);
+    $('diagnostic-detections').hidden=tab!=='detections';$('diagnostic-history').hidden=tab!=='history';$('diagnostic-episodes').hidden=tab!=='episodes';
     if(tab==='detections') {
       const detail=document.querySelector('[data-camera-layer="details"]');
       if(detail.getAttribute('aria-pressed')!=='true')detail.click();
     }
   }));
   document.body.dataset.diagnosticTab='joints';
+  if(new URLSearchParams(location.search).get('tab')==='episodes') document.querySelector('[data-diagnostic-tab=episodes]').click();
   const history=$('diagnostic-history');
   new MutationObserver(() => {
     const tools=[...$('chat').querySelectorAll('.tool,.msg-error')];

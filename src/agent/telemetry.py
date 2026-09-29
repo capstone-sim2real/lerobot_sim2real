@@ -7,6 +7,9 @@ from dataclasses import asdict
 
 
 def collect(skills):
+    # A read queued just before recording began must not interrupt 30-Hz ticks.
+    if getattr(getattr(skills, "collection", None), "recording", False):
+        return {"sampled_at": time.time(), "recording": True, "motors": []}
     s = skills.s
     robot = getattr(s, '_inner_robot', None)
     hardware = getattr(robot, 'robot', None)

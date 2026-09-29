@@ -206,7 +206,7 @@ class EpisodeRecorder:
 
     # ── lifecycle ────────────────────────────────────────────────────
 
-    def begin_episode(self, color: str) -> None:
+    def begin_episode(self, color: str, *, task_text: str | None = None) -> None:
         """Start recording; the arm is expected to be at home.
 
         An already-open episode here means a state left without resolving it,
@@ -219,7 +219,7 @@ class EpisodeRecorder:
         self._sink.clear_episode_buffer()
         self._open = True
         self._color = color
-        self._task_text = self.task_text_for(color)
+        self._task_text = task_text if task_text is not None else self.task_text_for(color)
         self._frames = 0
         self._stale_run = 0
         self._abort_reason = None
@@ -357,6 +357,10 @@ class EpisodeRecorder:
         # features were declared in.
         return np.array([values[joint] for joint in JOINT_NAMES], dtype=np.float32)
 
+    def reset_tick_interval(self) -> None:
+        """Start a new timed segment after a measured-stationary planning pause."""
+        self._last_tick_at = None
+
     def interval_stats(self) -> dict[str, float]:
         """Measured tick spacing — the check that ``record_fps`` is honest."""
         if not self.tick_intervals:
@@ -413,6 +417,7 @@ class RecordingRobotIO(BaseRobotIO):
         # physically true value for an uncommanded joint is the last thing it
         # was told, not its measured position.
         self._last_command: dict[str, float] | None = None
+        self.last_measured: dict[str, float] | None = None
 
     # ── BaseRobotIO passthrough ──────────────────────────────────────
 
@@ -454,6 +459,7 @@ class RecordingRobotIO(BaseRobotIO):
         # Read before commanding: the observation an action is conditioned on
         # must be the state the arm was in when the action was chosen.
         measured = self._inner.read_joints()
+        self.last_measured = dict(measured)
         if self._last_command is None:
             self._last_command = dict(measured)
         pending = self._recorder.capture_tick(measured)

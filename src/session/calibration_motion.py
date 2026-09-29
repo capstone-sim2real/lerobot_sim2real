@@ -243,7 +243,8 @@ class CalibrationMotion(Skills):
         result.action="calibration_prepare_visible"
         return result
 
-    def calibration_prepare(self, color, _scene=None, *, _open_gripper=True):
+    def calibration_prepare(self, color, _scene=None, *, _open_gripper=True,
+                            route_guard=None):
         self.descent_ready = False
         self.attempt = None
         self.baseline = None
@@ -281,7 +282,7 @@ class CalibrationMotion(Skills):
             from control.grasp import highest_reachable_hover
             height=highest_reachable_hover(self.s.ik,*shifted,primary.grasp_z_mm,self.cfg,yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm)
             kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
-            hover_xy=approach_hover_xy(shifted,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+            hover_xy=approach_hover_xy(shifted,primary.grasp_z_mm,height,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
             hover=self.s.ik.solve(*hover_xy,height,**kw)
             grasp=self.s.ik.solve(*shifted,primary.grasp_z_mm,**kw)
             extra.append(replace(primary,label=f"trial_f{forward:+g}_l{left:+g}",xy_mm=shifted,
@@ -306,7 +307,7 @@ class CalibrationMotion(Skills):
                        xy[1]+math.sin(angle)*dx+math.cos(angle)*dy)
                 kw=dict(yaw_deg=yaw,radial_tilt_deg=plan.radial_tilt_deg)
                 height=highest_reachable_hover(self.s.ik,*point,primary.grasp_z_mm,self.cfg,axis_aligned=True,clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,min_clearance_mm=plan.hover_z_mm-primary.grasp_z_mm,**kw)
-                hover_xy=approach_hover_xy(point,primary.grasp_z_mm,height,plan.radial_tilt_deg)
+                hover_xy=approach_hover_xy(point,primary.grasp_z_mm,height,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
                 hover=self.s.ik.solve(*hover_xy,height,**kw)
                 grasp=self.s.ik.solve(*point,primary.grasp_z_mm,**kw)
                 extra.append(replace(primary,label=f"yaw_{source.label}_{delta:+g}",xy_mm=point,
@@ -327,7 +328,7 @@ class CalibrationMotion(Skills):
                 if math.dist(rotated,candidate.xy_mm)>self.cfg.agent.relative.max_pick_offset_mm:
                     continue
                 kw=dict(yaw_deg=candidate.yaw_deg,radial_tilt_deg=plan.radial_tilt_deg)
-                hover_xy=approach_hover_xy(rotated,candidate.grasp_z_mm,candidate.hover_z_mm,plan.radial_tilt_deg)
+                hover_xy=approach_hover_xy(rotated,candidate.grasp_z_mm,candidate.hover_z_mm,plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
                 hover=self.s.ik.solve(*hover_xy,candidate.hover_z_mm,**kw)
                 grasp=self.s.ik.solve(*rotated,candidate.grasp_z_mm,**kw)
                 candidate=replace(candidate,xy_mm=rotated,hover=hover,hover_xy_mm=hover_xy,grasp=grasp,
@@ -341,6 +342,10 @@ class CalibrationMotion(Skills):
             if not candidate.reachable or not self.s.in_workspace(candidate.xy_mm):
                 continue
             clearance=self._clearance_gate(scene,color,candidate)
+            if (clearance["clear"] and route_guard is not None
+                    and not route_guard(self.s.robot.read_joints(),
+                                        (candidate.hover.joints,))):
+                clearance = {"clear": False, "reason": "limit_exceeded"}
             considered.append(dict(label=candidate.label,**clearance))
             if clearance["clear"]:
                 a=candidate
@@ -375,9 +380,17 @@ class CalibrationMotion(Skills):
                      frame_seq=scene.frame_seq, captured_at=scene.captured_at,
                      clearance_candidates=considered)
         selected=getattr(self,"_selected_opening",self.cfg.sensing.gripper_open_pos)
-        if (selected < self.s.robot.read_joints()['gripper']
-                and self.s.arm_position_mm()[2] < self.s.grasp_z_mm+self.cfg.agent.calibration_clearance.obstacle_height_mm):
-            return SkillResult(False,"calibration_prepare","precondition",detail="Lift before narrowing the jaws")
+        if selected < self.s.robot.read_joints()['gripper']:
+            minimum_z = (self.s.grasp_z_mm
+                         + self.cfg.agent.calibration_clearance.obstacle_height_mm)
+            if self.s.arm_position_mm()[2] < minimum_z:
+                self.s.lift_in_place()
+            measured_z = self.s.arm_position_mm()[2]
+            if measured_z < minimum_z:
+                return SkillResult(False, "calibration_prepare", "precondition",
+                                   detail="Lift before narrowing the jaws",
+                                   data={"measured_z_mm": measured_z,
+                                         "required_z_mm": minimum_z})
         self.s.player.set_gripper(selected)
         if self._approach_joints is not None:
             self.s.player.move_to(self._approach_joints,max_step=self.cfg.motion.descent_step_per_tick,
@@ -405,8 +418,14 @@ class CalibrationMotion(Skills):
         robot,cfg=self.s.robot,self.cfg
         current=robot.read_joints()
         current_z=self.s.ik.forward_position_mm(current)[2]
-        if current_z < a.grasp_z_mm+cfg.agent.calibration_clearance.obstacle_height_mm:
-            return SkillResult(False,"calibration_correct_hover","precondition")
+        safe_z = a.grasp_z_mm + cfg.agent.calibration_clearance.obstacle_height_mm
+        if current_z < safe_z:
+            return SkillResult(
+                False, "calibration_correct_hover", "height_limit",
+                detail=f"Measured pregrasp hover {current_z:.1f}mm is below block clearance {safe_z:.1f}mm",
+                retry_advice="try_other_target",
+                data={"measured_hover_z_mm": current_z, "required_hover_z_mm": safe_z},
+            )
         if joint != "all" and joint not in a.hover.joints:
             return SkillResult(False,"calibration_correct_hover","invalid_arguments")
         if not math.isfinite(gain) or not 0 < gain <= 1:
@@ -478,7 +497,7 @@ class CalibrationMotion(Skills):
         if yaw is None:
             yaw = self.s.ik.neutral_yaw_deg(*a.xy_mm, a.grasp_z_mm)
         kw = dict(yaw_deg=yaw, radial_tilt_deg=self.plan.radial_tilt_deg)
-        hover_xy=approach_hover_xy(xy,a.grasp_z_mm,a.hover_z_mm,self.plan.radial_tilt_deg)
+        hover_xy=approach_hover_xy(xy,a.grasp_z_mm,a.hover_z_mm,self.plan.radial_tilt_deg,getattr(self.s.ik, "pan_origin_xy_mm", (0.0, 0.0)))
         hover = self.s.ik.solve(*hover_xy, a.hover_z_mm, **kw)
         grasp = self.s.ik.solve(*xy, a.grasp_z_mm, **kw)
         if any(over_ik_gate(x,self.cfg,target_tilt_deg=self.plan.radial_tilt_deg) for x in (hover,grasp)):
@@ -556,7 +575,16 @@ class CalibrationMotion(Skills):
             # Experimental load increase guard; sign reversal or unloading alone is not contact.
             magnitude_delta = {j:max(0.0, abs(v)-abs(baseline[j])) for j,v in reading.loads.items()}
             samples[-1]["magnitude_deltas"] = magnitude_delta
-            if any(v >= cfg.sensing.contact_load_delta for v in magnitude_delta.values()):
+            measured_z = self.s.ik.forward_position_mm(current)[2]
+            samples[-1]["measured_z_mm"] = measured_z
+            contact_band_z = (a.grasp_z_mm
+                              + cfg.agent.calibration_clearance.obstacle_height_mm)
+            # An oblique approach changes gravity torque far from the block.
+            # At that height a load increase alone cannot be block contact;
+            # tracking lag still stops a genuine obstruction anywhere.
+            if (measured_z <= contact_band_z
+                    and any(v >= cfg.sensing.contact_load_delta
+                            for v in magnitude_delta.values())):
                 return current, "load_increase"
             if lag > cfg.motion.descent_max_lag:
                 return current, "tracking_lag"
@@ -575,7 +603,7 @@ class CalibrationMotion(Skills):
             return SkillResult(ok, "calibration_descend_guarded", "ok" if ok else "grasp_blocked",
                                retry_advice=None if ok else "do_not_retry", data={"stop_reason":why,
                 "samples":len(samples), "max_load_delta":max(
-                    (max(v["deltas"].values()) for v in samples), default=0),
+                    (max(v["magnitude_deltas"].values()) for v in samples), default=0),
                 "gripper_closed":False, "trial":self.trial})
         current, reason = sample(start)
         if reason:

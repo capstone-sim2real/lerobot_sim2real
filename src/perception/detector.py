@@ -308,7 +308,8 @@ def workspace_radius_at_angle(cfg: PerceptionConfig, azimuth_deg: float) -> floa
 
 
 def workspace_sector_points_mm(
-    cfg: PerceptionConfig, base_xy: tuple[float, float], step_deg: float
+    cfg: PerceptionConfig, base_xy: tuple[float, float], step_deg: float,
+    *, radius_limit_mm: float | None = None,
 ) -> np.ndarray:
     """(N, 2) mm samples of the workspace sector's outer arc, base-relative.
 
@@ -327,6 +328,8 @@ def workspace_sector_points_mm(
     radii = np.asarray(
         [workspace_radius_at_angle(cfg, angle) for angle in angles_deg], dtype=np.float64
     )
+    if radius_limit_mm is not None:
+        radii = np.minimum(radii, max(0.0, radius_limit_mm))
     return np.column_stack(
         [base_xy[0] + radii * np.cos(angles_rad), base_xy[1] + radii * np.sin(angles_rad)]
     )

@@ -386,16 +386,10 @@ class Skills:
         return self._result(False, action, reason, self._VERDICT_DETAIL.get(reason, reason),
                             retry_advice=advice, t0=t0, **data)
 
-    def _verify_block(self, color: str) -> dict[str, Any]:
-        """Home, look again, and report where ``color`` actually is."""
-        try:
-            scene = self.s.home_and_observe()
-        except CameraError as exc:
-            return {"verified": False, "verification_error": str(exc)}
-        block = scene.find(color)
-        if block is None:
-            return {"verified": False, "measured": None}
-        return {"verified": True, "measured": self._block_dict(block), "in_zone": block.in_zone}
+    def _finish_placement(self, color: str) -> dict[str, Any]:
+        """Finish release with home return; visual confirmation is optional observation."""
+        self.s.go_home()
+        return {"verified": False, "placement_verified": False, "release_completed": True}
 
     # ── pick ─────────────────────────────────────────────────────────
 
@@ -578,7 +572,7 @@ class Skills:
         )
 
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(target, verification))
         measured = verification.get("measured") or {}
         in_zone = verification.get("in_zone")
@@ -645,7 +639,7 @@ class Skills:
         s.carry_and_release(plan)
         regions = self.cfg.agent.table_regions
         name = f"{regions.column_korean[column]} {regions.row_korean[row]}"
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(point, verification))
         detail = f"{self._label(color)} 블록을 부채꼴 {name} 자리에 놓았습니다."
         if moved:
@@ -700,7 +694,7 @@ class Skills:
             )
         plan, correction = self._place_plan(moved_point)
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(moved_point, verification))
         landed = self._measured_cell(verification)
         detail = f"{self._label(color)} 블록을 ({x}, {y}) 칸에 놓았습니다."
@@ -724,7 +718,7 @@ class Skills:
         if reason is not None:
             return self._verdict_failure(action, reason, t0, target=_xy((x, y)))
         color = self._release_over(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         return self._result(True, action, "released", f"{self._label(color)} 블록을 현재 위치에 내려놓았습니다.",
                             t0=t0, color=color, target=_xy((x, y)), **verification)
 
@@ -842,7 +836,7 @@ class Skills:
         if not picked.ok:
             return self._chain(action, t0, picked, lambda: None)
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         data: dict[str, Any] = {
             "color": color,
             "requested_mm": {"forward": f, "left": l},
@@ -998,9 +992,8 @@ class Skills:
             return self._verdict_failure(action,reason,t0,target=target)
         color=s.held.color
         s.carry_and_release(plan)
-        verification=self._verify_block(color)
-        return self._result(True,action,"released","선택한 픽셀에 블록을 놓았습니다.",
-                            t0=t0,target=target,**verification)
+        return self._result(True,action,"released","선택한 픽셀에 해제 동작을 완료했습니다.",
+                            t0=t0,target=target,placement_verified=False)
 
     def move_to_cell(self, x: int, y: int) -> SkillResult:
         """Fly the gripper over one chessboard cell, at the current height.
@@ -1086,43 +1079,47 @@ class Skills:
         s.last_block_color = None
         return self._result(True, action, "held", "무언가를 집었습니다.", t0=t0, grasp_label=held.label)
 
-    def return_to_home(self) -> SkillResult:
+    def return_to_home(self, *, post_release: bool = False) -> SkillResult:
         t0 = time.monotonic()
-        lifted, at_home = self.s.return_home_safely()
+        lifted, at_home = (self.s.return_home_safely(post_release=True) if post_release
+                           else self.s.return_home_safely())
         return self._result(at_home, "return_to_home", "ok" if at_home else "motion_timeout",
                             "home으로 복귀했습니다." if at_home else "home 자세에 도달하지 못했습니다.",
                             t0=t0, lifted_first=lifted or None, arm_at_home=at_home)
 
     def recover_and_home(self) -> SkillResult:
-        """STOP/fault recovery: drop whatever is held, home, then close the jaws.
+        """STOP/fault recovery: open the jaws, then return home with them open.
 
-        Unlike ``return_to_home`` (a normal LLM tool that keeps a held block
-        held), this always opens the gripper first -- the arena's blocks and
-        arm are small enough, and the zone is not reachable by students, that
-        a dropped block is a non-issue and simplicity wins. Clears the STOP
-        flag first so the recovery motion itself is not immediately cancelled.
+        The service clears cancellation before queuing this skill. A new STOP
+        during recovery must remain effective at the next robot bus write.
         """
         t0, s = time.monotonic(), self.s
-        s.cancel.clear()
         released = s.held.color if s.held else None
+        open_error = None
         try:
             s.motion.open_gripper()
         except Exception as exc:  # noqa: BLE001 - still try to get home
+            open_error = str(exc)
             logger.warning("recover_and_home: open_gripper failed: %s", exc)
-        s.held = None
-        if released is not None:
-            s.last_block_color = released
-        lifted, at_home = s.return_home_safely()
-        if at_home:
-            try:
-                s.motion.close_gripper()
-            except Exception as exc:  # noqa: BLE001 - homing already succeeded
-                logger.warning("recover_and_home: close_gripper failed: %s", exc)
-        detail = "그리퍼를 열어" + (f" {released} 블록을 내려놓고" if released else "") + \
-            (" home으로 복귀하고 그리퍼를 닫았습니다." if at_home else " home으로 복귀를 시도했지만 도달하지 못했습니다.")
+        else:
+            s.held = None
+            if released is not None:
+                s.last_block_color = released
+        # Explicit STOP recovery uses the measured-joint trajectory directly.
+        # The normal low-hover preflight may be unsatisfiable after an
+        # interrupted move; the operator requested home even from that pose.
+        s.motion.go_home(include_gripper=False)
+        lifted, at_home = False, s.arm_at_home()
+        ok = at_home and open_error is None
+        detail = (
+            "그리퍼를 열고 home으로 복귀했습니다." if ok else
+            "그리퍼 열기 또는 home 복귀를 완료하지 못했습니다."
+        )
         return self._result(
-            at_home, "recover_and_home", "ok" if at_home else "motion_timeout", detail,
-            t0=t0, released=released, lifted_first=lifted or None, arm_at_home=at_home,
+            ok, "recover_and_home", "ok" if ok else "motion_timeout", detail,
+            t0=t0, released=released if open_error is None else None,
+            lifted_first=lifted or None, arm_at_home=at_home, gripper_open=open_error is None,
+            open_error=open_error,
         )
 
     def open_gripper(self) -> SkillResult:
@@ -1140,11 +1137,8 @@ class Skills:
 
     def run_task(self, task: int) -> SkillResult:
         action, t0, s, cfg = f"run_task{task}", time.monotonic(), self.s, self.cfg
-        if task not in (1, 2, 3):
-            return self._result(False, action, "invalid_arguments", "미션은 1, 2, 3만 있습니다.", t0=t0)
-        if task == 3:
-            return self._result(False, action, "disabled", "데이터 수집은 에피소드 도구와 동작 primitive를 조합하세요.",
-                                retry_advice="do_not_retry", t0=t0)
+        if task not in (1, 2):
+            return self._result(False, action, "invalid_arguments", "미션은 1, 2만 있습니다.", t0=t0)
         if s.held is not None:
             return self._result(False, action, "already_holding",
                                 f"{self._label(s.held.color)} 블록을 들고 있어 미션을 시작할 수 없습니다. 먼저 내려놓으세요.",
@@ -1152,9 +1146,6 @@ class Skills:
         scene = self._observe_or_fail(action, t0)
         if isinstance(scene, SkillResult):
             return scene
-        if task == 3:
-            return self._run_task3(t0, scene)
-
         from fsm.flows import build_task1_states, build_task2_stack_states
         from fsm.machine import StateMachine, TransitionLogger
 
@@ -1238,89 +1229,3 @@ class Skills:
         if warnings:
             detail += " " + " ".join(warnings)
         return self._result(complete, action, "ok" if complete else "task_incomplete", detail, t0=t0, **data)
-
-    def _run_task3(self, t0: float, scene: Scene) -> SkillResult:
-        """One Task 3 collection round: gather every outside block while recording.
-
-        The terminal prompt that starts a new round is replaced by the end of
-        the tool call; the operator rearranges and asks again.
-        """
-        import copy
-
-        from data.episode_recorder import (
-            EpisodeRecorder,
-            LeRobotEpisodeSink,
-            RecordingRobotIO,
-            StopRecording,
-            create_dataset,
-            remove_empty_dataset,
-            resolve_dataset_root,
-        )
-        from fsm.flows import build_task3_states
-        from fsm.machine import StateMachine, TransitionLogger
-        from lerobot.datasets import VideoEncodingManager
-        from runners.run_task3 import resolve_repo_id, start_frame_sources
-        from session.factories import make_pick_state, make_task1_perceive
-
-        class RoundDone(Exception):
-            pass
-
-        def end_round(_message: str) -> str:
-            raise RoundDone()
-
-        action, s = "run_task3", self.s
-        if scene.inside:
-            return self._result(False, action, "precondition",
-                                "데이터 수집은 빈 적재 구역에서 시작해야 합니다.",
-                                retry_advice="ask_operator", t0=t0)
-        cfg3 = copy.deepcopy(self.cfg)
-        cfg3.motion.fps = cfg3.task3.motion_fps_override
-        cfg3.task3.prompt_on_round_complete = True
-        repo_id = resolve_repo_id(cfg3, resume=False)
-        root = resolve_dataset_root(cfg3.task3, repo_id)
-        sources = start_frame_sources(cfg3)
-        dataset = None
-        recorder = None
-        try:
-            dataset = create_dataset(cfg3.task3, repo_id, root, resume=False)
-            recorder = EpisodeRecorder(LeRobotEpisodeSink(dataset), sources, cfg3.task3)
-            robot = RecordingRobotIO(s.robot, recorder, record_fps=cfg3.task3.record_fps,
-                                     stop_event=s.cancel.event)
-            from control.motion import MotionController
-
-            motion = MotionController(robot, s.poses, cfg3.motion, cfg3.sensing)
-            pick = make_pick_state("cv_ik", robot=robot, motion=motion, cfg=cfg3, calib=s.calib,
-                                   retreat_pose=None, radial_tilt_extra_key=PICK_TILT_KEY,
-                                   max_grasp_attempts=cfg3.task3.max_grasp_attempts, ik=s.ik)
-            states = build_task3_states(
-                robot=robot, motion=motion,
-                perceive=guard(s.cancel, make_task1_perceive(s.calib, cfg3)),
-                pick_state=pick, cfg=cfg3, calib=s.calib, planner=s.transport,
-                recorder=recorder, prompt=end_round, stop_requested=s.cancel.is_set,
-            )
-            ctx = RunContext(fsm=cfg3.fsm)
-            run_id = time.strftime("agent_task3_%Y%m%d_%H%M%S")
-            csv_path = (Path(cfg3.logging.log_dir) / f"{run_id}_transitions.csv"
-                        if cfg3.logging.save_transitions else None)
-            with VideoEncodingManager(dataset):
-                try:
-                    StateMachine(states, ctx, transition_logger=TransitionLogger(csv_path),
-                                 enforce_time_budget=False).run()
-                except RoundDone:
-                    pass
-                except StopRecording as exc:
-                    recorder.abort_episode("interrupted")
-                    raise Cancelled(str(exc)) from exc
-                finally:
-                    recorder.abort_episode("shutdown")
-        finally:
-            for source in sources.values():
-                source.stop()
-            if dataset is not None and (recorder is None or recorder.saved_total == 0):
-                remove_empty_dataset(Path(dataset.root))
-        return self._result(
-            True, action, "ok",
-            f"데이터 수집 라운드 완료: 에피소드 {recorder.saved_total}개 저장.",
-            t0=t0, dataset_root=str(dataset.root), episodes_saved=recorder.saved_total,
-            episodes_saved_by_color=recorder.saved_by_color, discard_reasons=recorder.discard_reasons,
-        )

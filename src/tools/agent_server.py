@@ -70,7 +70,9 @@ def configure_manual_tools(service, cfg):
     from agent.calibration_manual_tools import build_calibration_manual_tools
     defs = definitions(cfg) + build_calibration_manual_tools(cfg)
     primitive_names = frozenset(service.registry._tools)
-    service.registry._tools.update({d.spec.name: d for d in defs})
+    # Compatibility adapters must not replace canonical primitive schemas.
+    for definition in defs:
+        service.registry._tools.setdefault(definition.spec.name, definition)
     allowed = primitive_names | WEB_MANUAL_TOOLS | frozenset(d.spec.name for d in defs)
     tools = {}
     for name, definition in service.registry._tools.items():

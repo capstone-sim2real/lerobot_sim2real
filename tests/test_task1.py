@@ -76,6 +76,28 @@ def test_stale_or_duplicate_frame_never_completes_empty_timeout(monkeypatch):
     assert state.step(ctx) is None  # new frame starts a new five-second proof
 
 
+
+@pytest.mark.parametrize(
+    ("edge_x", "expected"),
+    [(350.0, "green"), (430.0, "blue")],
+)
+def test_task1_select_balances_base_reach_and_screen_center(monkeypatch, edge_x, expected):
+    cfg = AppConfig()
+    cfg.task1.scan_interval_s = 0.0
+    monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
+    sample = Task1Perception(
+        [_block("green", 250.0, -230.0), _block("blue", edge_x, 0.0)],
+        1,
+        1000.0,
+    )
+    state = Task1SelectState(_Motion(), _Samples([sample]), _calibration(), cfg)
+    ctx = RunContext(cfg.fsm)
+    state.enter(ctx)
+
+    assert state.step(ctx) is StateName.PICK
+    assert ctx.target_id == expected
+
+
 def test_task1_assigns_slots_in_verified_grasp_order():
     cfg = AppConfig()
     result = IkResult({"wrist_flex": 0.0}, position_error_mm=0.0, tilt_error_deg=0.0)
@@ -139,17 +161,51 @@ class _AlwaysReachableIk:
         )
 
 
-def test_far_pick_tilts_to_thirty_without_changing_placement():
+def test_far_pick_allows_sixty_without_changing_placement():
     from control.grasp import approach_hover_xy
     from control.task1_transport import over_ik_gate, place_tilt_deg
 
     cfg = AppConfig()
     assert far_reach_tilt_deg((280.0, 0.0), (0.0, 0.0), cfg) == -3.0
-    assert far_reach_tilt_deg((300.0, 0.0), (0.0, 0.0), cfg) == -16.5
-    assert far_reach_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == -30.0
+    assert far_reach_tilt_deg((290.0, 0.0), (0.0, 0.0), cfg) == -31.5
+    assert far_reach_tilt_deg((300.0, 0.0), (0.0, 0.0), cfg) == -60.0
     assert place_tilt_deg((320.0, 0.0), (0.0, 0.0), cfg) == 0.0
     tilted = IkResult({}, 0.2, 30.0)
     assert not over_ik_gate(tilted, cfg, target_tilt_deg=-30.0)
     assert over_ik_gate(tilted, cfg)
     hover = approach_hover_xy((320.0, 0.0), 4.0, 39.0, -30.0)
     assert hover == pytest.approx((320.0 - 35.0 / np.sqrt(3.0), 0.0))
+
+
+
+def test_far_pick_uses_smallest_gated_tilt():
+    from control.grasp import plan_grasp_attempts
+
+    class SideIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            result = super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+            result.position_error_mm = 30.0 if abs(radial_tilt_deg) > 15.0 else 0.0
+            return result
+
+    cfg = AppConfig()
+    plan = plan_grasp_attempts(SideIk(), cfg, 300.0, 80.0, 4.0, radial_tilt_deg=-60.0)
+    assert plan.radial_tilt_deg == -3.0
+    assert plan.attempts[0].reachable
+    assert plan.attempts[0].radial_tilt_deg == -3.0
+
+
+def test_far_pick_refines_between_configured_tilts():
+    from control.grasp import plan_grasp_attempts
+
+    class ThresholdIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            result = super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+            if abs(radial_tilt_deg) < 20.0:
+                result.position_error_mm = 30.0
+            return result
+
+    cfg = AppConfig()
+    plan = plan_grasp_attempts(ThresholdIk(), cfg, 300.0, 80.0, 4.0,
+                               radial_tilt_deg=-60.0)
+    assert plan.radial_tilt_deg == -22.5
+    assert plan.attempts[0].reachable

@@ -93,6 +93,9 @@ class AgentService:
         self.places: dict[str, Any] = {}
         self.started = False
         self._keyboard_jog = None
+        self._auto_home_token: str | None = None
+        self._auto_home_lock = threading.Lock()
+        self._shutting_down = threading.Event()
         self._telemetry_future = None
         self._telemetry_cache = {}
 
@@ -115,6 +118,7 @@ class AgentService:
         self.started = True
 
     def shutdown(self) -> None:
+        self._shutting_down.set()
         if self.gate.state in (ControlState.BUSY, ControlState.HOMING):
             self.cancel.set()
         for thread in list(self._threads):
@@ -164,10 +168,19 @@ class AgentService:
 
     # ── commands ─────────────────────────────────────────────────────
 
-    def chat(self, token: str | None, text: str) -> tuple[int, dict[str, Any]]:
+    def chat(self, token: str | None, text: str, *, selected_pixel=None) -> tuple[int, dict[str, Any]]:
         text = (text or "").strip()
         if not text:
             return 400, {"error": "empty message"}
+        model_text = text
+        if selected_pixel is not None:
+            if (not isinstance(selected_pixel, dict)
+                    or set(selected_pixel) != {"u", "v", "calibration_id"}
+                    or any(type(selected_pixel[k]) is not int or selected_pixel[k] < 0 for k in ("u", "v"))
+                    or not isinstance(selected_pixel["calibration_id"], str)):
+                return 400, {"error": "invalid selected pixel"}
+            import json
+            model_text += "\nSelected head-camera pixel (source or destination per user request): " + json.dumps(selected_pixel)
         if not self.gate.check(token):
             return 403, {"error": "not the operator"}
         if not self.gate.try_begin(token, "chat"):
@@ -177,7 +190,7 @@ class AgentService:
 
         def turn() -> None:
             try:
-                outcome = self.runner.run_turn(text)
+                outcome = self.runner.run_turn(model_text)
             except Exception as exc:  # noqa: BLE001 - a crashed turn is a fault
                 logger.exception("agent turn crashed")
                 self._publish({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
@@ -186,6 +199,83 @@ class AgentService:
 
         self._spawn(turn, "so101-agent-turn")
         return 202, {"accepted": True}
+
+    def mission(self, token: str | None, task: int) -> tuple[int, dict[str, Any]]:
+        """Run the existing composite tools without entering AgentRunner."""
+        if type(task) is not int or task not in (1, 2):
+            return 400, {"error": "task must be 1 or 2"}
+        if not self.gate.check(token):
+            return 403, {"error": "not the operator"}
+        if not self.gate.try_begin(token, f"task_{task}"):
+            return 409, {"error": "busy", **self.gate.snapshot()}
+        self.cancel.clear()
+
+        def run() -> None:
+            fault = False
+            try:
+                from perception.homography import PlaneCalibration
+                from .primitive_mission import PrimitiveMission
+
+                calib = PlaneCalibration.load(self.cfg.perception.calibration_path)
+
+                def mission_stopped() -> bool:
+                    return (self._shutting_down.is_set()
+                            or self.gate.state is ControlState.STOPPING)
+
+                def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+                    if name == "recover_and_home":
+                        # A tool timeout also sets the cancellation token.
+                        # Clear it only for bounded recovery, never after an
+                        # operator STOP or while the server is shutting down.
+                        with self._auto_home_lock:
+                            if mission_stopped():
+                                return {"ok": False, "reason": "cancelled"}
+                            self.cancel.clear()
+                    elif self.cancel.is_set():
+                        return {"ok": False, "reason": "cancelled",
+                                "detail": "비상정지로 실행하지 않았습니다."}
+                    call_id = f"mission_{next(self._ids)}"
+                    self._publish({"type": "tool_call", "id": call_id, "name": name,
+                                   "arguments": arguments, "mission": task})
+                    if name == "recover_and_home":
+                        skill = self.registry.run_skill(name, lambda skills: skills.recover_and_home())
+                        content = skill.to_envelope()
+                    elif task == 1 and name == "move_block_to_slot":
+                        # Share the mission's five-slot array with the existing
+                        # composite tool without exposing it as an LLM argument.
+                        def transfer(skills):
+                            previous = skills._mission_slot_ledger
+                            skills._mission_slot_ledger = mission.slots
+                            try:
+                                return skills.move_block_to_slot(
+                                    arguments["color"], arguments["slot"])
+                            finally:
+                                skills._mission_slot_ledger = previous
+                        content = self.registry.run_skill(name, transfer).to_envelope()
+                    else:
+                        content = self.registry.execute(ToolCall(call_id, name, arguments)).content
+                    self._publish({"type": "tool_result", "id": call_id, "name": name,
+                                   "result": content, "mission": task})
+                    return content
+
+                mission = PrimitiveMission(
+                    self.cfg, calib, call, stopped=mission_stopped,
+                    emit=self._publish,
+                )
+                result = mission.run(task)
+                logger.info("Task %s no-LLM mission ended: %s", task, result)
+                fault = result["status"] in ("needs_recovery", "stopped")
+            except Exception as exc:
+                logger.exception("primitive mission failed")
+                fault = True
+                self._publish({"type": "mission_result", "task": task,
+                               "status": "needs_recovery",
+                               "detail": f"미션 실행 오류: {type(exc).__name__}: {exc}"})
+            finally:
+                self._after_command(fault)
+
+        self._spawn(run, f"so101-task-{task}")
+        return 202, {"accepted": True, "task": task, "mode": "no_llm"}
 
     # Tools the manual control panel may call directly, bypassing the LLM.
     # Everything here is also an ordinary LLM tool (agent.tools.build_tools);
@@ -305,9 +395,26 @@ class AgentService:
             robot_fault = robot_fault or cleanup.robot_fault
         fault = robot_fault or self.cancel.is_set()
         self.gate.finish(robot_fault=fault, message="동작이 중단되었습니다. home 복귀가 필요합니다." if fault else None)
+        with self._auto_home_lock:
+            self._maybe_auto_home_locked()
 
-    def stop(self) -> dict[str, Any]:
-        stopped = self.gate.request_stop()
+    def _maybe_auto_home_locked(self) -> None:
+        token = self._auto_home_token
+        if token is not None and self.gate.try_begin_home(token):
+            self._auto_home_token = None
+            self._spawn(self._home_job, "so101-agent-auto-home")
+
+    def stop(self, token: str | None = None) -> dict[str, Any]:
+        # STOP cancels an active motion first. A valid operator's STOP then
+        # starts one home recovery after that motion has fully unwound.
+        with self._auto_home_lock:
+            state = self.gate.state
+            stopped = self.gate.request_stop()
+            if stopped and state.value != "homing" and self.gate.check(token):
+                self._auto_home_token = token
+                self._maybe_auto_home_locked()
+            elif state.value == "homing":
+                self._auto_home_token = None
         self._publish({"type": "stop_pressed", "effective": stopped})
         return {"stopped": stopped, **self.gate.snapshot()}
 
@@ -322,10 +429,10 @@ class AgentService:
     def _home_job(self) -> None:
         # Cleared here, before queuing, rather than inside the skill: a STOP
         # pressed after this point must still stop the homing motion.
+        self.cancel.clear()
         if self.gate.state is not ControlState.HOMING:
             self.gate.finish_home(False, message="home 복귀 전에 다시 정지되었습니다.")
             return
-        self.cancel.clear()
         call_id = f"home_{next(self._ids)}"
         self._publish({"type": "tool_call", "id": call_id, "name": "recover_and_home", "arguments": {}, "direct": True})
         result = self.registry.run_skill("recover_and_home", lambda skills: skills.recover_and_home())
@@ -352,11 +459,15 @@ class AgentService:
             except Exception as exc:
                 self._telemetry_cache = {**self._telemetry_cache, "error": type(exc).__name__}
             self._telemetry_future = None
+        # A bus-wide diagnostics read can block the sole robot worker beyond
+        # the recording tick deadline. Keep the last snapshot while recording.
+        resource = self._worker.resource
+        recording = bool(getattr(getattr(resource, "collection", None), "recording", False))
         age = time.time() - self._telemetry_cache.get("sampled_at", 0)
-        if self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
+        if not recording and self._telemetry_future is None and age >= self.cfg.agent.camera_view.poll_s:
             self._telemetry_future = self._worker.submit(collect)
         return {**self._telemetry_cache, "pending": self._telemetry_future is not None,
-                "control": self.gate.snapshot()}
+                "recording": recording, "control": self.gate.snapshot()}
 
     def health(self) -> dict[str, Any]:
         return {

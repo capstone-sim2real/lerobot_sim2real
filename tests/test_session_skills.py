@@ -34,7 +34,7 @@ def test_move_block_to_slot_places_and_verifies_the_cell():
     assert skills.s.held is None and skills.s.last_block_color == "yellow"
 
 
-def test_recover_and_home_drops_a_held_block_and_closes_the_gripper():
+def test_recover_and_home_drops_a_held_block_and_opens_the_gripper():
     skills, world, robot = make_skills({"yellow": (200.0, 100.0)})
     assert skills.pick_block("yellow").ok
     picked_at = world.blocks["yellow"]  # SimWorld only tracks a block's xy while it is not held
@@ -47,7 +47,7 @@ def test_recover_and_home_drops_a_held_block_and_closes_the_gripper():
     # dropped close to where it was picked from (small grasp-bias tolerance),
     # not carried all the way home (home is ~150mm away)
     assert world.blocks["yellow"] == pytest.approx(picked_at, abs=15.0)
-    assert robot.joints["gripper"] == pytest.approx(skills.cfg.sensing.gripper_close_pos)
+    assert robot.joints["gripper"] == pytest.approx(skills.cfg.sensing.gripper_open_pos)
 
 
 # ── board cell addressing ──────────────────────────────────────────────

@@ -69,17 +69,25 @@ def build_task1_states(
     cfg: AppConfig,
     calib: PlaneCalibration,
     planner: Task1TransportPlanner,
+    recorder: EpisodeRecorder | None = None,
+    prompt=input,
+    stop_requested: Callable[[], bool] = lambda: False,
 ) -> dict[StateName, State]:
-    """Gather until fresh perception proves no outside-zone blocks remain."""
+    """Gather with Task 1; optionally record each home-to-home block transfer."""
     if pick_state.name is not StateName.PICK:
         raise ValueError("pick_state must implement the PICK state")
     player = TrajectoryPlayer(robot, cfg.motion)
+    select = (Task1SelectState(motion, perceive, calib, cfg) if recorder is None
+              else Task3SelectState(motion, perceive, calib, cfg, recorder,
+                                    prompt=prompt, stop_requested=stop_requested))
+    place = (Task1PlaceState(motion, player, cfg) if recorder is None
+             else Task3PlaceState(motion, player, cfg))
     return {
-        StateName.SELECT: Task1SelectState(motion, perceive, calib, cfg),
+        StateName.SELECT: select,
         StateName.PICK: pick_state,
         StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
         StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
-        StateName.PLACE: Task1PlaceState(motion, player, cfg),
+        StateName.PLACE: place,
     }
 
 
@@ -96,32 +104,12 @@ def build_task3_states(
     prompt=input,
     stop_requested: Callable[[], bool] = lambda: False,
 ) -> dict[StateName, State]:
-    """Task 1's gather loop, recorded as ACT episodes.
-
-    PICK, VERIFY and TRANSPORT are Task 1's own handlers, unmodified: the
-    trajectories being recorded have to be the ones the mission actually
-    runs. Recording happens a layer below, in the ``RecordingRobotIO`` the
-    caller wraps ``robot`` with, so nothing in this flow knows about it
-    except the two states that own the episode boundary.
-    """
-    if pick_state.name is not StateName.PICK:
-        raise ValueError("pick_state must implement the PICK state")
-    player = TrajectoryPlayer(robot, cfg.motion)
-    return {
-        StateName.SELECT: Task3SelectState(
-            motion,
-            perceive,
-            calib,
-            cfg,
-            recorder,
-            prompt=prompt,
-            stop_requested=stop_requested,
-        ),
-        StateName.PICK: pick_state,
-        StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
-        StateName.TRANSPORT: Task1TransportState(planner, player, cfg),
-        StateName.PLACE: Task3PlaceState(motion, player, cfg),
-    }
+    """Compatibility entry point for the standalone Task 3 runner."""
+    return build_task1_states(
+        robot=robot, motion=motion, perceive=perceive, pick_state=pick_state,
+        cfg=cfg, calib=calib, planner=planner, recorder=recorder,
+        prompt=prompt, stop_requested=stop_requested,
+    )
 
 
 def build_task2_stack_states(
