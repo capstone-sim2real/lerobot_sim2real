@@ -818,6 +818,25 @@ class PrimitiveSkills(Skills):
                                 retry_advice="ask_operator", placement=placed.data)
         return placed
 
+    def _task1_near_low_zone_block(self, point) -> bool:
+        """Model-FK low-path check around observed in-zone blocks only.
+
+        Task 1 does not stack, so the observed block top is the calibrated
+        grasp plane. A carried block extends below the gripper frame.
+        """
+        scene = self._observed_scene
+        if scene is None:
+            return False
+        radius = self.cfg.agent.place_clear_radius_mm
+        clear_z = self.s.grasp_z_mm + self.cfg.task1.zone_path_clearance_mm
+        if self.s.held is not None:
+            clear_z += self.cfg.agent.calibration_clearance.obstacle_height_mm
+        return point[2] < clear_z and any(
+            block.color != (self.s.held.color if self.s.held else None)
+            and math.dist(point[:2], block.center_mm) < radius
+            for block in scene.inside.values()
+        )
+
     def _task2_path_clear_of_tower(self, start, waypoints) -> bool:
         """Preflight the local tower footprint, allowing travel above its estimated top.
 
@@ -1284,7 +1303,6 @@ class PrimitiveSkills(Skills):
             # reads can differ slightly while building and checking its goal.
             xyz = (*start[:2], xyz[2])
         lateral = math.dist(start[:2], xyz[:2]) > 1e-6
-        clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
         if lateral and not self._lateral_clearance_ready(min(start[2], xyz[2])):
             return self._fail(action, "Lift vertically above clearance before lateral movement")
         if not self._held_check() and (lateral or xyz[2] < start[2]):
@@ -1335,16 +1353,16 @@ class PrimitiveSkills(Skills):
             return self._fail(action, str(exc), "ik_gate")
         if self.s.held is not None and level_during_carry:
             # A permissive placement IK error can solve a hover several mm
-            # below its requested Z. Reject that before moving a held block
-            # into the zone; the subsequent motor lag can only make it worse.
-            safe_z = clear_z - self.limits.lateral_clearance_tolerance_mm
+            # below its requested Z. Check only observed placed blocks;
+            # the rest of the zone is not an obstacle.
             for point, plan in zip(points, plans, strict=True):
                 planned = self.s.ik.forward_position_mm(plan.joints)
-                if (self.s.in_zone(point[:2]) or self.s.in_zone(planned[:2])) and planned[2] < safe_z:
+                if (self._task1_near_low_zone_block(point)
+                        or self._task1_near_low_zone_block(planned)):
                     return self._result(
                         False, action, "ik_gate",
-                        f"Planned carry enters zone below clearance: "
-                        f"planned_z={planned[2]:.1f}mm required_z={safe_z:.1f}mm",
+                        f"Planned carry passes a placed block below clearance: "
+                        f"planned_z={planned[2]:.1f}mm",
                         retry_advice="try_other_target",
                         target_mm=list(point), planned_fk_mm=list(planned),
                     )
@@ -1621,8 +1639,6 @@ class PrimitiveSkills(Skills):
                 True, action, "moved", measured_fk_mm=list(actual),
                 initial_lift_mm=round(actual[2] - self.s.grasp_z_mm, 1),
                 requested_initial_lift_mm=self.cfg.task1.tilted_pick_hover_clearance_mm)
-        zone_safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
-                       - tolerance)
         trace = []
         goal = None
         for step in interpolate(joints, hover_goal,
@@ -1636,7 +1652,7 @@ class PrimitiveSkills(Skills):
         for point in trace:
             if (point[2] < previous_z - self.limits.contact_step_mm
                     or point[2] > target_z + tolerance
-                    or (self.s.in_zone(point[:2]) and point[2] < zone_safe_z)
+                    or self._task1_near_low_zone_block(point)
                     or not self.s.in_workspace(point[:2])):
                 return self._result(
                     False, action, "grasp_blocked",
@@ -1690,8 +1706,6 @@ class PrimitiveSkills(Skills):
         if max_command_z_mm is not None:
             target_z = min(target_z, max_command_z_mm)
         heights = (target_z, (target_z + required_z) / 2, required_z)
-        zone_safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
-                       - self.limits.lateral_clearance_tolerance_mm)
         scene = self._observed_scene
         obstacles = ([block for block in scene.all() if block.color != self.s.held.color]
                      if scene is not None else [])
@@ -1718,7 +1732,7 @@ class PrimitiveSkills(Skills):
                             or (max_command_z_mm is not None
                                 and point[2] > max_command_z_mm
                                     + self.limits.lateral_clearance_tolerance_mm)
-                            or (self.s.in_zone(point[:2]) and point[2] < zone_safe_z)
+                            or self._task1_near_low_zone_block(point)
                             or not self.s.in_workspace(point[:2])
                             or math.dist(point[:2], origin[:2]) > max_inward):
                         safe = False
@@ -1754,7 +1768,7 @@ class PrimitiveSkills(Skills):
         if (not held_ok
                 or actual[2] < origin[2] - self.limits.contact_step_mm
                 or not self.s.in_workspace(actual[:2])
-                or (self.s.in_zone(actual[:2]) and actual[2] < zone_safe_z)):
+                or self._task1_near_low_zone_block(actual)):
             # The command path already has a bounded inward sweep. After
             # motion, judge the measured pose by clearance and workspace;
             # servo lag can change the displacement by a few millimetres.

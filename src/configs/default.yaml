@@ -245,6 +245,8 @@ task1:
   tilted_pick_pregrasp_clearance_mm: 50.0
   # 실기 확정 전 가정값. 접촉 탐색 없이 블록 윗면 기준 15mm 위에서 놓는다.
   release_clearance_mm: 15.0
+  # 적재구역 전체가 아닌 관측된 블록 주변의 낮은 경로만 막는다 (실기 미검증).
+  zone_path_clearance_mm: 15.0
 
 # 2차 미션: 한 좌표에 접촉 기반으로 적층한다. SELECT/PICK/VERIFY와 픽 보정은
 # task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).

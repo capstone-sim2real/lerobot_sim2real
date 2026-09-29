@@ -519,6 +519,8 @@ class Task1Config:
     # Assumption pending hardware measurement: release 15mm above the
     # calibrated block-top plane, without seeking table contact.
     release_clearance_mm: float = 15.0
+    # Assumed extra vertical gap above an observed in-zone block.
+    zone_path_clearance_mm: float = 15.0
 
 
 @dataclass
@@ -1299,6 +1301,8 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError("task1.tilted_pick_pregrasp_clearance_mm must cover the first lift")
     if cfg.task1.tilted_pick_hover_clearance_mm < cfg.agent.calibration_clearance.obstacle_height_mm:
         raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
+    if cfg.task1.zone_path_clearance_mm < 0:
+        raise ValueError("task1.zone_path_clearance_mm must be non-negative")
     if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError("task1.place_tilt_max_deg must be within the placement IK tilt gate")
     if not 0 < cfg.task1.place_level_tolerance_deg <= cfg.ik.max_tilt_error_deg:

@@ -648,3 +648,30 @@ def test_task2_route_guard_only_blocks_low_sweep_through_local_tower(monkeypatch
     assert not guard(start, (goal,))  # Second recorded floor raises the wall.
     height += sk.cfg.task2.block_height_mm
     assert guard(start, (goal,))
+
+
+def test_task1_zone_guard_is_local_and_height_aware():
+    from types import SimpleNamespace
+
+    sk, world, _ = fixture()
+    assert sk.observe_scene().ok
+    point = (*sk.s.slot_centres[0], sk.s.grasp_z_mm + 10.0)
+    assert not sk._task1_near_low_zone_block(point)
+
+    world.blocks["red"] = sk.s.slot_centres[0]
+    assert sk.observe_scene().ok
+    block_xy = sk._observed_scene.inside["red"].center_mm
+    low = (*block_xy, sk.s.grasp_z_mm + 10.0)
+    assert sk._task1_near_low_zone_block(low)
+    assert not sk._task1_near_low_zone_block(
+        (block_xy[0] + sk.cfg.agent.place_clear_radius_mm + 1.0,
+         block_xy[1], low[2]))
+    assert not sk._task1_near_low_zone_block(
+        (*block_xy, sk.s.grasp_z_mm + sk.cfg.task1.zone_path_clearance_mm + 1.0))
+
+    sk.s.held = SimpleNamespace(color="yellow")
+    assert sk._task1_near_low_zone_block(
+        (*block_xy, sk.s.grasp_z_mm + sk.cfg.task1.zone_path_clearance_mm + 1.0))
+    assert not sk._task1_near_low_zone_block(
+        (*block_xy, sk.s.grasp_z_mm + sk.cfg.task1.zone_path_clearance_mm
+         + sk.cfg.agent.calibration_clearance.obstacle_height_mm + 1.0))
