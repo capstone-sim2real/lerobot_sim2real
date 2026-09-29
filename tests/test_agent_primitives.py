@@ -738,5 +738,9 @@ def test_task1_mission_slot_array_ignores_camera_slot_label(monkeypatch):
     result = sk.move_block_to_slot("yellow", labels[0])
     assert result.ok and result.data["slot_source"] == "commanded"
     assert result.data["placement_verified"] is False
+    preplace = next(step for step in result.data["steps"] if step["stage"] == "preplace")
+    assert isinstance(preplace["wrist_roll_deg"], float)
+    assert preplace["commanded_yaw_deg"] is not None
+    assert preplace["zone_alignment_fallback"] is False
     assert sk._mission_slot_ledger[0] == "yellow"
     assert observations == 1  # no post-release camera slot verification

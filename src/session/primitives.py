@@ -518,6 +518,18 @@ class PrimitiveSkills(Skills):
             step = {"stage": stage, "reason": result.reason}
             if stage in ("lift_held", "prezone_clearance"):
                 step["measured_z_mm"] = round(self.s.arm_position_mm()[2], 1)
+            if result.ok and stage in ("close_verify", "preplace", "drop_approach", "release"):
+                try:
+                    measured = self.s.robot.read_joints()
+                    step["wrist_roll_deg"] = round(measured["wrist_roll"], 1)
+                    step["jaw_yaw_deg"] = round(self.s.ik.forward_yaw_deg(measured), 1)
+                except (KeyError, OSError, RuntimeError):
+                    pass  # diagnostics must never turn a successful motion into a failure
+            if result.ok and stage == "close_verify":
+                step["observed_block_angle_deg"] = self._held_block_angle_deg
+            if result.ok and stage == "preplace":
+                step["commanded_yaw_deg"] = result.data.get("place_yaw_deg")
+                step["zone_alignment_fallback"] = result.data.get("zone_alignment_fallback")
             steps.append(step)
             if result.ok:
                 self.collection.settle_for_sequence_pause()
@@ -714,7 +726,7 @@ class PrimitiveSkills(Skills):
         if self._mission_slot_ledger is not None:
             return self._result(True, action, "released",
                                 f"{color} release commanded at {slot}; actual slot unverified.",
-                                t0=t0, color=color, slot=slot,
+                                t0=t0, color=color, slot=slot, steps=steps,
                                 slot_source="commanded", placement_verified=False)
         verified = self.observe_scene()
         steps.append({"stage": "observe_after", "reason": verified.reason})
