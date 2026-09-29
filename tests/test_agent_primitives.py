@@ -149,7 +149,7 @@ def test_no_contact_does_not_release():
 def test_moving_invalidates_contact(monkeypatch):
     sk, _, _ = fixture()
     place_hover(sk)
-    monkeypatch.setattr("session.primitives.ContactMonitor.check", lambda self: ContactReading(True))
+    monkeypatch.setattr("control.sensing.ContactMonitor.check", lambda self: ContactReading(True))
     assert sk.descend_until_contact(20).ok
     assert sk.move_relative(up_mm=10).ok
     assert not sk.open_gripper().ok

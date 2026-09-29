@@ -63,7 +63,7 @@ def deliver(rig, monkeypatch):
     assert rig.call("close_gripper")["ok"]
     assert rig.call("move_relative", up_mm=50)["ok"]
     assert rig.call("move_to_target", target_type="slot", phase="preplace", slot="top-left")["ok"]
-    monkeypatch.setattr("session.primitives.ContactMonitor.check",
+    monkeypatch.setattr("control.sensing.ContactMonitor.check",
                         lambda self: ContactReading(rig.sk.s.arm_position_mm()[2] <= rig.sk.s.grasp_z_mm))
     assert rig.call("descend_until_contact", max_descent_mm=60)["ok"]
     assert rig.call("open_gripper")["ok"]
@@ -346,7 +346,7 @@ def test_transport_hold_check_does_not_wait_for_unused_load_samples(rig, monkeyp
     joints = rig.robot.read_joints()
     joints["gripper"] = rig.sk.cfg.sensing.gripper_empty_closed_max + 5
     monkeypatch.setattr(rig.robot, "read_joints", lambda: joints)
-    monkeypatch.setattr("session.primitives.check_grasp", Mock(side_effect=AssertionError("transport must not average unused loads")))
+    monkeypatch.setattr("session.primitives.gripper.check_grasp", Mock(side_effect=AssertionError("transport must not average unused loads")))
     assert rig.sk._held_check()
     joints["gripper"] = rig.sk.cfg.sensing.gripper_empty_closed_max - 1
     assert not rig.sk._held_check()

@@ -220,7 +220,7 @@ def test_high_table_contact_never_allows_release(tmp_path, monkeypatch):
     assert sk.move_relative(up_mm=50).ok
     cell = min(sk.cells,key=lambda k: sum((a-b)**2 for a,b in zip(sk.cells[k],(180.,0.))))
     assert sk.move_to_target("cell","preplace",x=cell[0],y=cell[1]).ok
-    monkeypatch.setattr("session.primitives.ContactMonitor.check",lambda self:ContactReading(True))
+    monkeypatch.setattr("control.sensing.ContactMonitor.check",lambda self:ContactReading(True))
     assert not sk.descend_until_contact(20).ok
     assert not sk.open_gripper().ok
 
