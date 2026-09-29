@@ -40,6 +40,7 @@ class PrimitiveSkills(Skills):
         self._observed_scene = None
         self._pending_placement = None
         self._task2_placed_floors = {}
+        self._mission_slot_ledger = None
         self._stack_target = None
         self._recovery_target_xy = None
         from session.collection import Collection
@@ -320,6 +321,22 @@ class PrimitiveSkills(Skills):
                                             "missing detection is not proof of absence"])
         return replace(result, images=images)
 
+    def _slot_occupant(self, index: int):
+        if self._mission_slot_ledger is not None:
+            return self._mission_slot_ledger[index]
+        scene = self._observed_scene
+        return scene.slot_occupancy.get(index) if scene is not None else None
+
+    def _free_slot_labels(self):
+        labels = list(self.cfg.agent.zone_slots.labels)
+        return [label for index, label in enumerate(labels)
+                if self._slot_occupant(index) is None]
+
+    def _record_mission_release(self, slot: str, color: str):
+        if self._mission_slot_ledger is not None:
+            index = list(self.cfg.agent.zone_slots.labels).index(slot)
+            self._mission_slot_ledger[index] = color
+
     def _release_held_at_slot_from_recovery(self, color: str, slot: str):
         """Use a verified, already reached slot pose after a short loaded lift."""
         if self.s.held is None or self.s.held.color != color:
@@ -337,7 +354,7 @@ class PrimitiveSkills(Skills):
         if not observed.ok or not self._held_check():
             return None
         scene = self._observed_scene
-        if scene is None or scene.slot_occupancy.get(index) not in (None, color):
+        if scene is None or self._slot_occupant(index) not in (None, color):
             return None
         reason, _ = self.placement_verdict(xyz[:2], allow_zone=True,
                                            ignore_color=color, check_ik=False)
@@ -350,9 +367,14 @@ class PrimitiveSkills(Skills):
         released = self.open_gripper()
         if not released.ok:
             return released
+        self._record_mission_release(slot, color)
         home = self.return_to_home()
         if not home.ok:
             return home
+        if self._mission_slot_ledger is not None:
+            return self._result(True, "move_block_to_slot", "released",
+                                color=color, slot=slot, recovery="release_at_reached_slot",
+                                slot_source="commanded", placement_verified=False)
         verified = self.observe_scene()
         landed = self._observed_scene.find(color) if verified.ok else None
         actual_slot = labels[landed.slot_index] if landed and landed.slot_index is not None else None
@@ -377,7 +399,7 @@ class PrimitiveSkills(Skills):
         requested_xy = self.s.slot_centres[labels.index(requested_slot)]
         alternatives = sorted(
             (label for index, label in enumerate(labels)
-             if label != requested_slot and scene.slot_occupancy.get(index) is None),
+             if label != requested_slot and self._slot_occupant(index) is None),
             key=lambda label: math.dist(
                 self.s.slot_centres[labels.index(label)], requested_xy),
         )
@@ -387,11 +409,20 @@ class PrimitiveSkills(Skills):
                 if reached.reason == "ik_gate":
                     continue
                 return reached
-            for action in (self.drop_at_zone_target, self.open_gripper,
-                           self.return_to_home):
+            for stage, action in (("drop", self.drop_at_zone_target),
+                                  ("release", self.open_gripper),
+                                  ("home", self.return_to_home)):
                 result = action()
                 if not result.ok:
                     return result
+                if stage == "release":
+                    self._record_mission_release(alternate, color)
+            if self._mission_slot_ledger is not None:
+                return self._result(
+                    True, "move_block_to_slot", "released",
+                    color=color, slot=alternate, requested_slot=requested_slot,
+                    recovery="alternate_slot_while_held", slot_source="commanded",
+                    placement_verified=False)
             observed = self.observe_scene()
             landed = self._observed_scene.find(color) if observed.ok else None
             actual_slot = (labels[landed.slot_index]
@@ -521,14 +552,12 @@ class PrimitiveSkills(Skills):
             )
             failed.images = observed.images
             return failed
-        occupant = scene.slot_occupancy.get(index)
+        occupant = self._slot_occupant(index)
         if occupant is not None:
             return self._result(
                 False, action, "slot_occupied", f"{slot} is occupied by {occupant}.",
                 retry_advice="retry_ok", t0=t0, failed_stage="select", steps=steps,
-                color=color, slot=slot, free_slots=[
-                    labels[i] for i, value in scene.slot_occupancy.items() if value is None
-                ],
+                color=color, slot=slot, free_slots=self._free_slot_labels(),
             )
 
         object_id, observation_id = f"{color}_1", self.observation_id
@@ -673,7 +702,14 @@ class PrimitiveSkills(Skills):
             failed = run(stage, fn)
             if failed is not None:
                 return failed
+            if stage == "release":
+                self._record_mission_release(slot, color)
 
+        if self._mission_slot_ledger is not None:
+            return self._result(True, action, "released",
+                                f"{color} release commanded at {slot}; actual slot unverified.",
+                                t0=t0, color=color, slot=slot,
+                                slot_source="commanded", placement_verified=False)
         verified = self.observe_scene()
         steps.append({"stage": "observe_after", "reason": verified.reason})
         if not verified.ok:
@@ -1512,15 +1548,11 @@ class PrimitiveSkills(Skills):
             return self._fail(action, "Unknown phase", "invalid_arguments")
         if phase == "preplace" and self.s.held is None:
             return self._fail(action, "Close and verify grasp before preplace", "no_block_held")
-        if phase == "preplace" and target_type == "slot" and self._observed_scene is not None:
-            occupant = self._observed_scene.slot_occupancy.get(slot_index)
+        if phase == "preplace" and target_type == "slot":
+            occupant = self._slot_occupant(slot_index)
             held_color = self.s.held.color
             if occupant is not None and occupant != held_color:
-                free_slots = [
-                    self.cfg.agent.zone_slots.labels[i]
-                    for i, color in sorted(self._observed_scene.slot_occupancy.items())
-                    if color is None
-                ]
+                free_slots = self._free_slot_labels()
                 return self._result(
                     False, action, "slot_occupied",
                     f"Slot {slot} is occupied by {occupant}",

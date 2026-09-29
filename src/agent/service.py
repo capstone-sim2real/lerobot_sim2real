@@ -231,16 +231,29 @@ class AgentService:
                     if name == "recover_and_home":
                         skill = self.registry.run_skill(name, lambda skills: skills.recover_and_home())
                         content = skill.to_envelope()
+                    elif task == 1 and name == "move_block_to_slot":
+                        # Share the mission's five-slot array with the existing
+                        # composite tool without exposing it as an LLM argument.
+                        def transfer(skills):
+                            previous = skills._mission_slot_ledger
+                            skills._mission_slot_ledger = mission.slots
+                            try:
+                                return skills.move_block_to_slot(
+                                    arguments["color"], arguments["slot"])
+                            finally:
+                                skills._mission_slot_ledger = previous
+                        content = self.registry.run_skill(name, transfer).to_envelope()
                     else:
                         content = self.registry.execute(ToolCall(call_id, name, arguments)).content
                     self._publish({"type": "tool_result", "id": call_id, "name": name,
                                    "result": content, "mission": task})
                     return content
 
-                result = PrimitiveMission(
+                mission = PrimitiveMission(
                     self.cfg, calib, call, stopped=mission_stopped,
                     emit=self._publish,
-                ).run(task)
+                )
+                result = mission.run(task)
                 logger.info("Task %s no-LLM mission ended: %s", task, result)
                 fault = result["status"] in ("needs_recovery", "stopped")
             except Exception as exc:

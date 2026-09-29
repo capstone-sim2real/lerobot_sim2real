@@ -675,3 +675,28 @@ def test_task1_zone_guard_is_local_and_height_aware():
     assert not sk._task1_near_low_zone_block(
         (*block_xy, sk.s.grasp_z_mm + sk.cfg.task1.zone_path_clearance_mm
          + sk.cfg.agent.calibration_clearance.obstacle_height_mm + 1.0))
+
+
+def test_task1_mission_slot_array_ignores_camera_slot_label(monkeypatch):
+    sk, _, _ = fixture()
+    labels = list(sk.cfg.agent.zone_slots.labels)
+    sk._mission_slot_ledger = [None] * len(labels)
+    observe = sk.observe_scene
+    observations = 0
+
+    def wrong_camera_slots():
+        nonlocal observations
+        result = observe()
+        observations += 1
+        scene = sk._observed_scene
+        sk._observed_scene = replace(scene, slot_occupancy={
+            index: "red" for index in range(len(labels))
+        })
+        return result
+
+    monkeypatch.setattr(sk, "observe_scene", wrong_camera_slots)
+    result = sk.move_block_to_slot("yellow", labels[0])
+    assert result.ok and result.data["slot_source"] == "commanded"
+    assert result.data["placement_verified"] is False
+    assert sk._mission_slot_ledger[0] == "yellow"
+    assert observations == 1  # no post-release camera slot verification

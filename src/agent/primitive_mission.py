@@ -28,6 +28,7 @@ class PrimitiveMission:
     ):
         self.cfg, self.calib, self.call = cfg, calib, call
         self.stopped, self.emit, self.clock, self.sleep = stopped, emit, clock, sleep
+        self.slots: list[str | None] = [None] * len(cfg.agent.zone_slots.labels)
 
     def run(self, task: int) -> dict[str, Any]:
         if task not in (1, 2):
@@ -45,8 +46,10 @@ class PrimitiveMission:
                     and (result.get("state") or {}).get("arm_at_home") is not False)
 
         def finish(status: str, detail: str) -> dict[str, Any]:
+            colors = ([color for color in self.slots if color is not None]
+                      if task == 1 else completed)
             result = dict(task=task, status=status, detail=detail,
-                          colors=completed, failures=failures,
+                          colors=colors, failures=failures,
                           elapsed_s=round(self.clock() - started, 2))
             self.emit({"type": "mission_result", **result})
             return result
@@ -68,18 +71,23 @@ class PrimitiveMission:
                 continue
             start_pose_recovered = False
             objects = seen.get("objects") or []
-            outside = {item["color"] for item in objects if "slot" not in item}
-            inside = {item["color"] for item in objects if "slot" in item}
             if task == 1:
-                completed = [color for color in completed if color not in outside]
-                if len(inside) == 5 and not outside:
-                    return finish("complete", "새 관찰에서 블록 5개가 적재구역 안에 확인됐습니다.")
-                candidates = [item for item in objects if "slot" not in item]
-                slots = state.get("zone_slots") or {}
-                free_slots = [name for name in self.cfg.agent.zone_slots.labels
-                              if slots.get(name) is None]
+                completed = [color for color in self.slots if color is not None]
+                if len(completed) == len(self.slots):
+                    return finish("placed_unverified", "5개 슬롯에 해제 명령을 완료했습니다. 실제 위치는 카메라 슬롯 판정으로 확인하지 않았습니다.")
+                # An existing in-zone block with no release record cannot be
+                # assigned to a slot without the forbidden camera slot guess.
+                unknown_inside = [item["color"] for item in objects
+                                  if "slot" in item and item["color"] not in completed]
+                if unknown_inside:
+                    return finish("incomplete", "배열에 기록되지 않은 구역 안 블록이 있습니다. 구역을 비운 뒤 다시 실행해야 합니다.")
+                candidates = [item for item in objects
+                              if "slot" not in item and item["color"] not in completed]
+                free_slots = [name for name, color in
+                              zip(self.cfg.agent.zone_slots.labels, self.slots, strict=True)
+                              if color is None]
                 if not candidates or not free_slots:
-                    return finish("incomplete", "이동 가능한 외부 블록 또는 빈 슬롯이 확인되지 않았습니다.")
+                    return finish("incomplete", "이동 가능한 외부 블록 또는 빈 슬롯이 없습니다.")
             else:
                 if len(completed) >= 5:
                     # One more camera observation after the required dwell is
@@ -120,7 +128,11 @@ class PrimitiveMission:
                        "action": name, "arguments": arguments})
             result = self.call(name, arguments)
             if result.get("ok"):
-                if color not in completed:
+                if task == 1:
+                    placed_slot = result.get("slot", arguments["slot"])
+                    if placed_slot in self.cfg.agent.zone_slots.labels:
+                        self.slots[list(self.cfg.agent.zone_slots.labels).index(placed_slot)] = color
+                elif color not in completed:
                     completed.append(color)
                 attempted.clear()
                 continue

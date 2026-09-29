@@ -46,10 +46,13 @@ def test_task1_tries_next_candidate_after_bounded_failure():
         inside[color] = outside.pop(color)
         return {"ok": True, "reason": "released", "state": {"holding": None}}
 
-    result = PrimitiveMission(cfg, calibration(), call).run(1)
+    mission = PrimitiveMission(cfg, calibration(), call)
+    mission.slots[:] = ["red", "yellow", "wood", None, None]
+    result = mission.run(1)
     transfers = [args["color"] for name, args in calls if name == "move_block_to_slot"]
     assert transfers == ["green", "blue", "green"]
-    assert result["status"] == "complete"
+    assert result["status"] == "placed_unverified"
+    assert set(mission.slots) == {"red", "yellow", "wood", "blue", "green"}
     assert result["failures"][0]["reason"] == "neighbour_clearance"
 
 
@@ -106,11 +109,13 @@ def test_held_block_failure_opens_homes_and_tries_another_target():
     assert result["colors"] == ["green"]
 
 
-def test_release_then_failed_check_is_reobserved_before_retry():
+def test_release_record_survives_later_tool_failure():
     cfg = AppConfig()
     outside = {"green": (300.0, 0.0)}
     inside = {color: (200.0, 0.0) for color in ("red", "blue", "yellow", "wood")}
     calls = []
+    mission = PrimitiveMission(cfg, calibration(), None)
+    mission.slots[:] = ["red", "blue", "yellow", "wood", None]
 
     def call(name, args):
         calls.append(name)
@@ -118,12 +123,15 @@ def test_release_then_failed_check_is_reobserved_before_retry():
             return scene(outside, inside)
         if name == "recover_and_home":
             return {"ok": True, "reason": "ok", "arm_at_home": True}
-        inside["green"] = outside.pop("green")
-        return {"ok": False, "reason": "task_incomplete", "failed_stage": "verify",
+        # The real composite records the release immediately, before a
+        # subsequent home/observation step can fail.
+        mission.slots[4] = "green"
+        return {"ok": False, "reason": "motion_timeout", "failed_stage": "home",
                 "state": {"holding": None}}
 
-    result = PrimitiveMission(cfg, calibration(), call).run(1)
-    assert result["status"] == "complete"
+    mission.call = call
+    result = mission.run(1)
+    assert result["status"] == "placed_unverified"
     assert calls == ["observe_scene", "move_block_to_slot", "recover_and_home", "observe_scene"]
 
 
@@ -191,4 +199,70 @@ def test_service_mission_recovery_uses_worker_without_provider(monkeypatch):
     assert service.gate.state is ControlState.IDLE
     assert any(event.get("name") == "recover_and_home"
                for event in events if event.get("type") == "tool_result")
+    service.shutdown()
+
+
+def test_task1_ignores_camera_slot_occupancy_for_slot_array():
+    cfg = AppConfig()
+    outside = {color: (300.0 + i, 0.0) for i, color in
+               enumerate(("red", "blue", "yellow", "wood", "green"))}
+    inside = {}
+    chosen_slots = []
+
+    def call(name, args):
+        if name == "observe_scene":
+            observed = scene(outside, inside)
+            observed["state"]["zone_slots"] = {
+                label: "wrong-camera-result" for label in cfg.agent.zone_slots.labels
+            }
+            return observed
+        chosen_slots.append(args["slot"])
+        color = args["color"]
+        inside[color] = outside.pop(color)
+        return {"ok": True, "reason": "released", "slot": args["slot"]}
+
+    result = PrimitiveMission(cfg, calibration(), call).run(1)
+    assert result["status"] == "placed_unverified"
+    assert chosen_slots == list(cfg.agent.zone_slots.labels)
+
+
+def test_task1_refuses_untracked_existing_zone_block():
+    cfg = AppConfig()
+    calls = []
+
+    def call(name, args):
+        calls.append(name)
+        return scene({"blue": (300.0, 0.0)}, {"red": (200.0, 0.0)})
+
+    result = PrimitiveMission(cfg, calibration(), call).run(1)
+    assert result["status"] == "incomplete"
+    assert calls == ["observe_scene"]
+
+
+def test_service_task1_shares_slot_array_with_composite(monkeypatch):
+    from agent.control import ControlState
+    from session.results import SkillResult
+    from test_agent_service import _service
+
+    def run(self, task):
+        result = self.call("move_block_to_slot", {"color": "red", "slot": "top-left"})
+        assert result["ok"] and self.slots[0] == "red"
+        return {"status": "placed_unverified"}
+
+    monkeypatch.setattr(PrimitiveMission, "run", run)
+    monkeypatch.setattr(PlaneCalibration, "load", lambda _path: calibration())
+    service, skills, _events = _service([])
+    skills._mission_slot_ledger = None
+
+    def transfer(color, slot):
+        assert slot == "top-left"
+        skills._mission_slot_ledger[0] = color
+        return SkillResult(True, "move_block_to_slot", "released", data={"slot": slot})
+
+    skills.move_block_to_slot = transfer
+    token = service.acquire_lease(None)
+    assert service.mission(token, 1)[0] == 202
+    service.wait_idle()
+    assert skills._mission_slot_ledger is None
+    assert service.gate.state is ControlState.IDLE
     service.shutdown()
