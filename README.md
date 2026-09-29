@@ -247,7 +247,24 @@ Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 �
 
 ### 6.2. 시연 영상
 
-공개 영상 URL은 아직 등록되지 않았습니다. 보고서 근거 자료에는 과거 순차 배치 영상의 세 시점(시작·이동·배치) 프레임이 보존되어 있습니다. 영상을 공개할 때는 **촬영일, 사용 커밋, 미션 종류, 시작 배치, 성공 판정**을 함께 표기해 위의 과거 프레임과 현재 코드를 혼동하지 않도록 합니다.
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://www.youtube.com/shorts/N8D6KveiDgM">
+        <img src="https://img.youtube.com/vi/N8D6KveiDgM/hqdefault.jpg" alt="시연 영상 1 재생" width="480" height="270">
+      </a><br>
+      <a href="https://www.youtube.com/shorts/N8D6KveiDgM"><strong>시연 영상 1 · YouTube Shorts</strong></a>
+    </td>
+    <td align="center" width="50%">
+      <a href="https://www.youtube.com/watch?v=4WCohjLxTnY">
+        <img src="https://img.youtube.com/vi/4WCohjLxTnY/hqdefault.jpg" alt="시연 영상 2 재생" width="480" height="270">
+      </a><br>
+      <a href="https://www.youtube.com/watch?v=4WCohjLxTnY"><strong>시연 영상 2 · YouTube</strong></a>
+    </td>
+  </tr>
+</table>
+
+썸네일을 누르면 각 영상으로 이동합니다.
 
 ## 7. 팀 구성
 
