@@ -196,9 +196,22 @@ class Task1SelectState(State):
             eligible = detections
 
         bx, by = self._calib.base_xy_mm or (0.0, 0.0)
-        target = min(
+        image_mid_x = self._calib.image_size[0] / 2
+        image_half_width = image_mid_x or 1.0
+        centers_px = self._calib.board_to_pixel([d.center_mm for d in eligible])
+        center_offsets = {
+            id(det): min(1.0, abs(float(pixel[0]) - image_mid_x) / image_half_width)
+            for det, pixel in zip(eligible, centers_px)
+        }
+        target = max(
             eligible,
-            key=lambda d: (math.hypot(d.center_mm[0] - bx, d.center_mm[1] - by), d.center_mm[0], d.center_mm[1]),
+            key=lambda d: (
+                math.hypot(d.center_mm[0] - bx, d.center_mm[1] - by)
+                - self._cfg.task1.selection_center_bias_mm * center_offsets[id(d)],
+                -center_offsets[id(d)],
+                -d.center_mm[0],
+                -d.center_mm[1],
+            ),
         )
         target_id = target.color  # exactly one physical block per colour
         # Slot assignment belongs after VERIFY. A selected block may fail and

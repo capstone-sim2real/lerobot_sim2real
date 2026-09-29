@@ -76,6 +76,28 @@ def test_stale_or_duplicate_frame_never_completes_empty_timeout(monkeypatch):
     assert state.step(ctx) is None  # new frame starts a new five-second proof
 
 
+
+@pytest.mark.parametrize(
+    ("edge_x", "expected"),
+    [(350.0, "green"), (430.0, "blue")],
+)
+def test_task1_select_balances_base_reach_and_screen_center(monkeypatch, edge_x, expected):
+    cfg = AppConfig()
+    cfg.task1.scan_interval_s = 0.0
+    monkeypatch.setattr("fsm.task1.time.time", lambda: 1000.0)
+    sample = Task1Perception(
+        [_block("green", 250.0, -230.0), _block("blue", edge_x, 0.0)],
+        1,
+        1000.0,
+    )
+    state = Task1SelectState(_Motion(), _Samples([sample]), _calibration(), cfg)
+    ctx = RunContext(cfg.fsm)
+    state.enter(ctx)
+
+    assert state.step(ctx) is StateName.PICK
+    assert ctx.target_id == expected
+
+
 def test_task1_assigns_slots_in_verified_grasp_order():
     cfg = AppConfig()
     result = IkResult({"wrist_flex": 0.0}, position_error_mm=0.0, tilt_error_deg=0.0)

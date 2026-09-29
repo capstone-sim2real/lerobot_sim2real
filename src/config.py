@@ -467,6 +467,9 @@ class Task1Config:
     scan_interval_s: float = 0.2
     # A frozen/error status JPEG must never count toward the empty timeout.
     max_frame_age_s: float = 1.0
+    # Score outside blocks by base distance minus this penalty at the image edge.
+    # 0 means farthest-first regardless of horizontal position.
+    selection_center_bias_mm: float = 50.0
     # Slot coordinates in the calibrated quadrilateral: u runs left->right
     # along its long edge, v runs far->near. Fill the far row first.
     slot_uv: list[list[float]] = field(
