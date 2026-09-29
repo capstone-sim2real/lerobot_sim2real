@@ -59,7 +59,7 @@ class Task2StackPlan:
 class Task2StackPlanner:
     """Solve the whole tower once, up front, and report what is reachable."""
 
-    def __init__(self, calib: PlaneCalibration, cfg: AppConfig, ik: TopDownIK):
+    def __init__(self, calib: PlaneCalibration, cfg: AppConfig, ik: TopDownIK, *, target_xy_mm=None):
         self._calib = calib
         self._cfg = cfg
         self._ik = ik
@@ -69,14 +69,15 @@ class Task2StackPlanner:
             raise ValueError("Calibration metadata is missing grasp_z_mm_mean") from exc
         self._grasp_z = grasp_z
         base = calib.base_xy_mm or (0.0, 0.0)
-        self._raw_xy = zone_slot_centres(calib, [list(cfg.task2.stack_uv)])[0]
+        self._raw_xy = (tuple(target_xy_mm) if target_xy_mm is not None else
+                        zone_slot_centres(calib, [list(cfg.task2.stack_uv)])[0])
         # Command the point further out than we want the block, because the
         # arm under-reaches by about that much. The landing point is what has
         # to be inside zone_polygon_mm -- that is what hides placed blocks
         # from the detector, which is what lets Task 1's empty-timeout
         # completion criterion work here unchanged.
         self._xy = push_out_from_base(
-            self._raw_xy, base, cfg.task2.stack_radial_offset_mm
+            self._raw_xy, base, cfg.task2.stack_radial_offset_mm if target_xy_mm is None else 0.0
         )
         self._levels = self._solve_levels()
 

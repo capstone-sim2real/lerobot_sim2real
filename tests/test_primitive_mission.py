@@ -69,6 +69,7 @@ def test_task2_uses_floors_in_order_without_model_calls():
 
     def call(name, args):
         if name == "observe_scene":
+            assert len(floors) < 5, "no camera verification after final release"
             return scene(outside, inside)
         floors.append(args["floor"])
         color = args["color"]

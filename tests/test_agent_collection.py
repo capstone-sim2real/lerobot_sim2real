@@ -20,6 +20,8 @@ from test_task3 import _Sink
 
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
+    # FakeIk is linear Cartesian geometry, not the real arm folding corridor.
+    monkeypatch.setattr("session.arm_session._low_home_path_clear", lambda *_a, **_k: True)
     cfg = fast_cfg()
     cfg.agent.relative.frame = "base"
     cfg.task3.min_episode_frames = 2
@@ -70,8 +72,6 @@ def deliver(rig, monkeypatch):
 
 def test_task3_outcome_is_composed_without_running_task3(rig, monkeypatch):
     deliver(rig, monkeypatch)
-    assert rig.call("save_episode")["ok"] is False  # no visual evidence yet
-    assert rig.call("observe_scene")["ok"]
     assert rig.call("save_episode")["ok"]
     assert rig.sink.save_count == 1
     assert all("observation.images.top" in f and "action" in f for f in rig.sink.saved[0])
@@ -243,6 +243,110 @@ def test_sequence_discards_pause_with_unrecorded_motion(rig):
     rig.sk.collection.begin("yellow", task_text="Move yellow.", sequence_mode=True)
     rig.robot.joints["shoulder_pan"] += 5.0
     rig.mono[0] += 1.0
-    with pytest.raises(ValueError, match="Arm moved"):
+    with pytest.raises(ValueError, match="gap budget exceeded"):
         rig.sk.collection.check_tick()
     assert rig.sk.collection.recorder.discard_reasons["moving_timing_gap"] == 1
+
+
+def test_recorded_sequence_resolves_prior_result_and_accepts_label(rig, monkeypatch):
+    source = Mock(return_value=rig.sk._result(True, "observe_scene", "ok",
+                                            object_id="selected_1", observation_id=72))
+    align = Mock(return_value=rig.sk._result(True, "align_gripper", "moved"))
+    monkeypatch.setattr(rig.sk, "observe_scene", source)
+    monkeypatch.setattr(rig.sk, "align_gripper", align)
+    result = rig.call("record_tool_sequence", task="Inspect the selected target", color="selected",
+                      steps=[{"name":"observe_scene", "arguments":{}},
+                             {"name":"align_gripper", "arguments":{
+                                 "object_id":{"$ref":"step1.object_id"},
+                                 "observation_id":{"$ref":"step1.observation_id"}}}])
+    assert result["ok"], result
+    align.assert_called_once_with(object_id="selected_1", observation_id=72)
+
+
+@pytest.mark.parametrize("gap", [2/30, 3/30, 0.3])
+def test_brief_missing_motion_is_logged_without_discard(rig, gap):
+    c = rig.sk.collection
+    c.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    rig.robot.joints["shoulder_pan"] += 5
+    rig.mono[0] += gap
+    c.check_tick()
+    assert c.recording and c.recorder.is_open
+    assert c.recording_gaps[-1]["accepted"]
+    assert c.missing_motion_s > 0
+    assert not c.stationary_pauses
+    assert c.intervals[-1] >= gap
+
+
+def test_repeated_motion_gaps_exceed_cumulative_budget(rig):
+    c = rig.sk.collection
+    c.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    rig.robot.joints["shoulder_pan"] += 5
+    for _ in range(3):
+        rig.mono[0] += 0.3
+        c.check_tick()
+    assert c.recording
+    rig.mono[0] += 0.3
+    with pytest.raises(ValueError, match="missing_total"):
+        c.check_tick()
+    assert not c.recording and not c.recorder.is_open
+    assert not c.recording_gaps[-1]["accepted"]
+
+
+def test_observation_records_recovery_tail_before_camera_wait(rig, monkeypatch):
+    rig.sk.collection.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    settle = Mock(wraps=rig.sk.collection.settle_for_sequence_pause)
+    monkeypatch.setattr(rig.sk.collection, "settle_for_sequence_pause", settle)
+    observe = rig.sk.s.observe
+    def delayed_observe(**kwargs):
+        settle.assert_called_once()
+        rig.mono[0] += 0.857
+        return observe(**kwargs)
+    monkeypatch.setattr(rig.sk.s, "observe", delayed_observe)
+    assert rig.sk.observe_scene().ok
+    rig.sk.collection.io.send_joints(dict(rig.sk.collection.io.last_command))
+    assert rig.sk.collection.recording
+    assert rig.sk.collection.stationary_pauses[-1]["duration_s"] >= 0.857
+    rig.sk.collection.discard("test_done")
+
+
+def test_recording_quality_failure_is_not_a_robot_fault():
+    from session.collection import RecordingQualityError
+    from agent.tools import result_from_exception
+    result = result_from_exception("record_tool_sequence", RecordingQualityError("gap budget exceeded"))
+    assert result.reason == "task_incomplete"
+    assert not result.robot_fault
+    assert result.severity == "warning"
+
+
+def test_tolerated_jitter_does_not_exhaust_long_gap_budget(rig):
+    c = rig.sk.collection
+    c.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    for _ in range(40):
+        rig.mono[0] += 1/30
+        c.io.send_joints(dict(c.io.last_command))
+    assert c.recording
+    assert c.missing_motion_s > 1.0
+    c.discard("test_done")
+
+
+def test_gap_discards_recording_without_interrupting_current_motion(rig):
+    c = rig.sk.collection
+    c.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    c.writer.last_measured["shoulder_pan"] -= 5
+    rig.mono[0] += 1.0
+    sent = c.io.send_joints(dict(c.io.last_command))
+    assert sent
+    assert not c.recording
+    assert c.last_error == "moving_timing_gap"
+    assert not rig.sk.s.cancel.is_set()
+
+
+def test_transport_hold_check_does_not_wait_for_unused_load_samples(rig, monkeypatch):
+    rig.sk.s.held = SimpleNamespace(color="yellow")
+    joints = rig.robot.read_joints()
+    joints["gripper"] = rig.sk.cfg.sensing.gripper_empty_closed_max + 5
+    monkeypatch.setattr(rig.robot, "read_joints", lambda: joints)
+    monkeypatch.setattr("session.primitives.check_grasp", Mock(side_effect=AssertionError("transport must not average unused loads")))
+    assert rig.sk._held_check()
+    joints["gripper"] = rig.sk.cfg.sensing.gripper_empty_closed_max - 1
+    assert not rig.sk._held_check()

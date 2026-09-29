@@ -155,18 +155,22 @@ def test_moving_invalidates_contact(monkeypatch):
     assert not sk.open_gripper().ok
 
 
-def test_multiple_calls_execute_none():
-    sk, _, robot = fixture()
+def test_multiple_calls_execute_in_order_and_skip_after_failure():
+    sk, _, _ = fixture()
     provider = ScriptedProvider([
-        [ToolCallEvent(ToolCall("1", "open_gripper", {})), ToolCallEvent(ToolCall("2", "close_gripper", {})), TurnEnd("tool_use")],
+        [ToolCallEvent(ToolCall("1", "open_gripper", {})),
+         ToolCallEvent(ToolCall("2", "close_gripper", {})),
+         ToolCallEvent(ToolCall("3", "move_relative", {"up_mm": 50})), TurnEnd("tool_use")],
         [TurnEnd("end_turn")],
     ])
     registry = ToolRegistry(sk.cfg, lambda fn: fn(sk))
-    registry.execute = Mock(side_effect=AssertionError("must reject entire batch"))
+    registry.execute = Mock(wraps=registry.execute)
     runner = AgentRunner(provider, registry, "system", sk.cfg.agent)
     assert runner.run_turn("pick").error is None
-    registry.execute.assert_not_called()
-    assert all(r.is_error for r in runner.history[2].tool_results)
+    assert [c.args[0].id for c in registry.execute.call_args_list] == ["1", "2"]
+    results = runner.history[2].tool_results
+    assert results[0].content["ok"] and not results[1].content["ok"]
+    assert not results[2].content["ok"]
 
 
 def test_images_serialized_for_openai_and_anthropic():
@@ -245,12 +249,12 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
     assert not joint_lift_heights
     assert result.ok and result.reason == "released"
     assert result.data["slot"] == "top-left"
-    assert result.data["miss_mm"] < sk.cfg.agent.slot_snap_radius_mm
+    assert result.data["placement_verified"] is False
     assert world.held is None
     assert sk.s.arm_at_home()
 
 
-def test_task1_preplace_can_use_unaligned_yaw_when_aligned_yaw_fails(monkeypatch):
+def test_task1_preplace_rejects_unaligned_yaw_when_aligned_yaw_fails(monkeypatch):
     sk, _, _ = fixture()
     pick(sk)
     sk._held_pick_yaw_deg = 0.0
@@ -265,9 +269,9 @@ def test_task1_preplace_can_use_unaligned_yaw_when_aligned_yaw_fails(monkeypatch
 
     monkeypatch.setattr(sk, "_solve", only_fallback_yaw)
     xy = sk.s.slot_centres[0]
-    yaw, aligned = sk._choose_place_yaw(
-        (*xy, sk.s.grasp_z_mm + sk.limits.approach_clearance_mm), 0.0)
-    assert yaw == -60.0 and not aligned
+    with pytest.raises(ValueError, match="No zone-aligned placement yaw"):
+        sk._choose_place_yaw(
+            (*xy, sk.s.grasp_z_mm + sk.limits.approach_clearance_mm), 0.0)
 
 
 def test_unreachable_slot_keeps_block_held_for_another_slot(monkeypatch):
@@ -452,10 +456,8 @@ def test_unverified_transfer_at_source_is_recoverable(monkeypatch):
     monkeypatch.setattr(sk, "return_to_home", home_after_simulated_drop)
     result = sk.move_block_to_slot("yellow", "top-left")
 
-    assert not result.ok and result.reason == "task_incomplete"
-    assert result.data["still_at_source"] is True
-    assert result.retry_advice == "try_other_target"
-    assert result.to_envelope()["severity"] == "warning"
+    assert result.ok and result.reason == "released"
+    assert result.data["placement_verified"] is False
     assert SkillResult(False, "move", "motion_timeout").to_envelope()["severity"] == "error"
 
 
@@ -479,8 +481,12 @@ def test_task2_explicit_floors_use_requested_height_without_contact(monkeypatch)
         raise AssertionError("height drop must not read contact")
 
     monkeypatch.setattr(ContactMonitor, "check", contact_must_not_run)
+    observe = Mock(wraps=sk.observe_scene)
+    monkeypatch.setattr(sk, "observe_scene", observe)
     first = sk.stack_block_to_floor("yellow", 0)
     second = sk.stack_block_to_floor("red", 1)
+    assert observe.call_count == 2  # selection only; no post-release camera gate
+    assert first.data["placement_observed"] is second.data["placement_observed"] is False
     assert first.ok and second.ok
     assert (first.data["floor"], second.data["floor"]) == (0, 1)
     assert second.data["expected_place_z_mm"] - first.data["expected_place_z_mm"] == cfg.task2.block_height_mm
@@ -594,24 +600,42 @@ def test_post_release_lifts_before_home_and_preserves_open_jaws(monkeypatch):
     assert seen == [("home", 65.0, 1.0)]
 
 
-def test_post_release_rejects_home_path_that_drops_after_high_start(monkeypatch):
+def test_post_release_home_has_no_extra_fk_path_gate(monkeypatch):
     sk, _, robot = fixture()
     robot.joints.update(shoulder_pan=250.0, elbow_flex=65.0)
-    home = Mock(side_effect=AssertionError("unsafe low home sweep"))
+    monkeypatch.setattr("session.arm_session._low_home_path_clear",
+                        Mock(side_effect=AssertionError("FK home gate must not run")))
+    home = Mock()
     monkeypatch.setattr(sk.s, "go_home", home)
-    with pytest.raises(TimeoutError, match="hover clearance"):
-        sk.s.return_home_safely(post_release=True)
-    home.assert_not_called()
+    sk.s.return_home_safely(post_release=True)
+    home.assert_called_once_with()
 
 
-def test_home_does_not_sweep_low_when_vertical_lift_is_unreachable(monkeypatch):
+def test_home_continues_if_optional_lift_is_unavailable(monkeypatch):
     sk, _, robot = fixture()
     robot.joints.update(shoulder_pan=230.0, elbow_flex=15.0)
     monkeypatch.setattr(sk.s, "lift_in_place", lambda: False)
-    home = Mock(side_effect=AssertionError("unsafe home motion"))
+    home = Mock()
     monkeypatch.setattr(sk.s, "go_home", home)
-    with pytest.raises(TimeoutError, match="hover clearance"):
-        sk.s.return_home_safely()
+    sk.s.return_home_safely()
+    home.assert_called_once_with()
+
+
+def test_post_release_low_measured_lift_does_not_abort_home(monkeypatch):
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=250.0, elbow_flex=35.0)
+    monkeypatch.setattr(sk.s.player, "move_to", lambda *_a, **_k: None)
+    home = Mock()
+    monkeypatch.setattr(sk.s, "go_home", home)
+    lifted, _ = sk.s.return_home_safely(post_release=True)
+    assert lifted
+    home.assert_called_once_with()
+    def motor_failure(*_a, **_k):
+        raise TimeoutError("servo timeout")
+    monkeypatch.setattr(sk.s.player, "move_to", motor_failure)
+    home.reset_mock()
+    with pytest.raises(TimeoutError, match="servo timeout"):
+        sk.s.return_home_safely(post_release=True)
     home.assert_not_called()
 
 
@@ -744,3 +768,107 @@ def test_task1_mission_slot_array_ignores_camera_slot_label(monkeypatch):
     assert preplace["zone_alignment_fallback"] is False
     assert sk._mission_slot_ledger[0] == "yellow"
     assert observations == 1  # no post-release camera slot verification
+
+
+def test_zone_release_checks_jaw_line_against_zone_long_edge(monkeypatch):
+    sk, world, robot = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    assert sk.move_to_target("slot", "preplace", slot="top-left").ok
+    assert sk.drop_at_zone_target().ok
+    sk._held_block_angle_deg = 30.0
+    sk._held_pick_yaw_deg = 10.0
+    sk._place_yaw_deg = 0.0
+    monkeypatch.setattr(sk.s.ik, "forward_yaw_deg", lambda _joints: 0.0)
+    result = sk.open_gripper()
+    assert not result.ok and result.reason == "grasp_blocked"
+    assert world.held is not None
+    # Jaw direction may reverse by 180 degrees, but not 90 degrees.
+    monkeypatch.setattr(sk.s.ik, "forward_yaw_deg", lambda _joints: 270.0)
+    assert sk.open_gripper().ok
+
+
+def test_task1_placement_tries_small_tilt_and_retains_it_for_release(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    choose = sk._choose_place_yaw
+    def need_tilt(xyz, tilt):
+        if tilt == 0:
+            raise ValueError("vertical pose cannot reach")
+        return choose(xyz, tilt)
+    monkeypatch.setattr(sk, "_choose_place_yaw", need_tilt)
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+    assert result.ok
+    assert result.data["radial_tilt_deg"] == -5
+    target = sk._place_command_xy
+    dropped = sk.drop_at_zone_target()
+    assert dropped.ok
+    assert dropped.data["radial_tilt_deg"] == -5
+    assert dropped.data["target_xy_mm"] == list(target)
+
+
+def test_approximate_placement_chooses_closest_tilt_without_shifting_target(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    solve = sk._solve
+    def approximate(xyz, **kwargs):
+        pose = solve(xyz, **kwargs)
+        tilt = abs(kwargs.get("radial_tilt_deg", 0.0))
+        return replace(pose, position_error_mm=18.0 - tilt * 0.4)
+    monkeypatch.setattr(sk, "_solve", approximate)
+    result = sk.move_to_target("slot", "preplace", slot="top-left")
+    assert result.ok
+    assert result.data["radial_tilt_deg"] == -30.0
+    assert result.data["placement_approximate"]
+    assert result.data["placement_plan_error_mm"] == pytest.approx(6.0)
+    assert result.data["command_xy_mm"] == list(sk.s.slot_centres[0])
+
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_target_window_only_when_missing(monkeypatch, missing):
+    sk, _, robot = fixture()
+    scene = sk.s.observe()
+    missing_scene = replace(scene, outside={})
+    monkeypatch.setattr(sk.s, "observe", Mock(return_value=missing_scene if missing else scene))
+    window = Mock(return_value=scene)
+    monkeypatch.setattr(sk.s, "observe_window", window)
+    send = Mock(side_effect=AssertionError("observation must not move"))
+    monkeypatch.setattr(robot, "send_joints", send)
+    assert sk._observe_target("yellow").ok
+    assert sk._observed_scene.find("yellow") is not None
+    assert window.call_count == int(missing)
+    send.assert_not_called()
+
+
+def test_observation_window_uses_median_and_no_previous_history(monkeypatch):
+    sk, _, _ = fixture()
+    scene = sk.s.observe()
+    clock = [0.0]
+    xs = iter([100., 102., 900., 101.])
+    def observe(**kwargs):
+        clock[0] += 0.5
+        x = next(xs)
+        det = replace(scene.outside["yellow"].detection, center_mm=(x, 40.),
+                      box_mm=[(x-20, 20), (x+20, 20), (x+20, 60), (x-20, 60)])
+        return replace(scene, outside={"yellow": replace(scene.outside["yellow"], detection=det)}, inside={})
+    monkeypatch.setattr(sk.s, "observe", observe)
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    result = sk.s.observe_window()
+    assert clock[0] == 2.0
+    assert result.find("yellow").center_mm == pytest.approx((101.5, 40.))
+    assert result.find("red") is None
+
+
+def test_explicit_yaw_uses_measured_pose_and_held_gate(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    move = Mock(return_value=sk._result(True, "align_gripper", "moved"))
+    monkeypatch.setattr(sk, "_move", move)
+    assert sk.align_gripper(yaw_deg=20).ok
+    assert move.call_args.kwargs["place_yaw_deg"] == 20
+    assert sk.s.held is not None

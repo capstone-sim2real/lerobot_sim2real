@@ -55,6 +55,15 @@ class PrimitiveMission:
             return result
 
         while not self.stopped() and self.clock() < deadline:
+            if task == 2 and len(completed) >= 5:
+                remaining = 5.0
+                while remaining > 0 and not self.stopped():
+                    step = min(0.2, remaining)
+                    self.sleep(step)
+                    remaining -= step
+                if self.stopped():
+                    break
+                return finish("placed_unverified", "5개 해제와 5초 대기를 완료했습니다. 카메라 배치 검증은 수행하지 않습니다.")
             seen = self.call("observe_scene", {})
             if not seen.get("ok"):
                 return finish("incomplete", f"카메라 관찰 실패: {seen.get('reason')}")
@@ -89,20 +98,6 @@ class PrimitiveMission:
                 if not candidates or not free_slots:
                     return finish("incomplete", "이동 가능한 외부 블록 또는 빈 슬롯이 없습니다.")
             else:
-                if len(completed) >= 5:
-                    # One more camera observation after the required dwell is
-                    # evidence of continued planar visibility, not tower height.
-                    remaining = 5.0
-                    while remaining > 0 and not self.stopped():
-                        step = min(0.2, remaining)
-                        self.sleep(step)
-                        remaining -= step
-                    if self.stopped():
-                        break
-                    checked = self.call("observe_scene", {})
-                    if not checked.get("ok"):
-                        return finish("placed_unverified", "5개 해제 후 재관찰 실패. 실제 적층 높이는 미확인입니다.")
-                    return finish("placed_unverified", "5개를 적층 지점에 해제했습니다. 평면 카메라로 층수와 5초 안정성은 검증할 수 없습니다.")
                 candidates = [item for item in objects if item["color"] not in completed]
                 free_slots = []
                 if not candidates:

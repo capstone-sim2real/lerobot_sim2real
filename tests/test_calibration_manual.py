@@ -63,4 +63,25 @@ def test_http_config_jog_lease_and_denied_manual_tools():
         result=next(e for e in events if e['type']=='tool_result')
         assert result['name']=='move_arm' and result['result']['ok'],result
         assert client.post('/api/manual',json={'tool':'pick_here'},headers=headers).status_code==400
-        assert client.post('/api/manual',json={'tool':'move_to_pixel'},headers=headers).status_code==400
+        assert client.post('/api/manual',json={'tool':'move_to_pixel'},headers=headers).status_code==202
+        holder['svc'].wait_idle()
+        missing = [e for e in events if e['type']=='tool_result' and e['name']=='move_to_pixel'][-1]
+        assert missing['result']['reason']=='invalid_arguments'
+
+
+def test_manual_registration_preserves_pixel_calibration_argument(monkeypatch):
+    from unittest.mock import Mock
+    from session.results import SkillResult
+    sk, _, _ = make_skills({})
+    place = Mock(return_value=SkillResult(True, "place_at_pixel", "released"))
+    monkeypatch.setattr(sk, "place_at_pixel", place)
+    svc = configured(sk)
+    spec = next(s for s in svc.registry.specs() if s.name == "place_at_pixel")
+    assert "calibration_id" in spec.input_schema["required"]
+    bad = svc.registry.execute(ToolCall("missing", "place_at_pixel", {"u": 354, "v": 462}))
+    assert bad.content["reason"] == "invalid_arguments"
+    place.assert_not_called()
+    args = {"u": 354, "v": 462, "calibration_id": "8a8be3855592f93e"}
+    result = svc.registry.execute(ToolCall("valid", "place_at_pixel", args))
+    assert not result.is_error
+    place.assert_called_once_with(**args)

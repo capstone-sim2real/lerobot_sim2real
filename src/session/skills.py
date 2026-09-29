@@ -386,16 +386,10 @@ class Skills:
         return self._result(False, action, reason, self._VERDICT_DETAIL.get(reason, reason),
                             retry_advice=advice, t0=t0, **data)
 
-    def _verify_block(self, color: str) -> dict[str, Any]:
-        """Home, look again, and report where ``color`` actually is."""
-        try:
-            scene = self.s.home_and_observe()
-        except CameraError as exc:
-            return {"verified": False, "verification_error": str(exc)}
-        block = scene.find(color)
-        if block is None:
-            return {"verified": False, "measured": None}
-        return {"verified": True, "measured": self._block_dict(block), "in_zone": block.in_zone}
+    def _finish_placement(self, color: str) -> dict[str, Any]:
+        """Finish release with home return; visual confirmation is optional observation."""
+        self.s.go_home()
+        return {"verified": False, "placement_verified": False, "release_completed": True}
 
     # ── pick ─────────────────────────────────────────────────────────
 
@@ -578,7 +572,7 @@ class Skills:
         )
 
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(target, verification))
         measured = verification.get("measured") or {}
         in_zone = verification.get("in_zone")
@@ -645,7 +639,7 @@ class Skills:
         s.carry_and_release(plan)
         regions = self.cfg.agent.table_regions
         name = f"{regions.column_korean[column]} {regions.row_korean[row]}"
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(point, verification))
         detail = f"{self._label(color)} 블록을 부채꼴 {name} 자리에 놓았습니다."
         if moved:
@@ -700,7 +694,7 @@ class Skills:
             )
         plan, correction = self._place_plan(moved_point)
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         correction.update(self._learn_placement(moved_point, verification))
         landed = self._measured_cell(verification)
         detail = f"{self._label(color)} 블록을 ({x}, {y}) 칸에 놓았습니다."
@@ -724,7 +718,7 @@ class Skills:
         if reason is not None:
             return self._verdict_failure(action, reason, t0, target=_xy((x, y)))
         color = self._release_over(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         return self._result(True, action, "released", f"{self._label(color)} 블록을 현재 위치에 내려놓았습니다.",
                             t0=t0, color=color, target=_xy((x, y)), **verification)
 
@@ -842,7 +836,7 @@ class Skills:
         if not picked.ok:
             return self._chain(action, t0, picked, lambda: None)
         s.carry_and_release(plan)
-        verification = self._verify_block(color)
+        verification = self._finish_placement(color)
         data: dict[str, Any] = {
             "color": color,
             "requested_mm": {"forward": f, "left": l},
@@ -998,9 +992,8 @@ class Skills:
             return self._verdict_failure(action,reason,t0,target=target)
         color=s.held.color
         s.carry_and_release(plan)
-        verification=self._verify_block(color)
-        return self._result(True,action,"released","선택한 픽셀에 블록을 놓았습니다.",
-                            t0=t0,target=target,**verification)
+        return self._result(True,action,"released","선택한 픽셀에 해제 동작을 완료했습니다.",
+                            t0=t0,target=target,placement_verified=False)
 
     def move_to_cell(self, x: int, y: int) -> SkillResult:
         """Fly the gripper over one chessboard cell, at the current height.

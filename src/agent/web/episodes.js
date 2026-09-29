@@ -1,3 +1,4 @@
+(() => {
 "use strict";
 const $ = id => document.getElementById(id);
 let runs = [], episodes = [];
@@ -9,7 +10,7 @@ function showEpisode(episode) {
   const holder=$("episode-videos");holder.replaceChildren();
   if(!episode.videos.length){holder.append(label("저장된 영상이 없습니다.","episode-empty"));return;}
   for(const item of episode.videos){
-    const section=document.createElement("section");section.append(label(item.key.replace("observation.images.",""),"episode-muted"));
+    const section=document.createElement("section");section.append(label(({top:"헤드캠",wrist:"손목캠"})[item.key.replace("observation.images.","")] || item.key.replace("observation.images.",""),"episode-muted"));
     const video=document.createElement("video");video.controls=true;video.preload="metadata";video.className="episode-video";video.src=item.url;
     video.addEventListener("loadedmetadata",()=>{video.currentTime=item.start_s;});
     video.addEventListener("timeupdate",()=>{if(video.currentTime>=item.end_s){video.pause();video.currentTime=item.start_s;}});
@@ -38,3 +39,7 @@ async function refresh(){
   }catch(error){$("run-detail").textContent=`불러오기 실패: ${error.message}`;}
 }
 $("run-select").addEventListener("change",selectRun);$("refresh").addEventListener("click",refresh);refresh();
+
+document.querySelector('[data-diagnostic-tab="episodes"]')?.addEventListener("click",refresh);
+window.addEventListener("episodes-updated",refresh);
+})();

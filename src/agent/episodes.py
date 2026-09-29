@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-_RUN = re.compile(r"so101_task3_[0-9]{8}_[0-9]{6}_[0-9a-f]{8}\Z")
+_RUN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
 _VIDEO_KEY = re.compile(r"observation\.images\.[a-zA-Z0-9_]+\Z")
 
 

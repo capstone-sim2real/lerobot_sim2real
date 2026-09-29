@@ -168,10 +168,19 @@ class AgentService:
 
     # ── commands ─────────────────────────────────────────────────────
 
-    def chat(self, token: str | None, text: str) -> tuple[int, dict[str, Any]]:
+    def chat(self, token: str | None, text: str, *, selected_pixel=None) -> tuple[int, dict[str, Any]]:
         text = (text or "").strip()
         if not text:
             return 400, {"error": "empty message"}
+        model_text = text
+        if selected_pixel is not None:
+            if (not isinstance(selected_pixel, dict)
+                    or set(selected_pixel) != {"u", "v", "calibration_id"}
+                    or any(type(selected_pixel[k]) is not int or selected_pixel[k] < 0 for k in ("u", "v"))
+                    or not isinstance(selected_pixel["calibration_id"], str)):
+                return 400, {"error": "invalid selected pixel"}
+            import json
+            model_text += "\nSelected head-camera pixel (source or destination per user request): " + json.dumps(selected_pixel)
         if not self.gate.check(token):
             return 403, {"error": "not the operator"}
         if not self.gate.try_begin(token, "chat"):
@@ -181,7 +190,7 @@ class AgentService:
 
         def turn() -> None:
             try:
-                outcome = self.runner.run_turn(text)
+                outcome = self.runner.run_turn(model_text)
             except Exception as exc:  # noqa: BLE001 - a crashed turn is a fault
                 logger.exception("agent turn crashed")
                 self._publish({"type": "error", "message": f"{type(exc).__name__}: {exc}"})

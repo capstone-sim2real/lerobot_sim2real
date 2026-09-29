@@ -38,11 +38,16 @@ class PrimitiveSkills(Skills):
         self._held_block_angle_deg = None
         self._held_pick_yaw_deg = None
         self._place_yaw_deg = None
+        self._place_yaw_explicit = False
+        self._place_radial_tilt_deg = None
+        self._place_command_xy = None
         self._observed_scene = None
         self._pending_placement = None
         self._task2_placed_floors = {}
         self._mission_slot_ledger = None
         self._stack_target = None
+        self._transfer_source = None
+        self._tower_histories = {}
         self._recovery_target_xy = None
         from session.collection import Collection
         from control.trajectory import TrajectoryPlayer
@@ -162,15 +167,16 @@ class PrimitiveSkills(Skills):
     def record_tool_sequence(self, task, color, steps):
         """Run a model-planned tool program without model waits between steps."""
         from agent.primitive_tools import RECORDABLE_TOOLS
+        from agent.tool_arguments import has_reference, resolve_references
         from agent.tools import build_tools, result_from_exception, validate_arguments
 
         action, t0 = "record_tool_sequence", time.monotonic()
         allowed = set(RECORDABLE_TOOLS)
         if (not isinstance(task, str) or not task.strip() or len(task) > self.cfg.agent.collection.max_task_text_chars
-                or not isinstance(color, str) or color not in self.cfg.task3.task_templates
+                or not isinstance(color, str) or not color.strip()
                 or not isinstance(steps, list)
                 or not 1 <= len(steps) <= self.cfg.agent.collection.max_steps):
-            return self._fail(action, "A task sentence, known color and bounded steps are required",
+            return self._fail(action, "A task sentence, nonempty label and bounded steps are required",
                               "invalid_arguments")
         definitions = {tool.spec.name: tool for tool in build_tools(self.cfg)}
         planned = []
@@ -180,7 +186,7 @@ class PrimitiveSkills(Skills):
             name, args = step["name"], step["arguments"]
             if not isinstance(name, str) or name not in allowed or name not in definitions:
                 return self._fail(action, f"Tool {name!r} is not recordable", "invalid_arguments")
-            error = validate_arguments(definitions[name].spec.input_schema, args)
+            error = None if has_reference(args) else validate_arguments(definitions[name].spec.input_schema, args)
             if error is not None:
                 return self._fail(action, f"Step {index + 1}: {error}", "invalid_arguments")
             planned.append((name, dict(args), definitions[name]))
@@ -193,17 +199,25 @@ class PrimitiveSkills(Skills):
             return self._fail(action, str(exc))
 
         results = []
+        references = {}
         try:
             for index, (name, args, definition) in enumerate(planned, 1):
                 try:
-                    result = definition.run(self, args)
+                    resolved = resolve_references(args, references)
+                    error = validate_arguments(definition.spec.input_schema, resolved)
+                    if error:
+                        result = self._fail(name, error, "invalid_arguments")
+                    else:
+                        result = definition.run(self, resolved)
                 except Exception as exc:  # return the failed step, then stop the program
                     result = result_from_exception(name, exc)
+                references[f"step{index}"] = result.to_envelope()
                 self.collection.note(name, result)
                 results.append({"step": index, "tool": name, **result.to_envelope()})
                 if not result.ok or not self.collection.recording:
                     return self._result(False, action, result.reason if not result.ok else "task_incomplete",
-                                        f"Step {index} ({name}) stopped: {result.detail}",
+                                        (f"Step {index} ({name}) stopped: {result.detail}" if not result.ok else
+                                         f"Step {index} completed, but recording was discarded: {self.collection.last_error}"),
                                         t0=t0, step_results=results,
                                         collection=self.collection.status())
             try:
@@ -218,12 +232,11 @@ class PrimitiveSkills(Skills):
             if self.collection.recorder and self.collection.recorder.is_open:
                 self.collection.discard("sequence_interrupted")
 
-    def begin_episode(self, object_id, observation_id):
+    def begin_episode(self, object_id, observation_id, task=None):
         try:
             block = self._object(object_id, observation_id)
-            if block.in_zone:
-                return self._fail("begin_episode", "Collection target must start outside the zone")
-            self.collection.begin(block.color)
+            self.collection.begin(block.color, task_text=task or (
+                None if block.color in self.cfg.task3.task_templates else "Manipulate the selected block"))
         except ImportError as exc:
             return self._fail("begin_episode", f"Dataset dependencies missing: {exc}", "disabled")
         except ValueError as exc:
@@ -267,9 +280,99 @@ class PrimitiveSkills(Skills):
     def _fail(self, action, detail, reason="precondition"):
         return self._result(False, action, reason, detail, retry_advice="retry_ok")
 
-    def observe_scene(self):
+    def select_pixel_target(self, u, v, calibration_id, angle_deg=None):
+        """An explicit operator address, not a claim of a CV detection."""
+        action, t0 = "select_pixel_target", time.monotonic()
+        target, failure = self._pixel_point(action, t0, u, v, calibration_id)
+        if failure is not None:
+            return failure
+        if angle_deg is not None and (not math.isfinite(angle_deg) or not -180 <= angle_deg <= 180):
+            return self._fail(action, "angle_deg must be finite and in [-180, 180]", "invalid_arguments")
+        observed = self.observe_scene()
+        if not observed.ok:
+            return observed
+        from perception.detector import BlockDetection
+        from perception.scene import build_scene
+        xy = (target["x_mm"], target["y_mm"])
+        side = self.cfg.agent.calibration_clearance.block_side_mm
+        # Associate only a footprint containing the selected point, never a
+        # distant nearest colour. Retain the exact requested XY either way.
+        matches = []
+        for block in self._observed_scene.all():
+            a = math.radians(block.angle_deg)
+            dx, dy = xy[0] - block.center_mm[0], xy[1] - block.center_mm[1]
+            if max(abs(dx*math.cos(a)+dy*math.sin(a)),
+                   abs(-dx*math.sin(a)+dy*math.cos(a))) <= side / 2:
+                matches.append(block)
+        matched = min(matches, key=lambda b: math.dist(b.center_mm, xy)) if matches else None
+        color = matched.color if matched is not None else "selected"
+        angle = angle_deg if angle_deg is not None else (matched.angle_deg if matched else 0.0)
+        a = math.radians(angle)
+        box = [(xy[0] + side/2*(i*math.cos(a)-j*math.sin(a)),
+                xy[1] + side/2*(i*math.sin(a)+j*math.cos(a)))
+               for i, j in ((-1,-1),(1,-1),(1,1),(-1,1))]
+        detection = BlockDetection(color, xy, side*side, 1.0, 1.0, 1.0, box, angle)
+        detections = [b.detection for b in self._observed_scene.all() if b.color != color]
+        detections.append(detection)
+        scene = build_scene(detections, detections, self.s.calib, self.s.slot_centres,
+                            snap_radius_mm=self.cfg.agent.slot_snap_radius_mm,
+                            frame_seq=self._observed_scene.frame_seq,
+                            captured_at=self._observed_scene.captured_at)
+        self._observed_scene = scene
+        self._objects = {f"{b.color}_1": b for b in scene.all()}
+        # Stable alias lets every object-addressed primitive use the same target.
+        self._objects["selected_1"] = scene.find(color)
+        return self._result(True, action, "ok", t0=t0,
+                            object_id="selected_1", observation_id=self.observation_id,
+                            target=target, matched_color=matched.color if matched else None,
+                            target_source="user_selected_pixel", angle_deg=angle,
+                            geometry_assumed=matched is None,
+                            assumed_block_side_mm=side if matched is None else None)
+
+    def _run_with_source(self, source, action, fn):
+        """Bind a composite to an explicit address, preserving its retry path."""
+        if not isinstance(source, dict):
+            return self._fail(action, "source must be a pixel or observed object address", "invalid_arguments")
         try:
-            scene = self.s.observe(after=self.s._clock())
+            if set(source) == {"object_id", "observation_id"}:
+                block = self._object(**source)
+                from session.pixel_target import calibration_id
+                u, v = self.s.calib.board_to_pixel([block.center_mm])[0]
+                pixel = dict(u=int(round(u)), v=int(round(v)),
+                             calibration_id=calibration_id(self.s.calib), angle_deg=block.angle_deg)
+            elif set(source) in ({"u", "v", "calibration_id"}, {"u", "v", "calibration_id", "angle_deg"}):
+                pixel = dict(source)
+            else:
+                raise ValueError("Use object_id+observation_id or u+v+calibration_id")
+        except (ValueError, TypeError) as exc:
+            return self._fail(action, str(exc), "invalid_arguments")
+        selected = self.select_pixel_target(**pixel)
+        if not selected.ok:
+            return selected
+        color = self._objects["selected_1"].color
+        previous = self._transfer_source
+        self._transfer_source = pixel
+        try:
+            return fn(color)
+        finally:
+            self._transfer_source = previous
+
+    def _observe_target(self, color):
+        if self._transfer_source is not None:
+            return self.select_pixel_target(**self._transfer_source)
+        observed = self.observe_scene()
+        if (observed.ok and self._observed_scene is not None
+                and self._observed_scene.find(color) is None):
+            return self.observe_scene(_window=True)
+        return observed
+
+    def observe_scene(self, *, _window=False):
+        # Recovery and standalone tools can arrive here before their servo tail
+        # settles. Record that tail before blocking on camera/CV work.
+        self.collection.settle_for_sequence_pause()
+        try:
+            scene = (self.s.observe_window() if _window
+                     else self.s.observe(after=self.s._clock()))
         except CameraError as exc:
             return self._fail("observe_scene", str(exc), "camera_stale" if exc.stale else "camera_unreachable")
         self._invalidate_pick()
@@ -365,6 +468,7 @@ class PrimitiveSkills(Skills):
         self._zone_drop_xy = tuple(xyz[:2])
         self._zone_drop_ready = True
         self._place_yaw_deg = None
+        self._place_yaw_explicit = False
         released = self.open_gripper()
         if not released.ok:
             return released
@@ -372,22 +476,9 @@ class PrimitiveSkills(Skills):
         home = self.return_to_home()
         if not home.ok:
             return home
-        if self._mission_slot_ledger is not None:
-            return self._result(True, "move_block_to_slot", "released",
-                                color=color, slot=slot, recovery="release_at_reached_slot",
-                                slot_source="commanded", placement_verified=False)
-        verified = self.observe_scene()
-        landed = self._observed_scene.find(color) if verified.ok else None
-        actual_slot = labels[landed.slot_index] if landed and landed.slot_index is not None else None
-        if actual_slot == slot:
-            return self._result(True, "move_block_to_slot", "released",
-                                f"{color} block observed in {slot} after short-lift recovery.",
-                                color=color, slot=slot, recovery="release_at_reached_slot",
-                                measured_xy_mm=list(landed.center_mm))
-        return self._result(False, "move_block_to_slot", "task_incomplete",
-                            "Block released at the reached slot, but placement was not confirmed.",
-                            retry_advice="retry_ok", color=color, slot=slot,
-                            recovery="release_at_reached_slot", actual_slot=actual_slot)
+        return self._result(True, "move_block_to_slot", "released",
+                            color=color, slot=slot, recovery="release_at_reached_slot",
+                            placement_verified=False, slot_source="commanded")
 
     def _place_held_in_other_slot(self, color: str, requested_slot: str):
         """Keep a verified grasp when only the requested slot fails IK."""
@@ -418,32 +509,18 @@ class PrimitiveSkills(Skills):
                     return result
                 if stage == "release":
                     self._record_mission_release(alternate, color)
-            if self._mission_slot_ledger is not None:
-                return self._result(
-                    True, "move_block_to_slot", "released",
-                    color=color, slot=alternate, requested_slot=requested_slot,
-                    recovery="alternate_slot_while_held", slot_source="commanded",
-                    placement_verified=False)
-            observed = self.observe_scene()
-            landed = self._observed_scene.find(color) if observed.ok else None
-            actual_slot = (labels[landed.slot_index]
-                           if landed and landed.slot_index is not None else None)
-            if actual_slot == alternate:
-                return self._result(
-                    True, "move_block_to_slot", "released",
-                    f"{color} block observed in alternate slot {alternate}.",
-                    color=color, slot=alternate, requested_slot=requested_slot,
-                    recovery="alternate_slot_while_held",
-                    measured_xy_mm=list(landed.center_mm))
-            return self._result(
-                False, "move_block_to_slot", "task_incomplete",
-                f"Released {color} at alternate slot {alternate}, but placement was not confirmed.",
-                retry_advice="retry_ok", color=color, slot=alternate,
-                requested_slot=requested_slot, actual_slot=actual_slot)
+            return self._result(True, "move_block_to_slot", "released",
+                                color=color, slot=alternate, requested_slot=requested_slot,
+                                recovery="alternate_slot_while_held", placement_verified=False)
         return None
 
-    def move_block_to_slot(self, color: str, slot: str):
+    def move_block_to_slot(self, color=None, slot=None, source=None):
         """Retry a recoverable transfer once, after measured set-down or home."""
+        if source is not None:
+            if color is not None:
+                return self._fail("move_block_to_slot", "Specify color or source, not both", "invalid_arguments")
+            return self._run_with_source(source, "move_block_to_slot",
+                                         lambda selected: self.move_block_to_slot(selected, slot))
         attempts = []
         recoverable_stages = {
             "lift_empty", "pregrasp", "align", "grasp", "close_verify",
@@ -502,7 +579,7 @@ class PrimitiveSkills(Skills):
         """Run one Task 1 transfer with measured gates between every primitive."""
         action, t0 = "move_block_to_slot", time.monotonic()
         labels = list(self.cfg.agent.zone_slots.labels)
-        if color not in self.cfg.perception.color_prototypes or slot not in labels:
+        if (color not in self.cfg.perception.color_prototypes and not (color == "selected" and self._transfer_source)) or slot not in labels:
             return self._fail(action, "Unknown block colour or slot", "invalid_arguments")
         if self.s.held is not None:
             return self._fail(action, "Place the held block before starting another transfer",
@@ -544,7 +621,7 @@ class PrimitiveSkills(Skills):
             failed.images = result.images
             return failed
 
-        observed = self.observe_scene()
+        observed = self._observe_target(color)
         steps.append({"stage": "observe_before", "reason": observed.reason})
         if not observed.ok:
             failed = self._result(False, action, observed.reason, observed.detail,
@@ -555,11 +632,11 @@ class PrimitiveSkills(Skills):
         index = labels.index(slot)
         scene = self._observed_scene
         assert scene is not None
-        block = scene.outside.get(color)
+        block = scene.find(color)
         if block is None:
             reason = "not_in_zone" if color in scene.inside else "not_detected"
             failed = self._result(
-                False, action, reason, f"{color} block is not detected outside the zone.",
+                False, action, reason, f"{color} block is not detected in the scene.",
                 retry_advice="try_other_target", t0=t0, failed_stage="select",
                 steps=steps, visible_outside=list(scene.outside), color=color, slot=slot,
             )
@@ -723,61 +800,36 @@ class PrimitiveSkills(Skills):
             if stage == "release":
                 self._record_mission_release(slot, color)
 
-        if self._mission_slot_ledger is not None:
-            return self._result(True, action, "released",
-                                f"{color} release commanded at {slot}; actual slot unverified.",
-                                t0=t0, color=color, slot=slot, steps=steps,
-                                slot_source="commanded", placement_verified=False)
-        verified = self.observe_scene()
-        steps.append({"stage": "observe_after", "reason": verified.reason})
-        if not verified.ok:
-            failed = self._result(
-                False, action, verified.reason,
-                f"Block released, but placement could not be observed: {verified.detail}",
-                retry_advice="ask_operator", t0=t0, failed_stage="observe_after",
-                steps=steps, color=color, slot=slot,
-            )
-            failed.images = verified.images
-            return failed
-        landed = self._observed_scene.find(color)
-        actual_slot = labels[landed.slot_index] if landed and landed.slot_index is not None else None
-        miss = math.dist(landed.center_mm, self.s.slot_centres[index]) if landed else None
-        if actual_slot != slot:
-            still_at_source = bool(
-                landed and not landed.in_zone
-                and math.dist(landed.center_mm, block.center_mm) <= self.cfg.agent.calibration_clearance.block_side_mm / 2
-            )
-            detail = (
-                f"{color} is still near its starting position; {slot} placement was not verified."
-                if still_at_source else
-                f"{color} was released, but the camera did not confirm {slot}."
-            )
-            failed = self._result(
-                False, action, "task_incomplete", detail,
-                retry_advice="try_other_target" if still_at_source else
-                             "retry_ok" if landed else "ask_operator",
-                t0=t0, failed_stage="verify", steps=steps, color=color, slot=slot,
-                actual_slot=actual_slot, measured_xy_mm=list(landed.center_mm) if landed else None,
-                still_at_source=still_at_source,
-                miss_mm=round(miss, 1) if miss is not None else None,
-            )
-            failed.images = verified.images
-            return failed
-        yaw_error = square_angle_error_deg(
-            landed.angle_deg, zone_axis_yaw_deg(self.s.calib.zone_polygon_mm)
-        )
-        return self._result(
-            True, action, "released", f"{color} block observed in {slot}.", t0=t0,
-            color=color, slot=slot, measured_xy_mm=list(landed.center_mm),
-            miss_mm=round(miss, 1), frame_seq=verified.data.get("frame_seq"),
-            place_correction=self.place_correction.as_dict(),
-            observed_block_yaw_deg=round(landed.angle_deg, 1),
-            zone_yaw_error_deg=round(yaw_error, 1),
-            placement_aligned=abs(yaw_error) <= self.cfg.task1.place_yaw_tolerance_deg,
-        )
+        return self._result(True, action, "released",
+                            f"{color} release and home return completed at {slot}.",
+                            t0=t0, color=color, slot=slot, steps=steps,
+                            placement_verified=False, slot_source="commanded")
 
-    def stack_block_to_floor(self, color: str, floor: int):
+    def stack_block_to_floor(self, color=None, floor=0, source=None, destination=None):
         """Try the requested 0-based floor, with one guarded table recovery."""
+        if destination is not None:
+            if not isinstance(destination, dict) or set(destination) != {"u", "v", "calibration_id"}:
+                return self._fail("stack_block_to_floor", "destination requires u,v,calibration_id", "invalid_arguments")
+            target, failure = self._pixel_point("stack_block_to_floor", time.monotonic(), **destination)
+            if failure is not None:
+                return failure
+            from control.task2_stack import Task2StackPlanner
+            previous, history = self.s._stack, self._task2_placed_floors
+            self.s._stack = Task2StackPlanner(self.s.calib, self.cfg, self.s.ik,
+                                            target_xy_mm=(target["x_mm"], target["y_mm"]))
+            key = (round(target["x_mm"], 1), round(target["y_mm"], 1))
+            self._task2_placed_floors = self._tower_histories.setdefault(key, {})
+            if type(floor) is int and 0 < floor <= 4:
+                self._task2_placed_floors.setdefault(floor - 1, "requested_support")
+            try:
+                return self.stack_block_to_floor(color, floor, source=source)
+            finally:
+                self.s._stack, self._task2_placed_floors = previous, history
+        if source is not None:
+            if color is not None:
+                return self._fail("stack_block_to_floor", "Specify color or source, not both", "invalid_arguments")
+            return self._run_with_source(source, "stack_block_to_floor",
+                                         lambda selected: self.stack_block_to_floor(selected, floor))
         attempts = []
         for attempt_number in (1, 2):
             result = self._stack_block_to_floor_once(color, floor)
@@ -843,14 +895,7 @@ class PrimitiveSkills(Skills):
                 home = self.return_to_home()
                 if not home.ok:
                     return home
-                seen = self.observe_scene()
-                block = self._observed_scene.find(color) if seen.ok else None
-                if block is None or block.in_zone:
-                    return self._result(False, action, "task_incomplete",
-                                        "Set-down at the source was not confirmed",
-                                        retry_advice="ask_operator")
-                return self._result(True, action, "released", verified=True,
-                                    in_zone=False, measured=self._block_dict(block),
+                return self._result(True, action, "released", verified=False,
                                     target_xy_mm=list(xyz[:2]), mode="vertical_put_back")
             lift = self.move_relative(up_mm=min(required_z - xyz[2],
                                                 self.cfg.agent.relative.max_jog_mm))
@@ -863,13 +908,8 @@ class PrimitiveSkills(Skills):
         placed = self.place_on_table()
         if not placed.ok:
             return placed
-        measured = placed.data.get("measured") or {}
-        if (self.s.held is not None or not placed.data.get("verified")
-                or placed.data.get("in_zone") is not False
-                or measured.get("color") != color):
-            return self._result(False, action, "task_incomplete",
-                                "Temporary table release was not confirmed outside the zone",
-                                retry_advice="ask_operator", placement=placed.data)
+        if self.s.held is not None:
+            return self._fail(action, "Temporary release did not clear the held state", "grasp_blocked")
         return placed
 
     def _task1_near_low_zone_block(self, point) -> bool:
@@ -939,7 +979,7 @@ class PrimitiveSkills(Skills):
     def _stack_block_to_floor_once(self, color: str, floor: int):
         """Transfer one block to an explicitly requested tower floor."""
         action, t0 = "stack_block_to_floor", time.monotonic()
-        if color not in self.cfg.perception.color_prototypes:
+        if color not in self.cfg.perception.color_prototypes and not (color == "selected" and self._transfer_source):
             return self._fail(action, "Unknown block colour", "invalid_arguments")
         if self.s.held is not None:
             return self._fail(action, "A block is already held", "already_holding")
@@ -969,7 +1009,7 @@ class PrimitiveSkills(Skills):
             failed.images = result.images
             return failed
 
-        observed = self.observe_scene()
+        observed = self._observe_target(color)
         steps.append({"stage": "observe_before", "reason": observed.reason})
         if not observed.ok:
             failed = self._result(False, action, observed.reason, observed.detail,
@@ -1204,32 +1244,16 @@ class PrimitiveSkills(Skills):
             failed = run(stage, fn)
             if failed is not None:
                 return failed
-        verified = self.observe_scene()
-        steps.append({"stage": "observe_after", "reason": verified.reason})
-        if not verified.ok:
-            return self._result(False, action, verified.reason,
-                                "Block was released, but the camera could not reobserve the tower",
-                                retry_advice="ask_operator", t0=t0,
-                                failed_stage="observe_after", steps=steps,
-                                color=color, floor=floor, level=level_number)
-        landed = self._observed_scene.find(color)
-        if landed is None or math.dist(landed.center_mm, level.xy_mm) >= radius:
-            return self._result(False, action, "task_incomplete",
-                                "Released block was not observed near the tower point",
-                                retry_advice="ask_operator", t0=t0,
-                                failed_stage="verify", steps=steps, color=color,
-                                floor=floor, level=level_number, stack_verified=False)
         self._task2_placed_floors[floor] = color
         return self._result(True, action, "released",
-                            f"Floor {floor} released near tower point; tower height remains unverified",
+                            f"Floor {floor} release and retreat completed; no visual placement check",
                             t0=t0, color=color, floor=floor, level=level_number,
                             contact_confirmed=False,
                             release_mode="height_drop",
                             drop_clearance_mm=self.cfg.task2.drop_clearance_mm,
-                            placement_observed=True, stack_verified=False,
+                            placement_observed=False, stack_verified=False,
                             support_evidence=support_evidence,
-                            expected_place_z_mm=level.place_z_mm,
-                            measured_xy_mm=list(landed.center_mm))
+                            expected_place_z_mm=level.place_z_mm)
 
     def _object(self, object_id, observation_id):
         if observation_id != self.observation_id or time.monotonic() - self._observed_at > self.limits.target_max_age_s:
@@ -1240,12 +1264,14 @@ class PrimitiveSkills(Skills):
 
     def _held_check(self):
         if self.s.held is not None:
-            reading = check_grasp(self.s.robot, self.cfg.sensing, settle=False)
+            gripper_pos = self.s.robot.read_joints()["gripper"]
             # VERIFY required both position and load when the block was first
             # picked. During transport the gripper load can relax with arm
             # posture even while the block remains visibly between the jaws.
             # A fully closed jaw position still detects an actual loss.
-            if not reading.pos_says_held:
+            # Only position is used here: do not block on averaged load
+            # samples while the previous motor command is still settling.
+            if gripper_pos <= self.cfg.sensing.gripper_empty_closed_max:
                 self._grasp_failed = True
                 self._contact = False
                 self._stack_drop_ready = False
@@ -1254,21 +1280,10 @@ class PrimitiveSkills(Skills):
         return not self._grasp_failed
 
     def _choose_place_yaw(self, xyz, place_tilt):
-        """Prefer zone-parallel block alignment with wrist_roll nearest zero."""
-        if self._held_block_angle_deg is None or self._held_pick_yaw_deg is None:
-            raise ValueError("Held block orientation was not recorded at grasp")
+        """Align the jaw line to the zone long edge, with 180-degree symmetry."""
         axis = zone_axis_yaw_deg(self.s.calib.zone_polygon_mm)
-        base = self._held_pick_yaw_deg + axis - self._held_block_angle_deg
-        neutral = self.s.ik.neutral_yaw_deg(*xyz)
         current_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
-        # A square has four equivalent parallel headings. Prefer the one
-        # nearest neutral wrist_roll, then the smaller turn from current yaw.
-        aligned = sorted(
-            {(base + 90.0 * k + 180.0) % 360.0 - 180.0 for k in range(-3, 4)},
-            key=lambda yaw: abs(angle_error_deg(yaw, current_yaw)),
-        )
-        fallback = [neutral, *(neutral + offset
-                               for offset in self.cfg.task1.place_yaw_fallback_offsets_deg)]
+        aligned = [(axis + 180 * k + 180) % 360 - 180 for k in (0, 1)]
         safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
                   - self.limits.lateral_clearance_tolerance_mm)
 
@@ -1296,7 +1311,8 @@ class PrimitiveSkills(Skills):
                     continue
                 planned_z = self.s.ik.forward_position_mm(hover.joints)[2]
                 if planned_z >= safe_z:
-                    plans.append((max(abs(hover.joints["wrist_roll"]),
+                    plans.append((max(hover.position_error_mm, release.position_error_mm),
+                                  max(abs(hover.joints["wrist_roll"]),
                                       abs(release.joints["wrist_roll"])),
                                   abs(angle_error_deg(yaw, current_yaw)),
                                   hover.position_error_mm, yaw))
@@ -1304,14 +1320,8 @@ class PrimitiveSkills(Skills):
 
         aligned_plans = viable(aligned)
         if aligned_plans:
-            return min(aligned_plans)[3], True
-        unchanged_plans = viable([current_yaw])
-        if unchanged_plans:
-            return unchanged_plans[0][3], False
-        fallback_plans = viable(fallback)
-        if fallback_plans:
-            return min(fallback_plans)[3], False
-        raise ValueError("No placement yaw reaches IK and clearance gates")
+            return min(aligned_plans)[4], True
+        raise ValueError("No zone-aligned placement yaw reaches IK and clearance gates")
 
     def _solve(self, xyz, *, radial_tilt_deg=None, max_position_error_mm=None,
                max_tilt_error_deg=None, yaw_deg=None, max_yaw_error_deg=None):
@@ -1620,33 +1630,49 @@ class PrimitiveSkills(Skills):
                 else:
                     xy = nominal_xy
                 goal = (*xy, self.s.grasp_z_mm + self.limits.approach_clearance_mm)
-                try:
-                    place_yaw, zone_aligned = self._choose_place_yaw(goal, place_tilt)
-                except ValueError as exc:
-                    result = self._fail(action, str(exc), "ik_gate")
-                else:
+                options = []
+                for candidate_tilt in self.cfg.task1.place_tilt_candidates_deg:
+                    try:
+                        yaw, _ = self._choose_place_yaw(goal, candidate_tilt)
+                        poses = [self._solve(
+                            (*xy, height), radial_tilt_deg=candidate_tilt,
+                            max_position_error_mm=self.cfg.ik.max_position_error_mm,
+                            max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
+                            yaw_deg=yaw, max_yaw_error_deg=self.cfg.task1.place_yaw_tolerance_deg,
+                        ) for height in (goal[2], self.s.drop_z_mm)]
+                    except ValueError:
+                        continue
+                    error = max(p.position_error_mm for p in poses)
+                    accurate = error <= self.cfg.task1.place_ik_error_mm
+                    # Prefer a small tilt when accurate; otherwise the closest
+                    # FK solution to the unchanged requested coordinates.
+                    options.append((not accurate, abs(candidate_tilt) if accurate else error,
+                                    error, candidate_tilt, yaw))
+                result = self._fail(action, "No horizontal-jaw placement pose within IK limits", "ik_gate")
+                place_tilt = 0.0
+                for _, _, planned_error, place_tilt, place_yaw in sorted(options):
+                    zone_aligned = True
                     result = self._move(
-                        action,
-                        goal,
-                        radial_tilt_deg=place_tilt,
+                        action, goal, radial_tilt_deg=place_tilt,
                         max_ik_error_mm=self.cfg.ik.max_position_error_mm,
                         max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
-                        level_during_carry=True,
-                        place_yaw_deg=place_yaw,
+                        level_during_carry=True, place_yaw_deg=place_yaw,
                     )
-                attempts.append({
-                    "scale": correction_scale,
-                    "xy_mm": [round(value, 1) for value in xy],
-                    "reason": result.reason,
-                })
-                # An IK-gate failure happens before motion because _move
-                # solves the complete path first. Other failures may follow
-                # physical motion and must never be retried automatically.
+                    result.data["placement_plan_error_mm"] = planned_error
+                    result.data["placement_approximate"] = planned_error > self.cfg.task1.place_ik_error_mm
+                    attempts.append({"scale": correction_scale, "xy_mm": list(xy),
+                                     "tilt_deg": place_tilt, "plan_error_mm": planned_error,
+                                     "reason": result.reason})
+                    if result.ok or result.reason != "ik_gate":
+                        break
                 if result.ok or result.reason != "ik_gate":
                     break
             result.data["radial_tilt_deg"] = place_tilt
             if result.ok:
                 self._place_yaw_deg = place_yaw
+                self._place_yaw_explicit = False
+                self._place_radial_tilt_deg = place_tilt
+                self._place_command_xy = tuple(xy)
                 result.data["place_yaw_deg"] = round(place_yaw, 1)
                 result.data["zone_alignment_fallback"] = not zone_aligned
                 if zone_aligned:
@@ -1930,7 +1956,21 @@ class PrimitiveSkills(Skills):
             )
         return result
 
-    def align_gripper(self, object_id, observation_id):
+    def align_gripper(self, object_id=None, observation_id=None, yaw_deg=None):
+        if yaw_deg is not None:
+            if object_id is not None or observation_id is not None or not math.isfinite(yaw_deg) or not -180 <= yaw_deg <= 180:
+                return self._fail("align_gripper", "Use yaw_deg alone in [-180, 180]", "invalid_arguments")
+            xyz = self.s.arm_position_mm()
+            if not self._lateral_clearance_ready(xyz[2]):
+                return self._fail("align_gripper", "Lift before rotation")
+            if self.s.held is not None and not self._held_check():
+                return self._fail("align_gripper", "Verified grasp required", "grasp_empty")
+            result = self._move("align_gripper", xyz, place_yaw_deg=yaw_deg)
+            if result.ok:
+                self._invalidate_pick()
+                self._place_yaw_deg = yaw_deg if self._target and self._target[-1] == "preplace" else None
+                self._place_yaw_explicit = self._place_yaw_deg is not None
+            return result
         try:
             block = self._object(object_id, observation_id)
         except ValueError as exc:
@@ -2001,6 +2041,7 @@ class PrimitiveSkills(Skills):
         # the grasp closes; commanded yaw can differ under load.
         self._held_pick_yaw_deg = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
         self._place_yaw_deg = None
+        self._place_yaw_explicit = False
         self._target = None
         return self._result(
             True, "close_gripper", "held", grasp=asdict(check),
@@ -2036,10 +2077,12 @@ class PrimitiveSkills(Skills):
         if start[2] - drop_z > self.limits.contact_max_descent_mm:
             return self._fail(action, "Zone drop exceeds the bounded descent", "limit_exceeded")
         from control.task1_transport import place_tilt_deg
-        tilt = place_tilt_deg(start[:2], self.s.base_xy, self.cfg)
+        target_xy = self._place_command_xy or self._zone_drop_target_xy()
+        tilt = (self._place_radial_tilt_deg if self._place_radial_tilt_deg is not None
+                else place_tilt_deg(target_xy, self.s.base_xy, self.cfg))
         try:
             pose = self._solve(
-                (*start[:2], drop_z),
+                (*target_xy, drop_z),
                 radial_tilt_deg=tilt,
                 max_position_error_mm=self.cfg.ik.max_position_error_mm,
                 max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
@@ -2050,7 +2093,7 @@ class PrimitiveSkills(Skills):
             return self._fail(action, str(exc), "ik_gate")
         self._zone_drop_ready = False
         def in_release_window(pose):
-            return (math.dist(pose[:2], start[:2]) <= self.limits.alignment_tolerance_mm
+            return (math.dist(pose[:2], target_xy) <= self.limits.alignment_tolerance_mm
                     and self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm
                     <= pose[2] <= drop_z + 10)
         try:
@@ -2068,12 +2111,15 @@ class PrimitiveSkills(Skills):
         # The joint tolerance can accept several degrees of loaded shoulder
         # sag. If that consumes over half the intended drop clearance, make
         # one measured upward correction before opening the gripper.
-        if (actual[2] < self.s.grasp_z_mm + self.cfg.task1.release_clearance_mm / 2
-                and math.dist(actual[:2], start[:2]) <= self.limits.alignment_tolerance_mm):
-            correction_z = min(start[2], drop_z + max(0.0, drop_z - actual[2]))
+        xy_error = math.dist(actual[:2], target_xy)
+        if ((actual[2] < self.s.grasp_z_mm + self.cfg.task1.release_clearance_mm / 2
+             or xy_error > self.cfg.task1.place_ik_error_mm)
+                and xy_error <= self.limits.alignment_tolerance_mm):
+            correction_z = min(start[2], max(actual[2], drop_z + max(0.0, drop_z - actual[2])))
+            correction_xy = tuple(2 * target - measured for target, measured in zip(target_xy, actual[:2]))
             try:
                 correction = self._solve(
-                    (*start[:2], correction_z), radial_tilt_deg=tilt,
+                    (*correction_xy, correction_z), radial_tilt_deg=tilt,
                     max_position_error_mm=self.cfg.ik.max_position_error_mm,
                     max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
                     yaw_deg=self._place_yaw_deg,
@@ -2112,11 +2158,13 @@ class PrimitiveSkills(Skills):
                                 measured_fk_mm=list(actual))
         if not self._held_check():
             return self._fail(action, "Grasp verification failed", "grasp_empty")
-        self._zone_drop_xy = tuple(start[:2])
+        self._zone_drop_xy = tuple(target_xy)
         self._zone_retreat_joints = retreat_joints
         self._zone_drop_ready = True
         return self._result(True, action, "ok", release_mode="height_drop",
-                            release_fk_mm=list(actual), drop_z_mm=drop_z,
+                            release_fk_mm=list(actual), drop_z_mm=drop_z, target_xy_mm=list(target_xy),
+                            release_xy_error_mm=math.dist(actual[:2], target_xy),
+                            radial_tilt_deg=tilt,
                             first_release_fk_mm=list(first_release_fk))
 
     def descend_until_contact(self, max_descent_mm):
@@ -2309,8 +2357,13 @@ class PrimitiveSkills(Skills):
         if (self.s.held is not None and self._place_yaw_deg is not None
                 and self._target is not None and self._target[0] in ("slot", "cell", "object")):
             measured_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
-            if abs(angle_error_deg(measured_yaw, self._place_yaw_deg)) > self.cfg.task1.place_yaw_tolerance_deg:
-                return self._fail("open_gripper", "Jaw yaw drifted before release; still holding", "grasp_blocked")
+            axis = (self._place_yaw_deg if self._place_yaw_explicit else
+                    zone_axis_yaw_deg(self.s.calib.zone_polygon_mm))
+            zone_error = (measured_yaw - axis + 90.0) % 180.0 - 90.0
+            if abs(zone_error) > self.cfg.task1.place_yaw_tolerance_deg:
+                return self._fail("open_gripper",
+                                  f"Jaw line misses requested placement yaw by {zone_error:.1f}deg; still holding",
+                                  "grasp_blocked")
         pending = None
         if self.s.held is not None and (self._contact or self._zone_drop_ready) and self._target and self._target[-1] == "preplace":
             if self._target[0] == "slot":
@@ -2332,6 +2385,7 @@ class PrimitiveSkills(Skills):
         self._stack_target = None
         self._recovery_target_xy = None
         self._place_yaw_deg = None
+        self._place_yaw_explicit = False
         self._held_block_angle_deg = None
         self._held_pick_yaw_deg = None
         return self._result(True, "open_gripper", "released", stack_verified=False)
@@ -2339,6 +2393,7 @@ class PrimitiveSkills(Skills):
     def recover_and_home(self):
         self._invalidate_pick()
         self._place_yaw_deg = None
+        self._place_yaw_explicit = False
         self._held_block_angle_deg = None
         self._held_pick_yaw_deg = None
         self._stack_target = None
@@ -2356,14 +2411,6 @@ class PrimitiveSkills(Skills):
             # open jaws after release; only the arm should revisit that pose.
             target = {joint: value for joint, value in self._zone_retreat_joints.items()
                       if joint != "gripper"}
-            current = self.s.robot.read_joints()
-            start = self.s.ik.forward_position_mm(current)
-            trace = [self.s.ik.forward_position_mm({**current, **step})
-                     for step in interpolate(current, target,
-                                             self.cfg.motion.descent_step_per_tick)]
-            if not trace or min(point[2] for point in trace) < start[2] - 1.0:
-                return self._fail("return_to_home", "Release-column retreat is not clear",
-                                  "limit_exceeded")
             self.s.player.move_to(target, max_step=self.cfg.motion.descent_step_per_tick,
                                   tol=self.cfg.motion.transit_arrival_tol)
             self._zone_retreat_joints = None

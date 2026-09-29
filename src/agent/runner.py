@@ -150,16 +150,11 @@ class AgentRunner:
                 self.emit({"type": "turn_end", "robot_fault": False})
                 return outcome
 
-            if len(calls) > 1:
-                rejected = tuple(self._not_executed(c, "invalid_arguments", "Primitive mode requires exactly one tool call per response; none executed") for c in calls)
-                self.history.append(Message("user", tool_results=rejected))
-                self._log({"type": "batch_rejected", "tool_calls": [c.name for c in calls]})
-                continue
-
             results: list[ToolResult] = []
             halted_reason: str | None = None
+            batch_failed = False
             for call in calls:
-                if halted_reason is not None:
+                if halted_reason is not None or batch_failed:
                     results.append(self._not_executed(call, "precondition",
                                                       "앞선 동작이 중단되어 실행하지 않았습니다."))
                     continue
@@ -185,6 +180,7 @@ class AgentRunner:
                             path.write_bytes(im.jpeg)
                             self._log({"type": "observation_image", "path": str(path), "frame_seq": im.frame_seq, "captured_at": im.captured_at})
                 results.append(result)
+                batch_failed = not result.content.get("ok", False)
                 if result.content.get("reason") in ROBOT_FAULT_REASONS:
                     halted_reason = result.content["reason"]
             self.history.append(Message("user", tool_results=tuple(results)))

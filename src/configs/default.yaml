@@ -237,6 +237,9 @@ task1:
   pick_tilt_fallback_deg: [45.0, 30.0, 15.0]
   near_vertical_pick_max_deg: 5.0
   place_tilt_max_deg: 0.0
+  # Small outward placement tilts; physical performance remains to be measured.
+  place_tilt_candidates_deg: [0, -5, -10, -15, -20, -25, -30]
+  place_ik_error_mm: 5.0
   # 배치 시 모델 FK 수평 오차 한도. 실제 블록 수평은 관찰로 확인해야 한다.
   place_level_tolerance_deg: 3.0
   # 영역 긴 변에 대한 블록 평면 회전의 모델 FK 허용 오차.
@@ -349,11 +352,10 @@ task3:
 
   # 데이터셋 카메라 이름 -> camera.server MJPEG URL. /dev/video*의 단독 소유자는
   # camera.server이므로(AGENTS.md §8) 디바이스를 두 번 열지 않고 스트림을 읽는다.
-  # 손목캠을 다시 달면 so101-camera --wrist-device 로 서버에 붙이고 아래 한 줄만
-  # 주석 해제하면 된다 — 코드 변경 없음.
+  # 헤드캠과 손목캠을 같은 녹화 틱에 저장한다.
   cameras:
     top: http://127.0.0.1:8090/video/shoulder.mjpg
-    # wrist: http://127.0.0.1:8090/video/wrist.mjpg
+    wrist: http://127.0.0.1:8090/video/wrist.mjpg
   # ACT는 observation.images.* 여러 개를 카메라 뷰로 보고 shape이 같기를 요구한다.
   image_width: 640
   image_height: 480
@@ -456,8 +458,11 @@ agent:
     root: datasets/agent
     max_steps: 24
     max_task_text_chars: 240
-    # Assumed quality gates; timing failures discard rather than compress time.
+    # Provisional quality bounds: tolerate brief gaps, track cumulative missing motion.
     max_tick_gap_s: 0.1
+    tolerated_missing_ticks: 2
+    max_moving_gap_s: 0.5
+    max_total_missing_motion_s: 1.0
     max_stationary_drift: 1.0
     sequence_settle_window_s: 0.3
     sequence_settle_max_drift: 0.25
@@ -473,11 +478,13 @@ agent:
     lateral_clearance_tolerance_mm: 2.0
     zone_release_floor_margin_mm: 2.0
     max_lift_attempts: 4
+    observation_window_s: 2.0
+    observation_fps: 5.0
     alignment_tolerance_mm: 25.0
     arrival_error_mm: 15.0
     home_fold_radius_mm: 40.0  # assumed; only for an empty gripper near home
     home_return_clearance_mm: 55.0
-    home_return_min_clearance_mm: 45.0
+    home_return_min_clearance_mm: 38.0
     home_lift_xy_limit_mm: 10.0
     home_lift_tilt_candidates_deg: [0.0, -5.0, -10.0, -15.0]
     loaded_arrival_error_mm: 30.0

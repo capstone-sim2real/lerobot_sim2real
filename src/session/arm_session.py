@@ -330,6 +330,35 @@ class ArmSession:
 
     # ── perception ───────────────────────────────────────────────────
 
+    def observe_window(self) -> Scene:
+        """Aggregate fresh stationary observations, never prior-motion history."""
+        from camera.overlay import DetectionStabilizer
+        from perception.scene import build_scene
+
+        cfg = self.cfg.agent.primitives
+        interval = 1.0 / cfg.observation_fps
+        smoother = DetectionStabilizer(
+            max(1, math.ceil(cfg.observation_window_s * cfg.observation_fps) + 1),
+            self.cfg.camera.overlay.hide_after_misses,
+        )
+        deadline = time.monotonic() + cfg.observation_window_s
+        while True:
+            self.cancel.raise_if_set()
+            tick = time.monotonic()
+            scene = self.observe(after=self._clock())
+            detections = smoother.update("observation", [b.detection for b in scene.all()])
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, max(0.0, interval - (time.monotonic() - tick))))
+        scene = build_scene(
+            detections, detections, self.calib, self.slot_centres,
+            snap_radius_mm=self.cfg.agent.slot_snap_radius_mm,
+            frame_seq=scene.frame_seq, captured_at=scene.captured_at,
+        )
+        self.last_scene = scene
+        return scene
+
     def observe(self, *, after: float | None = None) -> Scene:
         """A fresh scene. ``after``: wall time the frame must be captured after.
 
@@ -480,19 +509,6 @@ class ArmSession:
                         or any(math.dist(point[:2], start[:2]) > bounds.home_lift_xy_limit_mm
                                for point in trace)):
                     continue
-                home = {joint: value for joint, value in
-                        self.poses.get(self.cfg.motion.home_pose).items()
-                        if joint != "gripper"}
-                home_xy = self.ik.forward_position_mm(home)[:2]
-                home_trace = [self.ik.forward_position_mm({**candidate.joints, **step})
-                              for step in interpolate(candidate.joints, home,
-                                                      self.cfg.motion.max_step_per_tick)]
-                if not _low_home_path_clear(
-                        planned, home_trace, home_xy, safe_z=minimum_z,
-                        home_radius=bounds.home_fold_radius_mm,
-                        low_lateral_limit=self.cfg.agent.calibration_clearance.block_side_mm / 2,
-                        tolerance=tolerance):
-                    continue
                 chosen = candidate.joints
                 break
             if chosen is not None:
@@ -500,17 +516,15 @@ class ArmSession:
             height -= self.cfg.motion.hover_search_step_mm
 
         if chosen is None:
-            if start[2] >= minimum_z - tolerance:
-                return False
-            raise TimeoutError("Cannot lift above home return clearance")
+            logger.info("Home lift has no IK candidate; proceeding with joint-space home")
+            return False
         self.player.move_to(chosen, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
-        measured = self.ik.forward_position_mm(self.robot.read_joints())
-        if measured[2] < minimum_z - tolerance:
-            raise TimeoutError("Measured lift did not reach home return clearance")
+        # The user requested no additional FK clearance verdict after this move.
+        # Trajectory/servo failures and cancellation still propagate.
         return True
 
     def return_home_safely(self, *, post_release: bool = False) -> tuple[bool, bool]:
-        """Raise before home; after a release, verify the entire low path."""
+        """Attempt a lift then execute home, without additional FK clearance gates."""
         if self.arm_at_home():
             return False, True
         lifted = False
@@ -523,27 +537,6 @@ class ArmSession:
                 raise
             except Exception as exc:  # noqa: BLE001 - preserve the guarded preflight
                 logger.warning("vertical lift before homing failed: %s", exc)
-        bounds = self.cfg.agent.primitives
-        safe_z = self.grasp_z_mm + (
-            bounds.home_return_min_clearance_mm
-            if post_release else self.cfg.motion.hover_min_clearance_mm
-        )
-        measured_joints = self.robot.read_joints()
-        measured = self.ik.forward_position_mm(measured_joints)
-        if post_release or measured[2] < safe_z - 1.0:
-            home = {joint: value for joint, value in
-                    self.poses.get(self.cfg.motion.home_pose).items()
-                    if joint != "gripper"}
-            home_xy = self.ik.forward_position_mm(home)[:2]
-            trace = [self.ik.forward_position_mm({**measured_joints, **step})
-                     for step in interpolate(measured_joints, home,
-                                             self.cfg.motion.max_step_per_tick)]
-            if (self.held is not None or not _low_home_path_clear(
-                    measured, trace, home_xy, safe_z=safe_z,
-                    home_radius=bounds.home_fold_radius_mm,
-                    low_lateral_limit=self.cfg.agent.calibration_clearance.block_side_mm / 2,
-                    tolerance=bounds.lateral_clearance_tolerance_mm)):
-                raise TimeoutError("Cannot home through blocks below hover clearance")
         self.go_home()
         return lifted, self.arm_at_home()
 

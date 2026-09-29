@@ -505,6 +505,8 @@ class Task1Config:
     pick_tilt_fallback_deg: list[float] = field(default_factory=lambda: [45.0, 30.0, 15.0])
     near_vertical_pick_max_deg: float = 5.0
     place_tilt_max_deg: float = 0.0
+    place_tilt_candidates_deg: list[float] = field(default_factory=lambda: [0.0, -5.0, -10.0, -15.0, -20.0, -25.0, -30.0])
+    place_ik_error_mm: float = 5.0
     # Model-FK tolerance for a held block's level placement approach.
     place_level_tolerance_deg: float = 3.0
     place_yaw_tolerance_deg: float = 5.0
@@ -667,10 +669,12 @@ class Task3Config:
 
     # Dataset camera name -> camera.server MJPEG URL. camera.server is the
     # single owner of /dev/video* (AGENTS.md §8), so recording reads its
-    # stream rather than opening the device a second time. Add the wrist
-    # entry once the camera is remounted and served by so101-camera.
+    # streams rather than opening either device a second time.
     cameras: dict[str, str] = field(
-        default_factory=lambda: {"top": "http://127.0.0.1:8090/video/shoulder.mjpg"}
+        default_factory=lambda: {
+            "top": "http://127.0.0.1:8090/video/shoulder.mjpg",
+            "wrist": "http://127.0.0.1:8090/video/wrist.mjpg",
+        }
     )
     # ACT treats several observation.images.* keys as camera views and
     # requires them to share one shape, so every stream is resized to this.
@@ -1010,12 +1014,14 @@ class PrimitiveConfig:
     lateral_clearance_tolerance_mm: float = 2.0  # FK/encoder settling near the lift threshold
     zone_release_floor_margin_mm: float = 2.0  # calibrated top plane to minimum release FK
     max_lift_attempts: int = 4
+    observation_window_s: float = 2.0
+    observation_fps: float = 5.0
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
     home_fold_radius_mm: float = 40.0  # assumed low-height folding corridor around home XY
-    # Assumed clearance after release: seek 55 mm, require 45 mm before folding home.
+    # Assumed clearance after release: seek 55 mm, require 38 mm before folding home.
     home_return_clearance_mm: float = 55.0
-    home_return_min_clearance_mm: float = 45.0
+    home_return_min_clearance_mm: float = 38.0
     home_lift_xy_limit_mm: float = 10.0
     home_lift_tilt_candidates_deg: list[float] = field(
         default_factory=lambda: [0.0, -5.0, -10.0, -15.0]
@@ -1040,6 +1046,9 @@ class AgentCollectionConfig:
     max_steps: int = 24
     max_task_text_chars: int = 240
     max_tick_gap_s: float = 0.1
+    tolerated_missing_ticks: int = 2
+    max_moving_gap_s: float = 0.5  # Provisional recording-quality bounds, not motor limits.
+    max_total_missing_motion_s: float = 1.0
     max_stationary_drift: float = 1.0  # degrees, or normalized gripper percent
     sequence_settle_window_s: float = 0.3
     sequence_settle_max_drift: float = 0.25
@@ -1317,6 +1326,11 @@ def validate_task1(cfg: AppConfig) -> None:
         raise ValueError("task1.place_tilt_max_deg must be within the placement IK tilt gate")
     if not 0 < cfg.task1.place_level_tolerance_deg <= cfg.ik.max_tilt_error_deg:
         raise ValueError("task1.place_level_tolerance_deg must be within the IK tilt gate")
+    if (not cfg.task1.place_tilt_candidates_deg
+            or any(not math.isfinite(v) or not -30 <= v <= 0 for v in cfg.task1.place_tilt_candidates_deg)):
+        raise ValueError("Task 1 placement tilts must be between -30 and 0 degrees")
+    if not math.isfinite(cfg.task1.place_ik_error_mm) or not 0 < cfg.task1.place_ik_error_mm <= cfg.ik.max_position_error_mm:
+        raise ValueError("Task 1 placement IK error must be positive and within the general gate")
     if not 0 < cfg.task1.place_yaw_tolerance_deg <= 45.0:
         raise ValueError("task1.place_yaw_tolerance_deg must be in (0, 45]")
 
@@ -1456,12 +1470,17 @@ def validate_agent(cfg: AppConfig) -> None:
         raise ValueError("agent.collection.root must be set")
     if agent.collection.max_steps < 1 or agent.collection.max_task_text_chars < 1:
         raise ValueError("agent.collection sequence limits must be positive")
-    for name in ("max_tick_gap_s", "max_stationary_drift", "sequence_settle_window_s",
+    for name in ("max_tick_gap_s", "max_moving_gap_s", "max_total_missing_motion_s", "max_stationary_drift", "sequence_settle_window_s",
                  "sequence_settle_max_drift", "sequence_settle_timeout_s",
                  "max_mean_period_error", "idle_poll_s"):
         value = getattr(agent.collection, name)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"agent.collection.{name} must be finite and positive")
+    if (type(agent.collection.tolerated_missing_ticks) is not int
+            or not 0 <= agent.collection.tolerated_missing_ticks <= 5):
+        raise ValueError("agent.collection.tolerated_missing_ticks must be in [0, 5]")
+    if agent.collection.max_moving_gap_s < agent.collection.max_tick_gap_s:
+        raise ValueError("max_moving_gap_s must cover max_tick_gap_s")
     if agent.collection.sequence_settle_max_drift >= agent.collection.max_stationary_drift:
         raise ValueError("agent.collection.sequence_settle_max_drift must be below max_stationary_drift")
     primitive = agent.primitives
@@ -1479,6 +1498,10 @@ def validate_agent(cfg: AppConfig) -> None:
         raise ValueError("primitive release floor margin must be below Task 1 drop clearance")
     if primitive.approach_clearance_mm < primitive.lateral_clearance_mm:
         raise ValueError("primitive approach clearance must cover lateral clearance")
+    for name in ("observation_window_s", "observation_fps"):
+        value = getattr(primitive, name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"agent.primitives.{name} must be finite and positive")
     if type(primitive.max_lift_attempts) is not int or not 1 <= primitive.max_lift_attempts <= 4:
         raise ValueError("agent.primitives.max_lift_attempts must be in [1, 4]")
     if (type(primitive.image_jpeg_quality) is not int or type(primitive.image_max_width) is not int

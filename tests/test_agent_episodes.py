@@ -9,7 +9,7 @@ def test_episode_browser_uses_saved_metadata_and_video_segment(tmp_path):
     pq = pytest.importorskip("pyarrow.parquet")
     import pyarrow as pa
     root = tmp_path / "agent"
-    run_id = "so101_task3_20260929_050154_582bc819"
+    run_id = "green_center_10_20260929"
     run = root / run_id
     (run / "meta/episodes/chunk-000").mkdir(parents=True)
     (run / "meta/info.json").write_text(json.dumps({"fps": 30, "total_episodes": 2,

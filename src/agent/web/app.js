@@ -212,7 +212,7 @@ function addMarkdownMessage(text) {
 }
 
 function describeArgs(args) {
-  const parts = Object.entries(args || {}).map(([k, v]) => `${k}=${typeof v === "number" ? Math.round(v * 10) / 10 : v}`);
+  const parts = Object.entries(args || {}).filter(([k]) => k !== "calibration_id").map(([k, v]) => `${k}=${typeof v === "number" ? Math.round(v * 10) / 10 : v}`);
   return parts.length ? `(${parts.join(", ")})` : "";
 }
 
@@ -234,6 +234,10 @@ function toolCall(event) {
 }
 
 function toolResult(event) {
+  if (["record_tool_sequence", "save_episode", "finish_dataset"].includes(event.name)) {
+    window.dispatchEvent(new Event("episodes-updated"));
+  }
+
   let chip = toolChips.get(event.id);
   if (!chip) { toolCall({ id: event.id, name: event.name, arguments: {} }); chip = toolChips.get(event.id); }
   const result = event.result || {};
@@ -380,7 +384,10 @@ async function send(text) {
   text = (text || "").trim();
   if (!text || control.state !== "idle") return;
   $("input").value = "";
-  const { status, data } = await api("/api/chat", { text });
+  const marker = chatPixelTarget && `헤드캠 선택 픽셀 (u=${chatPixelTarget.u}, v=${chatPixelTarget.v})`;
+  const selected_pixel = marker && text.includes(marker) ? chatPixelTarget : null;
+  const { status, data } = await api("/api/chat", { text, selected_pixel });
+  if (status < 400) chatPixelTarget = null;
   if (status === 409) addMessage("system", "로봇이 아직 동작 중입니다.");
   else if (status >= 400 && status !== 403) addMessage("error", data.error || `오류 ${status}`);
 }
@@ -659,6 +666,7 @@ function drawReachPreview(rules) {
 }
 
 let pixelTarget=null;
+let chatPixelTarget=null;
 let pixelSelectionGeneration=0;
 function enablePixelButtons() {
   const enabled=Boolean(pixelTarget) && selectedCamera()==='shoulder' && control?.state==='idle' && isOperator;
@@ -739,7 +747,15 @@ $('camera-wrap').addEventListener('pointerenter',updateHoverRing);
 $('camera-wrap').addEventListener('pointerleave',hideHoverRing);
 window.addEventListener('blur',hideHoverRing);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)hideHoverRing();});
+let cameraClickFromChat=false;
+$('camera-wrap').addEventListener('pointerdown',event=>{
+  cameraClickFromChat=event.button===0 && document.activeElement===$('input') && !$('input').disabled;
+  if(cameraClickFromChat)event.preventDefault(); // retain draft focus while selecting a point
+});
+$('camera-wrap').addEventListener('pointercancel',()=>{cameraClickFromChat=false;});
 $('camera-wrap').addEventListener('click',async event=>{
+  const insertIntoChat=cameraClickFromChat;
+  cameraClickFromChat=false;
   if(selectedCamera()!=='shoulder')return;
   const image=$('camera');
   if(!image.naturalWidth || !image.naturalHeight)return;
@@ -755,6 +771,7 @@ $('camera-wrap').addEventListener('click',async event=>{
     const target=await checkPixel(params,AbortSignal.timeout(5000));
     if(generation!==pixelSelectionGeneration)return;
     pixelTarget=target;mark.dataset.state='valid';
+    if(insertIntoChat && document.activeElement===$('input'))insertPixelIntoChat();
     $('pixel-target-status').textContent=`픽셀 (${u}, ${v}) · X ${pixelTarget.x_mm.toFixed(1)} / Y ${pixelTarget.y_mm.toFixed(1)} / Z ${pixelTarget.z_mm.toFixed(2)} mm · 블록 윗면 고정. 실행 시 IK 검사`;
     enablePixelButtons();
   } catch(error) {
@@ -767,10 +784,12 @@ function pixelArguments() {
 }
 $('move-pixel').addEventListener('click',()=>{if(pixelTarget)manual('move_to_pixel',pixelArguments());});
 $('place-pixel').addEventListener('click',()=>{if(pixelTarget)manual('place_at_pixel',pixelArguments());});
-$('pixel-to-chat').addEventListener('click',()=>{
-  if(!pixelTarget)return;
-  $('chat-tab').click();insertText(`헤드캠 선택 픽셀 (u=${pixelTarget.u}, v=${pixelTarget.v}), calibration_id=${pixelTarget.calibration_id}`);
-});
+function insertPixelIntoChat() {
+  if(!pixelTarget || $('input').disabled)return;
+  chatPixelTarget = pixelArguments();
+  $('chat-tab').click();insertText(`헤드캠 선택 픽셀 (u=${pixelTarget.u}, v=${pixelTarget.v})`);
+}
+$('pixel-to-chat').addEventListener('click',insertPixelIntoChat);
 
 async function loadConfig() {
   const response = await fetch("/api/config");

@@ -41,7 +41,8 @@ def test_bad_arguments_never_reach_the_robot():
 def test_task2_block_tool_requires_color_and_bounded_floor():
     tools = {tool.spec.name: tool.spec for tool in build_tools(AppConfig())}
     schema = tools["stack_block_to_floor"].input_schema
-    assert schema["required"] == ["color", "floor"]
+    assert schema["required"] == ["floor"]
+    assert "source" in schema["properties"] and "destination" in schema["properties"]
     assert schema["additionalProperties"] is False
     assert "yellow" in schema["properties"]["color"]["enum"]
     assert schema["properties"]["floor"] == {"type": "integer", "minimum": 0, "maximum": 4}
@@ -55,3 +56,14 @@ def test_agent_core_imports_without_sdks_or_web_framework():
         "'placo', 'lerobot') if m in sys.modules]; assert not bad, bad"
     )
     subprocess.run([sys.executable, "-c", code], check=True, cwd="src")
+
+
+def test_selected_pixel_tool_preserves_address_and_requires_calibration():
+    from unittest.mock import Mock
+    tool = next(t for t in build_tools(AppConfig()) if t.spec.name == "place_at_pixel")
+    args = {"u": 406, "v": 363, "calibration_id": "8a8be3855592f93e"}
+    assert validate_arguments(tool.spec.input_schema, args) is None
+    skills = Mock()
+    tool.run(skills, args)
+    skills.place_at_pixel.assert_called_once_with(**args)
+    assert "calibration_id" in validate_arguments(tool.spec.input_schema, {"u": 406, "v": 363})

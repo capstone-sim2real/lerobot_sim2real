@@ -41,7 +41,7 @@ def register_manual_api(app, service, *, control_ui_version):
     @app.post("/api/chat")
     async def chat(request: Request):
         body = await request.json()
-        return reply(service().chat(token_of(request), str(body.get("text", ""))))
+        return reply(service().chat(token_of(request), str(body.get("text", "")), selected_pixel=body.get("selected_pixel")))
 
     @app.post("/api/mission")
     async def mission(request: Request):
