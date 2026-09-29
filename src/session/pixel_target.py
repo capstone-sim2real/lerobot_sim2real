@@ -51,13 +51,17 @@ def pixel_preview_config(cfg, calib):
             / np.maximum(radius, 1e-9)
         )[:, None]
 
-    arc_px = calib.board_to_pixel(inside_edge(outer))
+    usable_outer = inside_edge(outer)
+    arc_px = calib.board_to_pixel(usable_outer)
     near_vertical_radius = near_vertical_pick_radius_mm(cfg.task1)
-    near_vertical_arc_px = (
-        calib.board_to_pixel(inside_edge(workspace_sector_points_mm(
-            cfg.perception, tuple(base), 3.0, radius_limit_mm=near_vertical_radius
-        ))).tolist() if near_vertical_radius > 0 else []
-    )
+    near_vertical_arc_px = []
+    if near_vertical_radius > 0:
+        radial = usable_outer - base
+        radius = np.linalg.norm(radial, axis=1)
+        near_vertical = base + radial * (
+            np.minimum(radius, near_vertical_radius) / np.maximum(radius, 1e-9)
+        )[:, None]
+        near_vertical_arc_px = calib.board_to_pixel(near_vertical).tolist()
     base_px = calib.board_to_pixel(base[None, :])[0]
     return {
         'reach_arc_px': arc_px.tolist(), 'reach_base_px': base_px.tolist(),

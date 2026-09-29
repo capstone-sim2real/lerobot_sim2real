@@ -1,6 +1,10 @@
+import math
+
+import numpy as np
 import pytest
 from agent_helpers import make_skills
-from session.pixel_target import calibration_id, resolve_pixel
+from control.grasp import near_vertical_pick_radius_mm
+from session.pixel_target import calibration_id, pixel_preview_config, resolve_pixel
 
 
 def setup(tmp_path):
@@ -36,3 +40,19 @@ def test_ik_failure_is_preplanned_before_first_motion(tmp_path,monkeypatch):
     result=sk.move_to_pixel(u,v,key)
     assert not result.ok and result.reason=='ik_gate'
     assert not robot.sent_actions
+
+
+def test_near_vertical_line_matches_lift_tilt_boundary(tmp_path):
+    sk, _, _, _, _ = setup(tmp_path)
+    preview = pixel_preview_config(sk.cfg, sk.s.calib)
+    green = preview["near_vertical_arc_px"]
+    outer = preview["reach_arc_px"]
+    middle = len(green) // 2
+    green_mm = sk.s.calib.pixel_to_board(np.asarray([green[middle]]))[0]
+    outer_mm = sk.s.calib.pixel_to_board(np.asarray([outer[middle]]))[0]
+    base = sk.s.base_xy
+    expected = min(
+        near_vertical_pick_radius_mm(sk.cfg.task1),
+        math.dist(outer_mm, base),
+    )
+    assert math.dist(green_mm, base) == pytest.approx(expected, abs=0.1)
