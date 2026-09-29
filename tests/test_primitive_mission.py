@@ -37,6 +37,8 @@ def test_task1_tries_next_candidate_after_bounded_failure():
         calls.append((name, args))
         if name == "observe_scene":
             return scene(outside, inside)
+        if name == "recover_and_home":
+            return {"ok": True, "reason": "ok", "arm_at_home": True}
         if args["color"] == "green" and len([x for x in calls if x[0] == name]) == 1:
             return {"ok": False, "reason": "neighbour_clearance",
                     "retry_advice": "try_other_target", "state": {"holding": None}}
@@ -80,18 +82,65 @@ def test_task2_uses_floors_in_order_without_model_calls():
     assert clock[0] >= 4.99
 
 
-def test_held_block_failure_stops_before_selecting_another():
+def test_held_block_failure_opens_homes_and_tries_another_target():
     cfg = AppConfig()
+    calls = []
+    outside = {"blue": (300.0, 0.0), "green": (200.0, 0.0)}
+    inside = {}
+
+    def call(name, args):
+        calls.append(name)
+        if name == "observe_scene":
+            return scene(outside, inside)
+        if name == "recover_and_home":
+            return {"ok": True, "reason": "ok", "arm_at_home": True}
+        if args["color"] == "blue":
+            return {"ok": False, "reason": "ik_gate", "state": {"holding": "blue"}}
+        inside["green"] = outside.pop("green")
+        return {"ok": True, "reason": "released", "state": {"holding": None}}
+
+    result = PrimitiveMission(cfg, calibration(), call).run(1)
+    assert result["status"] == "incomplete"
+    assert calls[:5] == ["observe_scene", "move_block_to_slot",
+                         "recover_and_home", "observe_scene", "move_block_to_slot"]
+    assert result["colors"] == ["green"]
+
+
+def test_release_then_failed_check_is_reobserved_before_retry():
+    cfg = AppConfig()
+    outside = {"green": (300.0, 0.0)}
+    inside = {color: (200.0, 0.0) for color in ("red", "blue", "yellow", "wood")}
     calls = []
 
     def call(name, args):
         calls.append(name)
         if name == "observe_scene":
-            return scene({"blue": (300.0, 0.0)}, {})
-        return {"ok": False, "reason": "ik_gate", "state": {"holding": "blue"}}
+            return scene(outside, inside)
+        if name == "recover_and_home":
+            return {"ok": True, "reason": "ok", "arm_at_home": True}
+        inside["green"] = outside.pop("green")
+        return {"ok": False, "reason": "task_incomplete", "failed_stage": "verify",
+                "state": {"holding": None}}
 
     result = PrimitiveMission(cfg, calibration(), call).run(1)
-    assert result["status"] == "needs_recovery"
+    assert result["status"] == "complete"
+    assert calls == ["observe_scene", "move_block_to_slot", "recover_and_home", "observe_scene"]
+
+
+def test_operator_stop_does_not_restart_mission():
+    cfg = AppConfig()
+    stopped = [False]
+    calls = []
+
+    def call(name, args):
+        calls.append(name)
+        if name == "observe_scene":
+            return scene({"green": (300.0, 0.0)}, {})
+        stopped[0] = True
+        return {"ok": False, "reason": "cancelled"}
+
+    result = PrimitiveMission(cfg, calibration(), call, stopped=lambda: stopped[0]).run(1)
+    assert result["status"] == "stopped"
     assert calls == ["observe_scene", "move_block_to_slot"]
 
 
@@ -118,4 +167,28 @@ def test_service_mission_never_calls_the_provider(monkeypatch):
     assert service.runner.history == []
     assert service.gate.state is ControlState.IDLE
     assert any(event.get("type") == "mission_result" for event in events)
+    service.shutdown()
+
+
+def test_service_mission_recovery_uses_worker_without_provider(monkeypatch):
+    from agent.primitive_mission import PrimitiveMission
+    from agent.control import ControlState
+    from test_agent_service import _service
+
+    monkeypatch.setattr(PlaneCalibration, "load", lambda _path: calibration())
+
+    def run(self, task):
+        recovered = self.call("recover_and_home", {})
+        self.emit({"type": "mission_result", "task": task, "status": "incomplete"})
+        return {"status": "incomplete" if recovered["ok"] else "needs_recovery"}
+
+    monkeypatch.setattr(PrimitiveMission, "run", run)
+    service, skills, events = _service([])
+    token = service.acquire_lease(None)
+    assert service.mission(token, 1)[0] == 202
+    service.wait_idle()
+    assert skills.homed == 1
+    assert service.gate.state is ControlState.IDLE
+    assert any(event.get("name") == "recover_and_home"
+               for event in events if event.get("type") == "tool_result")
     service.shutdown()

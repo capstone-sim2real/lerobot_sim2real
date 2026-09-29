@@ -95,6 +95,7 @@ class AgentService:
         self._keyboard_jog = None
         self._auto_home_token: str | None = None
         self._auto_home_lock = threading.Lock()
+        self._shutting_down = threading.Event()
         self._telemetry_future = None
         self._telemetry_cache = {}
 
@@ -117,6 +118,7 @@ class AgentService:
         self.started = True
 
     def shutdown(self) -> None:
+        self._shutting_down.set()
         if self.gate.state in (ControlState.BUSY, ControlState.HOMING):
             self.cancel.set()
         for thread in list(self._threads):
@@ -207,20 +209,36 @@ class AgentService:
 
                 calib = PlaneCalibration.load(self.cfg.perception.calibration_path)
 
+                def mission_stopped() -> bool:
+                    return (self._shutting_down.is_set()
+                            or self.gate.state is ControlState.STOPPING)
+
                 def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-                    if self.cancel.is_set():
+                    if name == "recover_and_home":
+                        # A tool timeout also sets the cancellation token.
+                        # Clear it only for bounded recovery, never after an
+                        # operator STOP or while the server is shutting down.
+                        with self._auto_home_lock:
+                            if mission_stopped():
+                                return {"ok": False, "reason": "cancelled"}
+                            self.cancel.clear()
+                    elif self.cancel.is_set():
                         return {"ok": False, "reason": "cancelled",
                                 "detail": "비상정지로 실행하지 않았습니다."}
                     call_id = f"mission_{next(self._ids)}"
                     self._publish({"type": "tool_call", "id": call_id, "name": name,
                                    "arguments": arguments, "mission": task})
-                    result = self.registry.execute(ToolCall(call_id, name, arguments))
+                    if name == "recover_and_home":
+                        skill = self.registry.run_skill(name, lambda skills: skills.recover_and_home())
+                        content = skill.to_envelope()
+                    else:
+                        content = self.registry.execute(ToolCall(call_id, name, arguments)).content
                     self._publish({"type": "tool_result", "id": call_id, "name": name,
-                                   "result": result.content, "mission": task})
-                    return result.content
+                                   "result": content, "mission": task})
+                    return content
 
                 result = PrimitiveMission(
-                    self.cfg, calib, call, stopped=self.cancel.is_set,
+                    self.cfg, calib, call, stopped=mission_stopped,
                     emit=self._publish,
                 ).run(task)
                 logger.info("Task %s no-LLM mission ended: %s", task, result)

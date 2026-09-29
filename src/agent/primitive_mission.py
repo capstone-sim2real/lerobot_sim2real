@@ -13,7 +13,6 @@ from typing import Any, Callable
 from config import AppConfig
 from fsm.task1 import block_priority
 from perception.homography import PlaneCalibration
-from session.results import ROBOT_FAULT_REASONS
 
 Call = Callable[[str, dict[str, Any]], dict[str, Any]]
 Emit = Callable[[dict[str, Any]], None]
@@ -36,8 +35,14 @@ class PrimitiveMission:
         started = self.clock()
         deadline = started + (180 if task == 1 else 300)
         completed: list[str] = []
-        attempted: set[str] = set()
+        attempted: dict[str, int] = {}
         failures: list[dict[str, str]] = []
+        start_pose_recovered = False
+
+        def recovered_home(result: dict[str, Any]) -> bool:
+            return (bool(result.get("ok"))
+                    and result.get("arm_at_home") is not False
+                    and (result.get("state") or {}).get("arm_at_home") is not False)
 
         def finish(status: str, detail: str) -> dict[str, Any]:
             result = dict(task=task, status=status, detail=detail,
@@ -51,10 +56,17 @@ class PrimitiveMission:
             if not seen.get("ok"):
                 return finish("incomplete", f"카메라 관찰 실패: {seen.get('reason')}")
             state = seen.get("state") or {}
-            if state.get("holding"):
-                return finish("needs_recovery", "블록을 쥔 상태여서 자동 선택을 중단했습니다.")
-            if not state.get("arm_at_home"):
-                return finish("needs_recovery", "팔이 홈이 아니어서 자동 선택을 중단했습니다.")
+            if state.get("holding") or not state.get("arm_at_home"):
+                if start_pose_recovered:
+                    return finish("needs_recovery", "home 복귀 후에도 안전한 시작 자세가 확인되지 않았습니다.")
+                recovered = self.call("recover_and_home", {})
+                if self.stopped():
+                    break
+                if not recovered_home(recovered):
+                    return finish("needs_recovery", "시작 자세의 home 복귀에 실패했습니다.")
+                start_pose_recovered = True
+                continue
+            start_pose_recovered = False
             objects = seen.get("objects") or []
             outside = {item["color"] for item in objects if "slot" not in item}
             inside = {item["color"] for item in objects if "slot" in item}
@@ -90,7 +102,8 @@ class PrimitiveMission:
 
             if self.stopped():
                 break
-            choices = [item for item in candidates if item["color"] not in attempted]
+            choices = [item for item in candidates
+                       if attempted.get(item["color"], 0) < self.cfg.fsm.max_retries_per_block]
             if not choices:
                 return finish("incomplete", "관찰된 모든 후보가 이번 실행에서 실패했습니다.")
             target = max(
@@ -113,10 +126,18 @@ class PrimitiveMission:
                 continue
             failures.append(dict(color=color, reason=str(result.get("reason")),
                                  stage=str(result.get("failed_stage", ""))))
-            holding = (result.get("state") or {}).get("holding", result.get("holding"))
-            if (result.get("reason") in ROBOT_FAULT_REASONS or holding
-                    or result.get("retry_advice") == "ask_operator"):
-                return finish("needs_recovery", f"{color} 동작 실패: {result.get('reason')}")
-            attempted.add(color)
+            if self.stopped():
+                break
+            # A composite may have released the block before its final check
+            # failed. Open, return home, and observe again before deciding
+            # whether the block still needs a slot or floor.
+            recovered = self.call("recover_and_home", {})
+            if self.stopped():
+                break
+            if not recovered_home(recovered):
+                return finish("needs_recovery", f"{color} 실패 후 home 복귀 실패: {recovered.get('reason')}")
+            attempted[color] = (self.cfg.fsm.max_retries_per_block
+                                if result.get("retry_advice") == "try_other_target"
+                                else attempted.get(color, 0) + 1)
         return finish("stopped" if self.stopped() else "timeout",
                       "중단되었습니다." if self.stopped() else "미션 시간 한도에 도달했습니다.")
