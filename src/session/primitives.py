@@ -578,11 +578,13 @@ class PrimitiveSkills(Skills):
                 # Use it before trying fixed-XY vertical IK at the far reach.
                 held = self.s.held
                 reverse_available = (
-                    held is not None and abs(self._held_radial_tilt_deg) >= 5.0
+                    held is not None and abs(self._held_radial_tilt_deg) > self.cfg.task1.near_vertical_pick_max_deg
                     and held.attempt.hover_xy_mm is not None
                     and held.attempt.hover_z_mm > actual_z
                 )
-                if held is not None and not reverse_available:
+                if (held is not None and not reverse_available
+                        and abs(held.attempt.radial_tilt_deg)
+                            > self.cfg.task1.near_vertical_pick_max_deg):
                     if self._recover_loaded_reverse_lift(
                             required_z - self.limits.lateral_clearance_tolerance_mm,
                             max_command_z_mm=required_z if stage == "lift_held" else None):
@@ -669,9 +671,12 @@ class PrimitiveSkills(Skills):
                 steps=steps, color=color, slot=slot,
                 holding=self.s.held.color if self.s.held else None,
             )
-        # Retreat only 30 mm from the grasp. Reach the zone-crossing height
-        # in a separate inward/upward move, before entering the zone.
-        failed = run("lift_held", self._lift_held_joint_space)
+        # A near-vertical grasp keeps the original measured, fixed-XY lift.
+        # Oblique far grasps use the cached reverse path for the first 30 mm.
+        if abs(self.s.held.attempt.radial_tilt_deg) <= self.cfg.task1.near_vertical_pick_max_deg:
+            failed = lift_until_clear("lift_held", self.limits.lateral_clearance_mm)
+        else:
+            failed = run("lift_held", self._lift_held_joint_space)
         if failed is not None:
             return failed
 
@@ -1006,7 +1011,7 @@ class PrimitiveSkills(Skills):
                 if self._lateral_clearance_ready(actual_z):
                     return None
                 held = self.s.held
-                if (held is not None and abs(self._held_radial_tilt_deg) >= 5.0
+                if (held is not None and abs(self._held_radial_tilt_deg) > self.cfg.task1.near_vertical_pick_max_deg
                         and held.attempt.hover_xy_mm is not None
                         and held.attempt.hover_z_mm >= required_z):
                     rise = min(held.attempt.hover_z_mm - actual_z,
@@ -1836,7 +1841,7 @@ class PrimitiveSkills(Skills):
         # Use it to clear the block before an ordinary upward jog; fixed-XY
         # lift at the far reach can miss the strict 5 mm jog IK gate.
         if (self.s.held is not None and up_mm > 0 and forward_mm == left_mm == 0
-                and abs(self._held_radial_tilt_deg) >= 5.0):
+                and abs(self._held_radial_tilt_deg) > self.cfg.task1.near_vertical_pick_max_deg):
             retreat = self.s.held.attempt
             clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
             first_retreat_z = (self.s.grasp_z_mm

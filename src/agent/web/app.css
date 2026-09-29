@@ -229,6 +229,8 @@ body[data-camera=wrist] #camera-tools,body[data-camera=wrist] .perception-contro
 #pixel-reach-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;}
 #pixel-reach-overlay .reach-fill {fill:rgba(239,68,68,.035);}
 #pixel-reach-overlay .reach-arc {fill:none;stroke:rgba(239,68,68,.30);stroke-width:1.5;}
+#pixel-reach-overlay .reach-near-vertical {fill:none;stroke:#16a34a;stroke-width:2.5;}
+#pixel-reach-overlay .reach-near-vertical-label {fill:#16a34a;font-size:15px;font-weight:700;paint-order:stroke;stroke:var(--background);stroke-width:3px;}
 #pixel-target-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
 .pixel-workspace {fill:#10b98116;stroke:#10b981;stroke-width:2;pointer-events:none;}
 body[data-camera=shoulder] #camera-wrap.pixel-pointer-active {cursor:none;}

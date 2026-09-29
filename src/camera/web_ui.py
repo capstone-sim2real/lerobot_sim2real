@@ -459,6 +459,13 @@ _PAGE = """<!doctype html>
           const middle = arc[Math.floor(arc.length / 2)];
           const boundaryLabel = boundary.label || `${Number(boundary.radius_mm).toFixed(0)} mm`;
           drawText(context, boundaryLabel, [middle[0] + 8, middle[1] - 8], '#ff9800');
+          const nearVertical = boundary.near_vertical_arc_px;
+          if (nearVertical?.length >= 2) {
+            drawPolyline(context, nearVertical, '#16a34a', 3);
+            const nearMiddle = nearVertical[Math.floor(nearVertical.length / 2)];
+            drawText(context, `≤${Number(boundary.near_vertical_max_tilt_deg).toFixed(0)}° pick`,
+              [nearMiddle[0] + 8, nearMiddle[1] - 8], '#16a34a');
+          }
           if (boundary.base_px && arc.length >= 2) {
             const first = arc[0];
             const last = arc[arc.length - 1];

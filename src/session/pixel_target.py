@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 
+from control.grasp import near_vertical_pick_radius_mm
 from perception.detector import point_in_workspace, workspace_radius_at_angle, workspace_sector_points_mm
 from session.grid import in_base_keepout
 from session.factories import calibration_grasp_z_mm
@@ -42,15 +43,26 @@ def pixel_preview_config(cfg, calib):
 
     base = np.asarray(calib.base_xy_mm or (0.0, 0.0), dtype=np.float64)
     outer = workspace_sector_points_mm(cfg.perception, tuple(base), 3.0)
-    radial = outer - base
-    radius = np.linalg.norm(radial, axis=1)
-    usable = base + radial * (
-        np.maximum(0.0, radius - cfg.agent.table_regions.edge_margin_mm) / radius
-    )[:, None]
-    arc_px = calib.board_to_pixel(usable)
+    def inside_edge(points):
+        radial = points - base
+        radius = np.linalg.norm(radial, axis=1)
+        return base + radial * (
+            np.maximum(0.0, radius - cfg.agent.table_regions.edge_margin_mm)
+            / np.maximum(radius, 1e-9)
+        )[:, None]
+
+    arc_px = calib.board_to_pixel(inside_edge(outer))
+    near_vertical_radius = near_vertical_pick_radius_mm(cfg.task1)
+    near_vertical_arc_px = (
+        calib.board_to_pixel(inside_edge(workspace_sector_points_mm(
+            cfg.perception, tuple(base), 3.0, radius_limit_mm=near_vertical_radius
+        ))).tolist() if near_vertical_radius > 0 else []
+    )
     base_px = calib.board_to_pixel(base[None, :])[0]
     return {
         'reach_arc_px': arc_px.tolist(), 'reach_base_px': base_px.tolist(),
+        'near_vertical_arc_px': near_vertical_arc_px,
+        'near_vertical_max_tilt_deg': cfg.task1.near_vertical_pick_max_deg,
         'camera_name': cfg.agent.camera_name,
         'H': calib.H.tolist(), 'image_size': list(calib.image_size),
         'base_xy_mm': list(calib.base_xy_mm or (0.0, 0.0)),

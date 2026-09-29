@@ -24,11 +24,27 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from config import AppConfig, MotionConfig
+from config import AppConfig, MotionConfig, Task1Config
 from control.ik import IkResult, TopDownIK, gripper_frame_offset
 from control.robot_io import BaseRobotIO
 from control.sensing import GraspCheck, check_grasp
 from control.trajectory import TrajectoryPlayer
+
+
+def near_vertical_pick_radius_mm(task: Task1Config) -> float:
+    """Nominal reach whose Task 1 requested pick tilt stays at or below the lift threshold."""
+    limit = task.near_vertical_pick_max_deg
+    if limit < task.pick_tilt_base_deg:
+        return 0.0
+    if limit >= task.pick_tilt_max_deg:
+        return math.inf
+    fraction = (limit - task.pick_tilt_base_deg) / (
+        task.pick_tilt_max_deg - task.pick_tilt_base_deg
+    )
+    return task.pick_tilt_start_radius_mm + fraction * (
+        task.pick_tilt_max_radius_mm - task.pick_tilt_start_radius_mm
+    )
+
 
 
 def _in_jaw_frame(

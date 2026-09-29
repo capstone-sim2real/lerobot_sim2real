@@ -208,6 +208,7 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
         lambda self: (_ for _ in ()).throw(AssertionError("zone placement must not seek contact")),
     )
     lift_commands = []
+    held_lift_commands = []
     retreat_heights = []
     joint_lift_heights = []
     move_relative = sk.move_relative
@@ -216,6 +217,8 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
 
     def record_lift(**kwargs):
         lift_commands.append(kwargs["up_mm"])
+        if sk.s.held is not None:
+            held_lift_commands.append(kwargs["up_mm"])
         return move_relative(**kwargs)
 
     def record_retreat(required_z, **kwargs):
@@ -233,13 +236,9 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
     result = sk.move_block_to_slot("yellow", "top-left")
 
     assert lift_commands and max(lift_commands) < sk.cfg.agent.relative.max_jog_mm
-    assert retreat_heights == [(
-        sk.s.grasp_z_mm + sk.limits.lateral_clearance_mm
-        - sk.limits.lateral_clearance_tolerance_mm, None)]
-    assert joint_lift_heights
-    assert joint_lift_heights[0] <= (
-        sk.s.grasp_z_mm + sk.cfg.task1.tilted_pick_hover_clearance_mm
-        + sk.limits.lateral_clearance_tolerance_mm)
+    assert held_lift_commands
+    assert not retreat_heights
+    assert not joint_lift_heights
     assert result.ok and result.reason == "released"
     assert result.data["slot"] == "top-left"
     assert result.data["miss_mm"] < sk.cfg.agent.slot_snap_radius_mm

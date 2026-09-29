@@ -235,6 +235,7 @@ task1:
   pick_tilt_base_deg: 3.0
   pick_tilt_max_deg: 60.0
   pick_tilt_fallback_deg: [45.0, 30.0, 15.0]
+  near_vertical_pick_max_deg: 5.0
   place_tilt_max_deg: 0.0
   # 배치 시 모델 FK 수평 오차 한도. 실제 블록 수평은 관찰로 확인해야 한다.
   place_level_tolerance_deg: 3.0

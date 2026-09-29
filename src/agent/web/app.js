@@ -647,6 +647,15 @@ function drawReachPreview(rules) {
   const fill=svgEl('polygon',{points:`${base[0]},${base[1]} ${points}`,class:'reach-fill'});
   const line=svgEl('polyline',{points,class:'reach-arc'});
   svg.append(fill,line);
+  const nearVertical=rules.near_vertical_arc_px;
+  if (Array.isArray(nearVertical) && nearVertical.length>=2) {
+    const nearPoints=nearVertical.map(([x,y])=>`${x},${y}`).join(' ');
+    svg.append(svgEl('polyline',{points:nearPoints,class:'reach-near-vertical'}));
+    const middle=nearVertical[Math.floor(nearVertical.length/2)];
+    const label=svgEl('text',{x:middle[0]+8,y:middle[1]-8,class:'reach-near-vertical-label'});
+    label.textContent=`≤${rules.near_vertical_max_tilt_deg}° pick`;
+    svg.append(label);
+  }
 }
 
 let pixelTarget=null;

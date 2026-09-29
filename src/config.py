@@ -503,6 +503,7 @@ class Task1Config:
     pick_tilt_base_deg: float = 3.0
     pick_tilt_max_deg: float = 60.0
     pick_tilt_fallback_deg: list[float] = field(default_factory=lambda: [45.0, 30.0, 15.0])
+    near_vertical_pick_max_deg: float = 5.0
     place_tilt_max_deg: float = 0.0
     # Model-FK tolerance for a held block's level placement approach.
     place_level_tolerance_deg: float = 3.0
@@ -1294,6 +1295,8 @@ def validate_task1(cfg: AppConfig) -> None:
     if any(not 0 <= angle <= cfg.task1.pick_tilt_max_deg
            for angle in cfg.task1.pick_tilt_fallback_deg):
         raise ValueError("task1.pick_tilt_fallback_deg must stay within pick_tilt_max_deg")
+    if not 0 <= cfg.task1.near_vertical_pick_max_deg <= cfg.task1.pick_tilt_max_deg:
+        raise ValueError("task1.near_vertical_pick_max_deg must stay within pick_tilt_max_deg")
     if any(not math.isfinite(angle) or abs(angle) > cfg.agent.relative.max_gripper_roll_deg
            for angle in cfg.task1.place_yaw_fallback_offsets_deg):
         raise ValueError("task1.place_yaw_fallback_offsets_deg exceeds bounded wrist rotation")
