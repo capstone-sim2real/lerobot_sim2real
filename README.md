@@ -256,10 +256,10 @@ Jetson이나 다른 원격 장비에서 실행한다면 브라우저는 해당 �
       <a href="https://www.youtube.com/shorts/AEWSGNCYYoI"><strong>Task 1 · 블록 모으기</strong></a>
     </td>
     <td align="center" width="50%">
-      <a href="https://www.youtube.com/watch?v=4WCohjLxTnY">
-        <img src="https://img.youtube.com/vi/4WCohjLxTnY/hqdefault.jpg" alt="Task 2 블록 탑쌓기 시연 영상 재생" width="480" height="270">
+      <a href="https://www.youtube.com/shorts/N8D6KveiDgM">
+        <img src="https://img.youtube.com/vi/N8D6KveiDgM/hqdefault.jpg" alt="Task 2 블록 탑쌓기 시연 영상 재생" width="480" height="270">
       </a><br>
-      <a href="https://www.youtube.com/watch?v=4WCohjLxTnY"><strong>Task 2 · 블록 탑쌓기</strong></a>
+      <a href="https://www.youtube.com/watch?v=N8D6KveiDgM"><strong>Task 2 · 블록 탑쌓기</strong></a>
     </td>
   </tr>
 </table>
