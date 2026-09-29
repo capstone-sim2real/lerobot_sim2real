@@ -504,7 +504,15 @@ class Task1Config:
     # Model-FK tolerance for a held block's level placement approach.
     place_level_tolerance_deg: float = 3.0
     place_yaw_tolerance_deg: float = 5.0
-    tilted_pick_hover_clearance_mm: float = 35.0
+    # Task 1 accepts any flat orientation. If zone-aligned yaw cannot reach
+    # a slot, search bounded yaw alternatives before rejecting placement.
+    place_yaw_fallback_offsets_deg: list[float] = field(
+        default_factory=lambda: [-15.0, 15.0, -30.0, 30.0, -45.0, 45.0,
+                                 -60.0, 60.0, -75.0, 75.0, -90.0, 90.0])
+    tilted_pick_hover_clearance_mm: float = 30.0
+    # Pre-grasp hover is higher at long reach to absorb measured empty-arm
+    # sag; the first lift after closing still stops at the 30 mm value above.
+    tilted_pick_pregrasp_clearance_mm: float = 50.0
     # Assumption pending hardware measurement: release 15mm above the
     # calibrated block-top plane, without seeking table contact.
     release_clearance_mm: float = 15.0
@@ -989,13 +997,14 @@ class PrimitiveConfig:
     """Experimental bounds, ASSUMED until physically measured. No mission overrides."""
     calibrated_pick: bool = True  # Same calibrated primitive path as default.yaml.
     target_max_age_s: float = 120.0
-    approach_clearance_mm: float = 35.0
-    lateral_clearance_mm: float = 35.0
-    lateral_clearance_tolerance_mm: float = 1.0  # FK/encoder settling near the lift threshold
+    approach_clearance_mm: float = 38.0
+    lateral_clearance_mm: float = 38.0
+    lateral_clearance_tolerance_mm: float = 2.0  # FK/encoder settling near the lift threshold
     zone_release_floor_margin_mm: float = 2.0  # calibrated top plane to minimum release FK
     max_lift_attempts: int = 4
     alignment_tolerance_mm: float = 25.0
     arrival_error_mm: float = 15.0
+    home_fold_radius_mm: float = 40.0  # assumed low-height folding corridor around home XY
     # Measured loaded-arm endpoint sag is 24-29mm at far slots. This applies
     # only while carrying; empty moves retain arrival_error_mm.
     loaded_arrival_error_mm: float = 30.0
@@ -1017,6 +1026,9 @@ class AgentCollectionConfig:
     max_task_text_chars: int = 240
     max_tick_gap_s: float = 0.1
     max_stationary_drift: float = 1.0  # degrees, or normalized gripper percent
+    sequence_settle_window_s: float = 0.3
+    sequence_settle_max_drift: float = 0.25
+    sequence_settle_timeout_s: float = 3.0
     max_mean_period_error: float = 0.1
     idle_poll_s: float = 0.005
 
@@ -1275,6 +1287,11 @@ def validate_task1(cfg: AppConfig) -> None:
     if any(not 0 <= angle <= cfg.task1.pick_tilt_max_deg
            for angle in cfg.task1.pick_tilt_fallback_deg):
         raise ValueError("task1.pick_tilt_fallback_deg must stay within pick_tilt_max_deg")
+    if any(not math.isfinite(angle) or abs(angle) > cfg.agent.relative.max_gripper_roll_deg
+           for angle in cfg.task1.place_yaw_fallback_offsets_deg):
+        raise ValueError("task1.place_yaw_fallback_offsets_deg exceeds bounded wrist rotation")
+    if cfg.task1.tilted_pick_pregrasp_clearance_mm < cfg.task1.tilted_pick_hover_clearance_mm:
+        raise ValueError("task1.tilted_pick_pregrasp_clearance_mm must cover the first lift")
     if cfg.task1.tilted_pick_hover_clearance_mm < cfg.agent.calibration_clearance.obstacle_height_mm:
         raise ValueError("task1.tilted_pick_hover_clearance_mm must clear a block")
     if not 0 <= cfg.task1.place_tilt_max_deg <= cfg.ik.max_tilt_error_deg:
@@ -1418,10 +1435,14 @@ def validate_agent(cfg: AppConfig) -> None:
         raise ValueError("agent.collection.root must be set")
     if agent.collection.max_steps < 1 or agent.collection.max_task_text_chars < 1:
         raise ValueError("agent.collection sequence limits must be positive")
-    for name in ("max_tick_gap_s", "max_stationary_drift", "max_mean_period_error", "idle_poll_s"):
+    for name in ("max_tick_gap_s", "max_stationary_drift", "sequence_settle_window_s",
+                 "sequence_settle_max_drift", "sequence_settle_timeout_s",
+                 "max_mean_period_error", "idle_poll_s"):
         value = getattr(agent.collection, name)
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"agent.collection.{name} must be finite and positive")
+    if agent.collection.sequence_settle_max_drift >= agent.collection.max_stationary_drift:
+        raise ValueError("agent.collection.sequence_settle_max_drift must be below max_stationary_drift")
     primitive = agent.primitives
     for name in ("target_max_age_s", "approach_clearance_mm", "lateral_clearance_mm",
                  "lateral_clearance_tolerance_mm", "zone_release_floor_margin_mm",

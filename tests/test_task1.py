@@ -156,7 +156,7 @@ def test_far_pick_allows_sixty_without_changing_placement():
 
 
 
-def test_unreachable_sixty_uses_lower_gated_tilt():
+def test_far_pick_uses_smallest_gated_tilt():
     from control.grasp import plan_grasp_attempts
 
     class SideIk(_AlwaysReachableIk):
@@ -167,6 +167,23 @@ def test_unreachable_sixty_uses_lower_gated_tilt():
 
     cfg = AppConfig()
     plan = plan_grasp_attempts(SideIk(), cfg, 300.0, 80.0, 4.0, radial_tilt_deg=-60.0)
-    assert plan.radial_tilt_deg == -15.0
+    assert plan.radial_tilt_deg == -3.0
     assert plan.attempts[0].reachable
-    assert plan.attempts[0].radial_tilt_deg == -15.0
+    assert plan.attempts[0].radial_tilt_deg == -3.0
+
+
+def test_far_pick_refines_between_configured_tilts():
+    from control.grasp import plan_grasp_attempts
+
+    class ThresholdIk(_AlwaysReachableIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            result = super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+            if abs(radial_tilt_deg) < 20.0:
+                result.position_error_mm = 30.0
+            return result
+
+    cfg = AppConfig()
+    plan = plan_grasp_attempts(ThresholdIk(), cfg, 300.0, 80.0, 4.0,
+                               radial_tilt_deg=-60.0)
+    assert plan.radial_tilt_deg == -22.5
+    assert plan.attempts[0].reachable

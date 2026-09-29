@@ -19,8 +19,10 @@ def build_primitive_tools(cfg):
                              lambda skills, args, method=name: getattr(skills, method)(**args), moves))
     add("move_block_to_slot",
         "Task 1: transfer one named outside-zone block into one free zone slot. The server "
-        "observes before picking, checks grasp and clearance after each primitive, stops on "
-        "failure, then homes and verifies the actual slot. Prefer this over issuing the "
+        "observes before picking, checks grasp and clearance after each primitive, tries "
+        "another free slot while still holding if the requested slot fails IK, makes "
+        "one bounded retry after safe recovery, then homes and verifies the actual slot. "
+        "Prefer this over issuing the "
         "same primitive sequence one call at a time.",
         {"color": {"type": "string", "enum": sorted(cfg.perception.color_prototypes)},
          "slot": {"type": "string", "enum": list(cfg.agent.zone_slots.labels)}},

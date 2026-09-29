@@ -68,6 +68,59 @@ def test_low_lateral_move_and_unverified_carry_refused():
     assert sk.move_relative(forward_mm=20).ok
 
 
+def test_vertical_lift_ignores_xy_feedback_jitter(monkeypatch):
+    sk, _, _ = fixture()
+    measured = sk.s.arm_position_mm
+    calls = 0
+
+    def jittered_position():
+        nonlocal calls
+        calls += 1
+        x, y, z = measured()
+        return (x + 0.2, y, z) if calls == 1 else (x, y, z)
+
+    monkeypatch.setattr(sk.s, "arm_position_mm", jittered_position)
+    assert sk.move_relative(up_mm=50).ok
+
+
+def test_calibrated_tilted_hover_checks_planned_hover_not_block_centre(monkeypatch):
+    from types import SimpleNamespace
+
+    sk, _, _ = fixture()
+    assert sk.observe_scene().ok
+    sk.limits.calibrated_pick = True
+    sk._target = ("object", "yellow_1", sk.observation_id, None, None, None, "pregrasp")
+    sk._pick_calibration = SimpleNamespace(attempt=SimpleNamespace(
+        hover_xy_mm=(100.0, 40.0), xy_mm=(160.0, 40.0)))
+    monkeypatch.setattr(sk._pick_calibration, "baseline", None, raising=False)
+    monkeypatch.setattr(sk, "_calibrated_target",
+                        lambda *_args, **_kwargs: SkillResult(True, "move_to_target", "ok"))
+    monkeypatch.setattr(sk.s, "arm_position_mm", lambda: (100.0, 40.0, 39.0))
+    assert sk.move_to_target("object", "grasp", "yellow_1", sk.observation_id).ok
+
+    sk._target = ("object", "yellow_1", sk.observation_id, None, None, None, "pregrasp")
+    monkeypatch.setattr(sk.s, "arm_position_mm", lambda: (130.0, 40.0, 39.0))
+    result = sk.move_to_target("object", "grasp", "yellow_1", sk.observation_id)
+    assert not result.ok
+    assert "hover drift" in result.detail
+
+
+def test_loaded_reverse_lift_uses_inward_upward_ik_path(monkeypatch):
+    from types import SimpleNamespace
+
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=320.0, shoulder_lift=0.0, elbow_flex=20.0)
+    sk.s.held = SimpleNamespace(color="yellow", over_xy_mm=None)
+    monkeypatch.setattr(sk, "_held_check", lambda: True)
+    monkeypatch.setattr(sk, "_observed_scene", None)
+    assert sk._recover_loaded_reverse_lift(48.0)
+    reached = sk.s.arm_position_mm()
+    assert reached[0] < 320.0 and reached[2] >= 48.0
+    assert any("shoulder_pan" in action and "elbow_flex" in action
+               for action in robot.sent_actions)
+    assert sk.s.held.over_xy_mm == reached[:2]
+
+
 def test_primitive_preplace_rejects_slot_occupied_by_another_block():
     sk, _, _ = fixture()
     pick(sk)
@@ -155,21 +208,156 @@ def test_block_transfer_uses_gated_primitives_and_verifies_actual_slot(monkeypat
         lambda self: (_ for _ in ()).throw(AssertionError("zone placement must not seek contact")),
     )
     lift_commands = []
+    retreat_heights = []
+    joint_lift_heights = []
     move_relative = sk.move_relative
+    recover_lift = sk._recover_loaded_reverse_lift
+    joint_lift = sk._lift_held_joint_space
 
     def record_lift(**kwargs):
         lift_commands.append(kwargs["up_mm"])
         return move_relative(**kwargs)
 
+    def record_retreat(required_z, **kwargs):
+        retreat_heights.append((required_z, kwargs.get("max_command_z_mm")))
+        return recover_lift(required_z, **kwargs)
+
+    def record_joint_lift():
+        result = joint_lift()
+        joint_lift_heights.append(sk.s.arm_position_mm()[2])
+        return result
+
     monkeypatch.setattr(sk, "move_relative", record_lift)
+    monkeypatch.setattr(sk, "_recover_loaded_reverse_lift", record_retreat)
+    monkeypatch.setattr(sk, "_lift_held_joint_space", record_joint_lift)
     result = sk.move_block_to_slot("yellow", "top-left")
 
     assert lift_commands and max(lift_commands) < sk.cfg.agent.relative.max_jog_mm
+    assert retreat_heights == [(
+        sk.s.grasp_z_mm + sk.limits.lateral_clearance_mm
+        - sk.limits.lateral_clearance_tolerance_mm, None)]
+    assert joint_lift_heights
+    assert joint_lift_heights[0] <= (
+        sk.s.grasp_z_mm + sk.cfg.task1.tilted_pick_hover_clearance_mm
+        + sk.limits.lateral_clearance_tolerance_mm)
     assert result.ok and result.reason == "released"
     assert result.data["slot"] == "top-left"
     assert result.data["miss_mm"] < sk.cfg.agent.slot_snap_radius_mm
     assert world.held is None
     assert sk.s.arm_at_home()
+
+
+def test_task1_preplace_can_use_unaligned_yaw_when_aligned_yaw_fails(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    sk._held_pick_yaw_deg = 0.0
+    sk._held_block_angle_deg = 30.0
+    monkeypatch.setattr(sk.s.ik, "neutral_yaw_deg", lambda *_args: 0.0)
+    solve = sk._solve
+
+    def only_fallback_yaw(xyz, **kwargs):
+        if kwargs.get("yaw_deg") != -60.0:
+            raise ValueError("aligned yaw misses clearance")
+        return solve(xyz, **kwargs)
+
+    monkeypatch.setattr(sk, "_solve", only_fallback_yaw)
+    xy = sk.s.slot_centres[0]
+    yaw, aligned = sk._choose_place_yaw(
+        (*xy, sk.s.grasp_z_mm + sk.limits.approach_clearance_mm), 0.0)
+    assert yaw == -60.0 and not aligned
+
+
+def test_unreachable_slot_keeps_block_held_for_another_slot(monkeypatch):
+    sk, world, _ = fixture()
+    move_to_target = sk.move_to_target
+
+    def unreachable_top_right(target_type, phase, *args, **kwargs):
+        if target_type == "slot" and phase == "preplace" and kwargs.get("slot") == "top-right":
+            return SkillResult(False, "move_to_target", "ik_gate",
+                               "No reachable placement yaw")
+        return move_to_target(target_type, phase, *args, **kwargs)
+
+    monkeypatch.setattr(sk, "move_to_target", unreachable_top_right)
+    monkeypatch.setattr(sk, "_put_held_block_on_table",
+                        lambda *_args: (_ for _ in ()).throw(
+                            AssertionError("do not set down a held block for one unreachable slot")))
+    result = sk.move_block_to_slot("yellow", "top-right")
+    assert result.ok and result.data["recovery"] == "alternate_slot_while_held"
+    assert result.data["requested_slot"] == "top-right"
+    assert result.data["slot"] != "top-right"
+    assert world.held is None
+
+
+def test_cached_high_pregrasp_still_lifts_only_30mm_first():
+    sk, _, _ = fixture()
+    sk.cfg.motion.descent_step_per_tick = 0.3
+    pick(sk)
+    attempt = sk.s.held.attempt
+    hover = replace(attempt.hover, joints={**attempt.hover.joints,
+                                           "elbow_flex": sk.s.grasp_z_mm + 50.0})
+    sk.s.held.attempt = replace(attempt, hover=hover,
+                                hover_z_mm=sk.s.grasp_z_mm + 50.0)
+    result = sk._lift_held_joint_space()
+    assert result.ok, result
+    assert sk.s.arm_position_mm()[2] <= (
+        sk.s.grasp_z_mm + sk.cfg.task1.tilted_pick_hover_clearance_mm
+        + sk.limits.lateral_clearance_tolerance_mm)
+
+
+def test_verified_grasp_survives_transport_load_relaxation(monkeypatch):
+    sk, _, robot = fixture()
+    pick(sk)
+    read_loads = robot.read_loads
+
+    def relaxed_load():
+        loads = read_loads()
+        loads["gripper"] = 56
+        return loads
+
+    monkeypatch.setattr(robot, "read_loads", relaxed_load)
+    result = sk._lift_held_joint_space()
+    assert result.ok and result.data["initial_lift_mm"] >= (
+        sk.cfg.task1.tilted_pick_hover_clearance_mm
+        - sk.limits.lateral_clearance_tolerance_mm)
+    robot.joints["gripper"] = 3.4
+    assert not sk._held_check()
+
+
+def test_loaded_endpoint_miss_is_recoverable(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    start = sk.s.arm_position_mm()
+    monkeypatch.setattr(sk.s.player, "move_through", lambda *_args, **_kwargs: None)
+    sk.limits.calibrated_pick = False
+    result = sk._move("move_to_target", (start[0] + 40.0, start[1], start[2]))
+    assert not result.ok and result.reason == "grasp_blocked"
+    assert result.data["target_mm"] and result.data["measured_fk_mm"]
+    assert sk.s.held is not None
+
+
+def test_loaded_zone_carry_rejects_low_planned_fk_before_motion(monkeypatch):
+    from agent_helpers import FakeIk
+    from control.ik import IkResult
+
+    class LowZoneIk(FakeIk):
+        def solve(self, x_mm, y_mm, z_mm, yaw_deg=None, radial_tilt_deg=0.0):
+            plan = super().solve(x_mm, y_mm, z_mm, yaw_deg, radial_tilt_deg)
+            if x_mm >= 200.0:
+                joints = {**plan.joints, "elbow_flex": z_mm - 12.0}
+                return IkResult(joints, 12.0, plan.tilt_error_deg)
+            return plan
+
+    sk, _, robot = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    sk.s._ik = LowZoneIk()
+    sent_before = len(robot.sent_actions)
+    result = sk._move("move_to_target", (250.0, 0.0, 48.0),
+                      max_ik_error_mm=20.0, level_during_carry=True)
+    assert not result.ok and result.reason == "ik_gate"
+    assert "below clearance" in result.detail
+    assert len(robot.sent_actions) == sent_before
 
 
 def test_zone_drop_requires_verified_height_before_release():
@@ -183,6 +371,40 @@ def test_zone_drop_requires_verified_height_before_release():
     assert dropped.data["drop_z_mm"] == sk.s.drop_z_mm
     assert sk.open_gripper().ok
     assert world.held is None
+
+
+def test_zone_drop_accepts_small_loaded_fk_undershoot(monkeypatch):
+    sk, _, _ = fixture()
+    pick(sk)
+    assert sk.move_relative(up_mm=50).ok
+    assert sk.move_to_target("slot", "preplace", slot="top-left").ok
+    start = sk.s.arm_position_mm()
+    measured = [start]
+    monkeypatch.setattr(sk.s, "arm_position_mm", lambda: measured[0])
+    monkeypatch.setattr(
+        sk.s.player, "move_to",
+        lambda *_args, **_kwargs: measured.__setitem__(
+            0, (*start[:2], sk.s.grasp_z_mm + sk.limits.zone_release_floor_margin_mm + 0.3)),
+    )
+    result = sk.drop_at_zone_target()
+    assert result.ok and result.data["release_mode"] == "height_drop"
+    assert sk.open_gripper().ok
+
+
+def test_block_transfer_retries_after_safe_home(monkeypatch):
+    sk, _, _ = fixture()
+    calls = []
+    results = iter((
+        SkillResult(False, "move_block_to_slot", "limit_exceeded", data={"failed_stage": "lift_empty"}),
+        SkillResult(True, "move_block_to_slot", "released"),
+    ))
+    monkeypatch.setattr(sk, "_move_block_to_slot_once", lambda *_args: next(results))
+    monkeypatch.setattr(sk.s, "arm_at_home", lambda: False)
+    monkeypatch.setattr(sk, "return_to_home",
+                        lambda: calls.append("home") or SkillResult(True, "return_to_home", "ok"))
+    result = sk.move_block_to_slot("yellow", "top-left")
+    assert result.ok and calls == ["home"]
+    assert len(result.data["attempts"]) == 2
 
 
 def test_block_transfer_stops_before_transport_when_grasp_fails(monkeypatch):
@@ -328,3 +550,42 @@ def test_task2_can_repick_fallen_block_inside_zone():
     result = sk.stack_block_to_floor("yellow", 0)
     assert result.ok and result.data["floor"] == 0
     assert world.held is None
+
+
+def test_home_does_not_sweep_low_when_vertical_lift_is_unreachable(monkeypatch):
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=230.0, elbow_flex=15.0)
+    monkeypatch.setattr(sk.s, "lift_in_place", lambda: False)
+    home = Mock(side_effect=AssertionError("unsafe home motion"))
+    monkeypatch.setattr(sk.s, "go_home", home)
+    with pytest.raises(TimeoutError, match="hover clearance"):
+        sk.s.return_home_safely()
+    home.assert_not_called()
+
+
+def test_home_can_fold_when_low_but_already_in_home_column(monkeypatch):
+    sk, _, robot = fixture()
+    robot.joints.update(shoulder_pan=170.0, shoulder_lift=25.0, elbow_flex=30.0)
+    monkeypatch.setattr(sk.s, "lift_in_place", lambda: False)
+    home = Mock()
+    monkeypatch.setattr(sk.s, "go_home", home)
+    lifted, at_home = sk.s.return_home_safely()
+    assert not lifted and not at_home
+    home.assert_called_once_with()
+
+
+def test_low_home_path_requires_rise_before_lateral_sweep():
+    from session.arm_session import _low_home_path_clear
+
+    common = dict(safe_z=35.0, home_radius=40.0,
+                  low_lateral_limit=20.0, tolerance=2.0)
+    assert _low_home_path_clear(
+        (280.0, 0.0, 17.0),
+        [(275.0, 0.0, 27.0), (265.0, 0.0, 37.0),
+         (200.0, 0.0, 65.0), (158.0, 0.0, 8.0)],
+        (157.0, 0.0), **common)
+    assert not _low_home_path_clear(
+        (280.0, 0.0, 17.0),
+        [(250.0, 0.0, 20.0), (220.0, 0.0, 40.0),
+         (158.0, 0.0, 8.0)],
+        (157.0, 0.0), **common)

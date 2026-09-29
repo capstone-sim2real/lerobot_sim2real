@@ -74,8 +74,6 @@ class AgentService:
         self._worker = RobotWorker(skills_factory)
         self._ids = itertools.count(1)
         self._threads: list[threading.Thread] = []
-        self._stop_recovery_lock = threading.Lock()
-        self._stop_recovery_pending = 0
         self.gate = ControlGate(
             on_stop=cancel.set,
             lease_grace_s=cfg.agent.lease_grace_s,
@@ -307,25 +305,13 @@ class AgentService:
             robot_fault = robot_fault or cleanup.robot_fault
         fault = robot_fault or self.cancel.is_set()
         self.gate.finish(robot_fault=fault, message="동작이 중단되었습니다. home 복귀가 필요합니다." if fault else None)
-        self._maybe_auto_recover()
 
     def stop(self) -> dict[str, Any]:
-        # Only an explicit STOP button press requests automatic recovery.
-        # A lost lease or robot fault still leaves the arm stopped for inspection.
-        with self._stop_recovery_lock:
-            stopped = self.gate.request_stop()
-            if stopped:
-                self._stop_recovery_pending += 1
+        # STOP only cancels motion. Homing is a separate, deliberate action:
+        # the interrupted pose may be too low for a safe automatic retreat.
+        stopped = self.gate.request_stop()
         self._publish({"type": "stop_pressed", "effective": stopped})
-        self._maybe_auto_recover()
         return {"stopped": stopped, **self.gate.snapshot()}
-
-    def _maybe_auto_recover(self) -> None:
-        with self._stop_recovery_lock:
-            if not self._stop_recovery_pending or not self.gate.begin_auto_home():
-                return
-            self._stop_recovery_pending -= 1
-        self._spawn(self._home_job, "so101-agent-stop-home")
 
     def home(self, token: str | None) -> tuple[int, dict[str, Any]]:
         if not self.gate.check(token):
@@ -341,7 +327,6 @@ class AgentService:
         self.cancel.clear()
         if self.gate.state is not ControlState.HOMING:
             self.gate.finish_home(False, message="home 복귀 전에 다시 정지되었습니다.")
-            self._maybe_auto_recover()
             return
         call_id = f"home_{next(self._ids)}"
         self._publish({"type": "tool_call", "id": call_id, "name": "recover_and_home", "arguments": {}, "direct": True})
@@ -350,7 +335,6 @@ class AgentService:
         self._publish({"type": "tool_result", "id": call_id, "name": "recover_and_home", "result": envelope, "direct": True})
         at_home = bool(result.ok and result.data.get("arm_at_home"))
         self.gate.finish_home(at_home, message=None if at_home else result.detail)
-        self._maybe_auto_recover()
 
     def reset_chat(self, token: str | None) -> tuple[int, dict]:
         if not self.gate.check(token):

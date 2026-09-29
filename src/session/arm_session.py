@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -43,7 +44,7 @@ from control.task1_transport import (
     release_at,
     solve_place_point,
 )
-from control.trajectory import TrajectoryPlayer
+from control.trajectory import TrajectoryPlayer, interpolate
 from perception.detector import point_in_workspace
 from perception.homography import PlaneCalibration
 from perception.scene import Scene, detect_scene
@@ -56,6 +57,41 @@ logger = logging.getLogger(__name__)
 
 XY = tuple[float, float]
 PICK_TILT_KEY = "task1_pick_radial_tilt_deg"
+
+
+def _low_home_path_clear(
+    start: tuple[float, float, float],
+    trace: list[tuple[float, float, float]],
+    home_xy: tuple[float, float],
+    *,
+    safe_z: float,
+    home_radius: float,
+    low_lateral_limit: float,
+    tolerance: float,
+) -> bool:
+    """Permit an empty-arm home sweep only if its FK first rises in place.
+
+    The return may descend again only inside the small home column. This is
+    a model preflight, not a visual collision guarantee.
+    """
+    if math.dist(start[:2], home_xy) <= home_radius:
+        return True
+    previous_z = start[2]
+    cleared = False
+    for point in trace:
+        if not cleared:
+            if point[2] + tolerance < previous_z:
+                return False
+            if point[2] + tolerance < safe_z:
+                if math.dist(point[:2], start[:2]) > low_lateral_limit:
+                    return False
+            else:
+                cleared = True
+        elif (point[2] + tolerance < safe_z
+              and math.dist(point[:2], home_xy) > home_radius):
+            return False
+        previous_z = point[2]
+    return cleared
 
 
 class CameraError(RuntimeError):
@@ -406,7 +442,7 @@ class ArmSession:
         target_z = highest_reachable_hover(self.ik, x, y, self.grasp_z_mm, self.cfg, yaw_deg=yaw)
         result = self.ik.solve_holding_wrist_roll(x, y, target_z, joints["wrist_roll"])
         if over_ik_gate(result, self.cfg):
-            logger.warning("vertical lift at x=%.0f y=%.0f misses the IK gate; homing directly", x, y)
+            logger.warning("vertical lift at x=%.0f y=%.0f misses the IK gate", x, y)
             return False
         self.player.move_to(result.joints, max_step=1.0, tol=self.cfg.motion.transit_arrival_tol)
         return True
@@ -426,8 +462,25 @@ class ArmSession:
             lifted = self.lift_in_place()
         except (Cancelled, TimeoutError):
             raise
-        except Exception as exc:  # noqa: BLE001 - FK/IK trouble must not block homing
-            logger.warning("vertical lift before homing skipped: %s", exc)
+        except Exception as exc:  # noqa: BLE001 - report failed clearance without sweeping low
+            logger.warning("vertical lift before homing failed: %s", exc)
+        safe_z = self.grasp_z_mm + self.cfg.motion.hover_min_clearance_mm
+        measured_joints = self.robot.read_joints()
+        measured = self.ik.forward_position_mm(measured_joints)
+        if measured[2] < safe_z - 1.0:
+            home = {joint: value for joint, value in
+                    self.poses.get(self.cfg.motion.home_pose).items()
+                    if joint != "gripper"}
+            home_xy = self.ik.forward_position_mm(home)[:2]
+            trace = [self.ik.forward_position_mm({**measured_joints, **step})
+                     for step in interpolate(measured_joints, home,
+                                             self.cfg.motion.max_step_per_tick)]
+            if (self.held is not None or not _low_home_path_clear(
+                    measured, trace, home_xy, safe_z=safe_z,
+                    home_radius=self.cfg.agent.primitives.home_fold_radius_mm,
+                    low_lateral_limit=self.cfg.agent.calibration_clearance.block_side_mm / 2,
+                    tolerance=self.cfg.agent.primitives.lateral_clearance_tolerance_mm)):
+                raise TimeoutError("Cannot home through blocks below hover clearance")
         self.go_home()
         return lifted, self.arm_at_home()
 

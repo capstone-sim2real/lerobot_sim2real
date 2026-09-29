@@ -35,7 +35,7 @@ def test_stop_locks_until_home_is_verified():
     gate, stops, _snaps, _clock = _gate()
     token = gate.acquire_lease()
     assert gate.request_stop() and gate.state is ControlState.STOPPED
-    assert gate.begin_auto_home()
+    assert gate.try_begin_home(token)
     gate.finish_home(arm_at_home=True)
     gate.try_begin(token, "chat")
     assert gate.request_stop() and stops == [1] and gate.state is ControlState.STOPPING

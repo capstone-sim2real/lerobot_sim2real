@@ -29,6 +29,7 @@ class PrimitiveSkills(Skills):
         self._stack_drop_ready = False
         self._zone_drop_ready = False
         self._zone_drop_xy = None
+        self._zone_retreat_joints = None
         self._grasp_failed = False
         self._pick_calibration = None
         self._pick_ready = False
@@ -319,7 +320,153 @@ class PrimitiveSkills(Skills):
                                             "missing detection is not proof of absence"])
         return replace(result, images=images)
 
+    def _release_held_at_slot_from_recovery(self, color: str, slot: str):
+        """Use a verified, already reached slot pose after a short loaded lift."""
+        if self.s.held is None or self.s.held.color != color:
+            return None
+        labels = list(self.cfg.agent.zone_slots.labels)
+        index = labels.index(slot)
+        xyz = self.s.arm_position_mm()
+        target_xy = self.s.slot_centres[index]
+        if (not self.s.in_zone(xyz[:2])
+                or math.dist(xyz[:2], target_xy) > self.limits.alignment_tolerance_mm
+                or not self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm
+                <= xyz[2] <= self.s.drop_z_mm + 10):
+            return None
+        observed = self.observe_scene()
+        if not observed.ok or not self._held_check():
+            return None
+        scene = self._observed_scene
+        if scene is None or scene.slot_occupancy.get(index) not in (None, color):
+            return None
+        reason, _ = self.placement_verdict(xyz[:2], allow_zone=True,
+                                           ignore_color=color, check_ik=False)
+        if reason is not None:
+            return None
+        self._target = ("slot", None, None, slot, None, None, "preplace")
+        self._zone_drop_xy = tuple(xyz[:2])
+        self._zone_drop_ready = True
+        self._place_yaw_deg = None
+        released = self.open_gripper()
+        if not released.ok:
+            return released
+        home = self.return_to_home()
+        if not home.ok:
+            return home
+        verified = self.observe_scene()
+        landed = self._observed_scene.find(color) if verified.ok else None
+        actual_slot = labels[landed.slot_index] if landed and landed.slot_index is not None else None
+        if actual_slot == slot:
+            return self._result(True, "move_block_to_slot", "released",
+                                f"{color} block observed in {slot} after short-lift recovery.",
+                                color=color, slot=slot, recovery="release_at_reached_slot",
+                                measured_xy_mm=list(landed.center_mm))
+        return self._result(False, "move_block_to_slot", "task_incomplete",
+                            "Block released at the reached slot, but placement was not confirmed.",
+                            retry_advice="retry_ok", color=color, slot=slot,
+                            recovery="release_at_reached_slot", actual_slot=actual_slot)
+
+    def _place_held_in_other_slot(self, color: str, requested_slot: str):
+        """Keep a verified grasp when only the requested slot fails IK."""
+        if self.s.held is None or self.s.held.color != color or not self._held_check():
+            return None
+        scene = self._observed_scene
+        if scene is None:
+            return None
+        labels = list(self.cfg.agent.zone_slots.labels)
+        requested_xy = self.s.slot_centres[labels.index(requested_slot)]
+        alternatives = sorted(
+            (label for index, label in enumerate(labels)
+             if label != requested_slot and scene.slot_occupancy.get(index) is None),
+            key=lambda label: math.dist(
+                self.s.slot_centres[labels.index(label)], requested_xy),
+        )
+        for alternate in alternatives:
+            reached = self.move_to_target("slot", "preplace", slot=alternate)
+            if not reached.ok:
+                if reached.reason == "ik_gate":
+                    continue
+                return reached
+            for action in (self.drop_at_zone_target, self.open_gripper,
+                           self.return_to_home):
+                result = action()
+                if not result.ok:
+                    return result
+            observed = self.observe_scene()
+            landed = self._observed_scene.find(color) if observed.ok else None
+            actual_slot = (labels[landed.slot_index]
+                           if landed and landed.slot_index is not None else None)
+            if actual_slot == alternate:
+                return self._result(
+                    True, "move_block_to_slot", "released",
+                    f"{color} block observed in alternate slot {alternate}.",
+                    color=color, slot=alternate, requested_slot=requested_slot,
+                    recovery="alternate_slot_while_held",
+                    measured_xy_mm=list(landed.center_mm))
+            return self._result(
+                False, "move_block_to_slot", "task_incomplete",
+                f"Released {color} at alternate slot {alternate}, but placement was not confirmed.",
+                retry_advice="retry_ok", color=color, slot=alternate,
+                requested_slot=requested_slot, actual_slot=actual_slot)
+        return None
+
     def move_block_to_slot(self, color: str, slot: str):
+        """Retry a recoverable transfer once, after measured set-down or home."""
+        attempts = []
+        recoverable_stages = {
+            "lift_empty", "pregrasp", "align", "grasp", "close_verify",
+            "lift_held", "prezone_clearance", "preplace", "drop_approach",
+        }
+        for attempt_number in (1, 2):
+            result = self._move_block_to_slot_once(color, slot)
+            attempts.append({"attempt": attempt_number, "reason": result.reason,
+                             "failed_stage": result.data.get("failed_stage")})
+            if result.ok or result.robot_fault or self.s.cancel.is_set():
+                result.data["attempts"] = attempts
+                return result
+            if result.data.get("failed_stage") not in recoverable_stages:
+                result.data["attempts"] = attempts
+                return result
+            if self.s.held is not None:
+                if (result.data.get("failed_stage") == "preplace"
+                        and result.reason == "ik_gate"):
+                    alternate = self._place_held_in_other_slot(color, slot)
+                    if alternate is not None:
+                        attempts[-1]["recovery_reason"] = alternate.reason
+                        alternate.data["attempts"] = attempts
+                        if alternate.ok or self.s.held is None or alternate.robot_fault:
+                            return alternate
+                if result.data.get("failed_stage") == "lift_held":
+                    placed = self._release_held_at_slot_from_recovery(color, slot)
+                    if placed is not None:
+                        attempts[-1]["recovery_reason"] = placed.reason
+                        placed.data["attempts"] = attempts
+                        if placed.ok or self.s.held is None or placed.robot_fault:
+                            return placed
+                recovery = self._put_held_block_on_table(self.s.held.color)
+            elif not self.s.arm_at_home():
+                recovery = self.return_to_home()
+            else:
+                recovery = None
+            if recovery is not None:
+                attempts[-1]["recovery_reason"] = recovery.reason
+                if not recovery.ok:
+                    return self._result(
+                        False, "move_block_to_slot", recovery.reason,
+                        "Transfer failed and bounded recovery could not finish: " + recovery.detail,
+                        retry_advice="ask_operator", failed_stage="recovery",
+                        original_failed_stage=result.data.get("failed_stage"),
+                        original_reason=result.reason, original_steps=result.data.get("steps"),
+                        attempts=attempts, holding=self.s.held.color if self.s.held else None,
+                    )
+            if attempt_number == 2:
+                result.data.update(attempts=attempts, holding=None,
+                                   recovery_completed=True)
+                result.retry_advice = "try_other_target"
+                return result
+        raise AssertionError("bounded Task 1 attempt loop exhausted")
+
+    def _move_block_to_slot_once(self, color: str, slot: str):
         """Run one Task 1 transfer with measured gates between every primitive."""
         action, t0 = "move_block_to_slot", time.monotonic()
         labels = list(self.cfg.agent.zone_slots.labels)
@@ -328,7 +475,7 @@ class PrimitiveSkills(Skills):
         if self.s.held is not None:
             return self._fail(action, "Place the held block before starting another transfer",
                               "already_holding")
-        if self.collection.status().get("episode_open"):
+        if self.collection.status().get("episode_open") and not self.collection.sequence_mode:
             return self._fail(action, "Finish the recording episode before a Task 1 transfer")
 
         steps = []
@@ -336,14 +483,19 @@ class PrimitiveSkills(Skills):
         def run(stage, fn):
             self.s.cancel.raise_if_set()
             result = fn()
-            steps.append({"stage": stage, "reason": result.reason})
+            step = {"stage": stage, "reason": result.reason}
+            if stage in ("lift_held", "prezone_clearance"):
+                step["measured_z_mm"] = round(self.s.arm_position_mm()[2], 1)
+            steps.append(step)
             if result.ok:
+                self.collection.settle_for_sequence_pause()
                 return None
             failed = self._result(
                 False, action, result.reason, result.detail,
                 retry_advice=result.retry_advice, t0=t0,
                 failed_stage=stage, steps=steps, color=color, slot=slot,
                 holding=self.s.held.color if self.s.held else None,
+                failure_measurements=result.data or None,
             )
             failed.images = result.images
             return failed
@@ -384,19 +536,35 @@ class PrimitiveSkills(Skills):
         if failed is not None:
             return failed
 
-        def lift_until_clear(stage):
-            required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+        def lift_until_clear(stage, clearance_mm):
+            required_z = self.s.grasp_z_mm + clearance_mm
+            def ready(z):
+                return z + self.limits.lateral_clearance_tolerance_mm >= required_z
             correction_mm = 0.0
             for _ in range(self.limits.max_lift_attempts):
                 x, y, actual_z = self.s.arm_position_mm()
-                if self._lateral_clearance_ready(actual_z):
+                if ready(actual_z):
                     return None
                 # The selected tilted pick already preflighted a reverse path.
                 # Use it before trying fixed-XY vertical IK at the far reach.
                 held = self.s.held
-                if (held is not None and abs(self._held_radial_tilt_deg) >= 5.0
-                        and held.attempt.hover_xy_mm is not None
-                        and held.attempt.hover_z_mm >= required_z):
+                reverse_available = (
+                    held is not None and abs(self._held_radial_tilt_deg) >= 5.0
+                    and held.attempt.hover_xy_mm is not None
+                    and held.attempt.hover_z_mm > actual_z
+                )
+                if held is not None and not reverse_available:
+                    if self._recover_loaded_reverse_lift(
+                            required_z - self.limits.lateral_clearance_tolerance_mm,
+                            max_command_z_mm=required_z if stage == "lift_held" else None):
+                        steps.append({"stage": stage, "reason": "moved",
+                                      "measured_z_mm": round(self.s.arm_position_mm()[2], 1)})
+                        return None
+                    return run(stage, lambda: self._result(
+                        False, "move_relative", "grasp_blocked",
+                        "Loaded inward/upward lift did not reach clearance: "
+                        + self._loaded_lift_diagnostic))
+                if reverse_available:
                     rise = min(held.attempt.hover_z_mm - actual_z,
                                self.cfg.agent.relative.max_jog_mm)
                     if rise > 0:
@@ -436,15 +604,20 @@ class PrimitiveSkills(Skills):
                 error_limit = (self.limits.loaded_arrival_error_mm if self.s.held is not None
                                else self.limits.arrival_error_mm)
                 correction_mm = min(max(0.0, target_z - actual_z), error_limit)
-            if self._lateral_clearance_ready(self.s.arm_position_mm()[2]):
+            # The last measured FK sample can precede the motor's final settle.
+            if not ready(self.s.arm_position_mm()[2]):
+                time.sleep(self.cfg.motion.descent_settle_s)
+            measured_z = self.s.arm_position_mm()[2]
+            if ready(measured_z):
                 return None
             return self._result(
-                False, action, "limit_exceeded", "Arm did not reach lateral clearance.",
+                False, action, "limit_exceeded",
+                f"Arm did not reach lateral clearance: {measured_z:.1f}/{required_z:.1f}mm.",
                 retry_advice="ask_operator", t0=t0, failed_stage=stage, steps=steps,
                 color=color, slot=slot, holding=self.s.held.color if self.s.held else None,
             )
 
-        failed = lift_until_clear("lift_empty")
+        failed = lift_until_clear("lift_empty", self.limits.lateral_clearance_mm)
         if failed is not None:
             return failed
         for stage, fn in (
@@ -467,7 +640,27 @@ class PrimitiveSkills(Skills):
                 steps=steps, color=color, slot=slot,
                 holding=self.s.held.color if self.s.held else None,
             )
-        failed = lift_until_clear("lift_held")
+        # Retreat only 30 mm from the grasp. Reach the zone-crossing height
+        # in a separate inward/upward move, before entering the zone.
+        failed = run("lift_held", self._lift_held_joint_space)
+        if failed is not None:
+            return failed
+
+        def raise_before_zone():
+            required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+            if self._lateral_clearance_ready(self.s.arm_position_mm()[2]):
+                return self._result(True, "prezone_clearance", "moved")
+            if self._recover_loaded_reverse_lift(
+                    required_z - self.limits.lateral_clearance_tolerance_mm):
+                return self._result(True, "prezone_clearance", "moved",
+                                    measured_fk_mm=list(self.s.arm_position_mm()))
+            return self._result(
+                False, "prezone_clearance", "grasp_blocked",
+                "Could not raise held block before entering zone: "
+                + self._loaded_lift_diagnostic,
+                retry_advice="try_other_target")
+
+        failed = run("prezone_clearance", raise_before_zone)
         if failed is not None:
             return failed
 
@@ -652,7 +845,7 @@ class PrimitiveSkills(Skills):
             return self._fail(action, "Unknown block colour", "invalid_arguments")
         if self.s.held is not None:
             return self._fail(action, "A block is already held", "already_holding")
-        if self.collection.status().get("episode_open"):
+        if self.collection.status().get("episode_open") and not self.collection.sequence_mode:
             return self._fail(action, "Finish the recording episode before stacking")
         if type(floor) is not int or not 0 <= floor <= 4:
             return self._fail(action, "floor must be an integer from 0 to 4", "invalid_arguments")
@@ -668,6 +861,7 @@ class PrimitiveSkills(Skills):
             result = fn()
             steps.append({"stage": stage, "reason": result.reason})
             if result.ok:
+                self.collection.settle_for_sequence_pause()
                 return None
             failed = self._result(False, action, result.reason, result.detail,
                                   retry_advice=result.retry_advice, t0=t0,
@@ -949,39 +1143,78 @@ class PrimitiveSkills(Skills):
         return self._objects[object_id]
 
     def _held_check(self):
-        if self.s.held is not None and not check_grasp(self.s.robot, self.cfg.sensing, settle=False).grasped:
-            self._grasp_failed = True
-            self._contact = False
-            self._stack_drop_ready = False
-            self._zone_drop_ready = False
-            return False
+        if self.s.held is not None:
+            reading = check_grasp(self.s.robot, self.cfg.sensing, settle=False)
+            # VERIFY required both position and load when the block was first
+            # picked. During transport the gripper load can relax with arm
+            # posture even while the block remains visibly between the jaws.
+            # A fully closed jaw position still detects an actual loss.
+            if not reading.pos_says_held:
+                self._grasp_failed = True
+                self._contact = False
+                self._stack_drop_ready = False
+                self._zone_drop_ready = False
+                return False
         return not self._grasp_failed
 
     def _choose_place_yaw(self, xyz, place_tilt):
-        """Pick a reachable equivalent jaw yaw that squares the held block to the zone."""
+        """Keep the held jaw heading when reachable, otherwise use a safe yaw."""
         if self._held_block_angle_deg is None or self._held_pick_yaw_deg is None:
             raise ValueError("Held block orientation was not recorded at grasp")
         axis = zone_axis_yaw_deg(self.s.calib.zone_polygon_mm)
         base = self._held_pick_yaw_deg + axis - self._held_block_angle_deg
         neutral = self.s.ik.neutral_yaw_deg(*xyz)
-        candidates = sorted(
+        current_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
+        # A square does not need a quarter-turn to satisfy Task 1. Keep the
+        # held jaw heading when it is reachable at both hover and release.
+        aligned = sorted(
             {(base + 90.0 * k + 180.0) % 360.0 - 180.0 for k in range(-3, 4)},
-            key=lambda yaw: abs(angle_error_deg(yaw, neutral)),
+            key=lambda yaw: abs(angle_error_deg(yaw, current_yaw)),
         )
-        for yaw in candidates:
-            try:
-                for height in (xyz[2], self.s.grasp_z_mm):
-                    self._solve(
-                        (*xyz[:2], height), radial_tilt_deg=place_tilt,
+        fallback = [neutral, *(neutral + offset
+                               for offset in self.cfg.task1.place_yaw_fallback_offsets_deg)]
+        safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+                  - self.limits.lateral_clearance_tolerance_mm)
+
+        def viable(yaws):
+            plans = []
+            for yaw in yaws:
+                try:
+                    hover = self._solve(
+                        xyz, radial_tilt_deg=place_tilt,
                         max_position_error_mm=self.cfg.ik.max_position_error_mm,
                         max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
                         yaw_deg=yaw,
                         max_yaw_error_deg=self.cfg.task1.place_yaw_tolerance_deg,
                     )
-            except ValueError:
-                continue
-            return yaw
-        raise ValueError("No reachable zone-aligned jaw yaw at placement hover")
+                    # Release is above the grasp plane; no need to prove the
+                    # wrist can reach the table while holding a block.
+                    self._solve(
+                        (*xyz[:2], self.s.drop_z_mm), radial_tilt_deg=place_tilt,
+                        max_position_error_mm=self.cfg.ik.max_position_error_mm,
+                        max_tilt_error_deg=self.cfg.task1.place_level_tolerance_deg,
+                        yaw_deg=yaw,
+                        max_yaw_error_deg=self.cfg.task1.place_yaw_tolerance_deg,
+                    )
+                except ValueError:
+                    continue
+                planned_z = self.s.ik.forward_position_mm(hover.joints)[2]
+                if planned_z >= safe_z:
+                    plans.append((abs(angle_error_deg(yaw, current_yaw)),
+                                  abs(angle_error_deg(yaw, neutral)),
+                                  hover.position_error_mm, yaw))
+            return plans
+
+        unchanged_plans = viable([current_yaw])
+        if unchanged_plans:
+            return unchanged_plans[0][3], False
+        aligned_plans = viable(aligned)
+        if aligned_plans:
+            return min(aligned_plans)[3], True
+        fallback_plans = viable(fallback)
+        if fallback_plans:
+            return min(fallback_plans)[3], False
+        raise ValueError("No placement yaw reaches IK and clearance gates")
 
     def _solve(self, xyz, *, radial_tilt_deg=None, max_position_error_mm=None,
                max_tilt_error_deg=None, yaw_deg=None, max_yaw_error_deg=None):
@@ -1019,9 +1252,14 @@ class PrimitiveSkills(Skills):
         return solved
 
     def _move(self, action, xyz, *, radial_tilt_deg=None, max_ik_error_mm=None,
-              max_tilt_error_deg=None, level_during_carry=False, place_yaw_deg=None):
+              max_tilt_error_deg=None, level_during_carry=False, place_yaw_deg=None,
+              vertical_only=False):
         self._invalidate_pick()
         start = self.s.arm_position_mm()
+        if vertical_only:
+            # A vertical jog has no commanded XY motion; repeated encoder/FK
+            # reads can differ slightly while building and checking its goal.
+            xyz = (*start[:2], xyz[2])
         lateral = math.dist(start[:2], xyz[:2]) > 1e-6
         clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
         if lateral and not self._lateral_clearance_ready(min(start[2], xyz[2])):
@@ -1072,6 +1310,21 @@ class PrimitiveSkills(Skills):
             ]
         except ValueError as exc:
             return self._fail(action, str(exc), "ik_gate")
+        if self.s.held is not None and level_during_carry:
+            # A permissive placement IK error can solve a hover several mm
+            # below its requested Z. Reject that before moving a held block
+            # into the zone; the subsequent motor lag can only make it worse.
+            safe_z = clear_z - self.limits.lateral_clearance_tolerance_mm
+            for point, plan in zip(points, plans, strict=True):
+                planned = self.s.ik.forward_position_mm(plan.joints)
+                if (self.s.in_zone(point[:2]) or self.s.in_zone(planned[:2])) and planned[2] < safe_z:
+                    return self._result(
+                        False, action, "ik_gate",
+                        f"Planned carry enters zone below clearance: "
+                        f"planned_z={planned[2]:.1f}mm required_z={safe_z:.1f}mm",
+                        retry_advice="try_other_target",
+                        target_mm=list(point), planned_fk_mm=list(planned),
+                    )
         self._contact = False
         self._zone_drop_ready = False
         deadline = time.monotonic() + self.cfg.motion.move_timeout_s
@@ -1162,10 +1415,22 @@ class PrimitiveSkills(Skills):
                 self.limits.loaded_arrival_error_mm if self.s.held is not None else 0.0,
             )
             if endpoint_error_mm > endpoint_limit_mm:
-                raise TimeoutError(
-                    f"Measured FK did not reach primitive endpoint: "
+                detail = (
+                    f"Measured FK missed primitive endpoint: "
                     f"error={endpoint_error_mm:.1f}mm limit={endpoint_limit_mm:.1f}mm"
                 )
+                if self.s.held is not None:
+                    # Motion completed and the grasp is still verified. This is
+                    # a failed placement, not a bus/trajectory fault: let the
+                    # composite set the block down and try another candidate.
+                    return self._result(
+                        False, action, "grasp_blocked", detail,
+                        retry_advice="try_other_target",
+                        target_mm=list(xyz),
+                        planned_fk_mm=list(self.s.ik.forward_position_mm(plans[-1].joints)),
+                        measured_fk_mm=list(self.s.arm_position_mm()),
+                    )
+                raise TimeoutError(detail)
             if place_yaw_deg is not None:
                 actual_yaw = self.s.ik.forward_yaw_deg(self.s.robot.read_joints())
                 if abs(angle_error_deg(actual_yaw, place_yaw_deg)) > self.cfg.task1.place_yaw_tolerance_deg:
@@ -1227,7 +1492,17 @@ class PrimitiveSkills(Skills):
         if phase == "grasp":
             if self._target != (target_type, object_id, observation_id, slot, x, y, "pregrasp"):
                 return self._fail(action, "Approach this target first")
-            if math.dist(xyz[:2], xy) > self.cfg.agent.relative.max_pick_offset_mm:
+            if self.limits.calibrated_pick:
+                # A tilted approach deliberately hovers inward of the block.
+                # Check drift from that preflighted hover, not from its grasp
+                # centre; the latter can differ by more than the offset limit.
+                attempt = self._pick_calibration.attempt if self._pick_calibration else None
+                if attempt is None:
+                    return self._fail(action, "Calibrated pregrasp is no longer valid")
+                hover_xy = attempt.hover_xy_mm or attempt.xy_mm
+                if math.dist(xyz[:2], hover_xy) > self.cfg.agent.relative.max_pick_offset_mm:
+                    return self._fail(action, "Measured hover drift exceeds grasp offset limit")
+            elif math.dist(xyz[:2], xy) > self.cfg.agent.relative.max_pick_offset_mm:
                 return self._fail(action, "Correction exceeds grasp offset limit")
             goal = (*xyz[:2], self.s.grasp_z_mm)  # preserve intentional relative correction
         else:
@@ -1254,7 +1529,7 @@ class PrimitiveSkills(Skills):
                     xy = nominal_xy
                 goal = (*xy, self.s.grasp_z_mm + self.limits.approach_clearance_mm)
                 try:
-                    place_yaw = self._choose_place_yaw(goal, place_tilt)
+                    place_yaw, zone_aligned = self._choose_place_yaw(goal, place_tilt)
                 except ValueError as exc:
                     result = self._fail(action, str(exc), "ik_gate")
                 else:
@@ -1280,7 +1555,10 @@ class PrimitiveSkills(Skills):
             result.data["radial_tilt_deg"] = place_tilt
             if result.ok:
                 self._place_yaw_deg = place_yaw
-                result.data["zone_aligned_yaw_deg"] = round(place_yaw, 1)
+                result.data["place_yaw_deg"] = round(place_yaw, 1)
+                result.data["zone_alignment_fallback"] = not zone_aligned
+                if zone_aligned:
+                    result.data["zone_aligned_yaw_deg"] = round(place_yaw, 1)
             result.data["nominal_xy_mm"] = list(nominal_xy)
             result.data["command_xy_mm"] = list(xy)
             result.data["place_correction"] = self.place_correction.as_dict()
@@ -1295,6 +1573,183 @@ class PrimitiveSkills(Skills):
                 result.data["gripper_intentionally_open"] = True
                 result.data["next_required_action"] = "close_gripper"
         return result
+
+    def _lift_held_joint_space(self):
+        """Follow the cached grasp path only until the first 30 mm lift."""
+        action = "lift_held"
+        held = self.s.held
+        if held is None or not self._held_check():
+            return self._fail(action, "Verified held block required", "no_block_held")
+        joints = self.s.robot.read_joints()
+        origin = self.s.ik.forward_position_mm(joints)
+        hover_goal = held.attempt.hover.joints
+        target_z = self.s.grasp_z_mm + self.cfg.task1.tilted_pick_hover_clearance_mm
+        tolerance = self.limits.lateral_clearance_tolerance_mm
+        if held.attempt.hover_z_mm <= origin[2] + self.limits.contact_step_mm:
+            # Plain primitive picks have no cached descent path. Use the
+            # existing bounded vertical jog for their first 30 mm retreat.
+            moved = self.move_relative(
+                up_mm=self.cfg.task1.tilted_pick_hover_clearance_mm)
+            if not moved.ok:
+                return moved
+            actual = self.s.arm_position_mm()
+            held.over_xy_mm = actual[:2]
+            return self._result(
+                True, action, "moved", measured_fk_mm=list(actual),
+                initial_lift_mm=round(actual[2] - self.s.grasp_z_mm, 1),
+                requested_initial_lift_mm=self.cfg.task1.tilted_pick_hover_clearance_mm)
+        zone_safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+                       - tolerance)
+        trace = []
+        goal = None
+        for step in interpolate(joints, hover_goal,
+                                self.cfg.motion.descent_step_per_tick):
+            point = self.s.ik.forward_position_mm({**joints, **step})
+            trace.append(point)
+            goal = step
+            if point[2] >= target_z - tolerance:
+                break
+        previous_z = origin[2]
+        for point in trace:
+            if (point[2] < previous_z - self.limits.contact_step_mm
+                    or point[2] > target_z + tolerance
+                    or (self.s.in_zone(point[:2]) and point[2] < zone_safe_z)
+                    or not self.s.in_workspace(point[:2])):
+                return self._result(
+                    False, action, "grasp_blocked",
+                    "Cached pick retreat failed measured-path preflight",
+                    retry_advice="try_other_target")
+            previous_z = point[2]
+        if not trace or goal is None:
+            return self._result(
+                False, action, "grasp_blocked", "Cached pick retreat is empty",
+                retry_advice="try_other_target")
+        self.s.player.move_to(goal,
+                              max_step=self.cfg.motion.descent_step_per_tick,
+                              tol=self.cfg.motion.transit_arrival_tol)
+        time.sleep(self.cfg.motion.descent_settle_s)
+        actual = self.s.arm_position_mm()
+        if not self._held_check():
+            return self._result(
+                False, action, "grasp_blocked",
+                "Gripper position closed after retreat; grasp may be lost",
+                retry_advice="ask_operator", measured_fk_mm=list(actual))
+        if actual[2] < origin[2] + self.limits.contact_step_mm:
+            return self._result(
+                False, action, "grasp_blocked",
+                f"Retreat did not raise measured FK: {origin[2]:.1f}->{actual[2]:.1f}mm",
+                retry_advice="try_other_target", measured_fk_mm=list(actual))
+        held.over_xy_mm = actual[:2]
+        # The next stage raises to 38 mm before entering the zone. Do not
+        # reject a grasp just because motor lag left this first retreat short.
+        return self._result(
+            True, action, "moved", measured_fk_mm=list(actual),
+            initial_lift_mm=round(actual[2] - self.s.grasp_z_mm, 1),
+            requested_initial_lift_mm=self.cfg.task1.tilted_pick_hover_clearance_mm)
+
+    def _recover_loaded_reverse_lift(self, required_z, *, max_command_z_mm=None):
+        """Continue a short loaded retreat inward and upward as one IK path."""
+        self._loaded_lift_diagnostic = ""
+        if self.s.held is None or not self._held_check():
+            self._loaded_lift_diagnostic = "grasp no longer verified"
+            return False
+        measured = self.s.robot.read_joints()
+        origin = self.s.ik.forward_position_mm(measured)
+        radius = math.dist(origin[:2], self.s.base_xy)
+        if radius <= 0 or origin[2] >= required_z:
+            return origin[2] >= required_z
+        inward = tuple((base - value) / radius
+                       for value, base in zip(origin[:2], self.s.base_xy))
+        max_inward = self.cfg.agent.relative.max_jog_mm
+        target_z = min(self.cfg.agent.relative.jog_max_z_mm,
+                       required_z + min(required_z - origin[2],
+                                        self.limits.loaded_arrival_error_mm))
+        if max_command_z_mm is not None:
+            target_z = min(target_z, max_command_z_mm)
+        heights = (target_z, (target_z + required_z) / 2, required_z)
+        zone_safe_z = (self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+                       - self.limits.lateral_clearance_tolerance_mm)
+        scene = self._observed_scene
+        obstacles = ([block for block in scene.all() if block.color != self.s.held.color]
+                     if scene is not None else [])
+        plan = None
+        rejected_ik = rejected_trace = 0
+        self._loaded_lift_diagnostic = ""
+        for distance in (max_inward, max_inward / 2, 0.0):
+            xy = tuple(value + axis * distance
+                       for value, axis in zip(origin[:2], inward))
+            for height in heights:
+                try:
+                    candidate = self._solve((*xy, height))
+                except ValueError:
+                    rejected_ik += 1
+                    continue
+                trace = [self.s.ik.forward_position_mm({**measured, **step})
+                         for step in interpolate(measured, candidate.joints,
+                                                 self.cfg.motion.descent_step_per_tick)]
+                previous_z = origin[2]
+                safe = bool(trace)
+                for point in trace:
+                    if (point[2] < previous_z - self.limits.contact_step_mm
+                            or point[2] > self.cfg.agent.relative.jog_max_z_mm
+                            or (max_command_z_mm is not None
+                                and point[2] > max_command_z_mm
+                                    + self.limits.lateral_clearance_tolerance_mm)
+                            or (self.s.in_zone(point[:2]) and point[2] < zone_safe_z)
+                            or not self.s.in_workspace(point[:2])
+                            or math.dist(point[:2], origin[:2]) > max_inward):
+                        safe = False
+                        break
+                    if point[2] < required_z and any(
+                        math.dist(point[:2], block.center_mm) < self.cfg.agent.place_clear_radius_mm
+                        and math.dist(point[:2], block.center_mm)
+                            < math.dist(origin[:2], block.center_mm) - self.limits.contact_step_mm
+                        for block in obstacles
+                    ):
+                        safe = False
+                        break
+                    previous_z = point[2]
+                if safe and trace[-1][2] >= required_z:
+                    plan = candidate
+                    break
+                rejected_trace += 1
+            if plan is not None:
+                break
+        if plan is None:
+            self._loaded_lift_diagnostic = (
+                f"no safe inward/upward IK path; start_z={origin[2]:.1f}mm "
+                f"required_z={required_z:.1f}mm ik_rejected={rejected_ik} "
+                f"trace_rejected={rejected_trace}")
+            return False
+        self.s.player.move_to(plan.joints,
+                              max_step=self.cfg.motion.descent_step_per_tick,
+                              tol=self.cfg.motion.transit_arrival_tol)
+        time.sleep(self.cfg.motion.descent_settle_s)
+        actual = self.s.arm_position_mm()
+        held_ok = self._held_check()
+        inward_distance = math.dist(actual[:2], origin[:2])
+        if (not held_ok
+                or actual[2] < origin[2] - self.limits.contact_step_mm
+                or not self.s.in_workspace(actual[:2])
+                or (self.s.in_zone(actual[:2]) and actual[2] < zone_safe_z)):
+            # The command path already has a bounded inward sweep. After
+            # motion, judge the measured pose by clearance and workspace;
+            # servo lag can change the displacement by a few millimetres.
+            # Shoulder load changes with posture during an upward carry.
+            # It is not contact evidence here; the measured FK and verified
+            # grasp still bound this recovery motion.
+            self._loaded_lift_diagnostic = (
+                f"held={held_ok} start_z={origin[2]:.1f}mm "
+                f"measured_z={actual[2]:.1f}mm inward={inward_distance:.1f}mm "
+                f"limit={max_inward:.1f}mm"
+            )
+            return False
+        if actual[2] >= required_z:
+            self.s.held.over_xy_mm = actual[:2]
+            return True
+        self._loaded_lift_diagnostic = (
+            f"measured_z={actual[2]:.1f}mm required_z={required_z:.1f}mm")
+        return False
 
     def move_relative(self, forward_mm=0.0, left_mm=0.0, up_mm=0.0):
         from session.relative import offset_xy
@@ -1315,9 +1770,11 @@ class PrimitiveSkills(Skills):
                 and abs(self._held_radial_tilt_deg) >= 5.0):
             retreat = self.s.held.attempt
             clear_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
+            first_retreat_z = (self.s.grasp_z_mm
+                               + self.cfg.task1.tilted_pick_hover_clearance_mm)
             hover_xy = retreat.hover_xy_mm
             if (hover_xy is not None and xyz[2] < clear_z
-                    and retreat.hover_z_mm >= clear_z
+                    and retreat.hover_z_mm > xyz[2]
                     and retreat.hover_z_mm <= xyz[2] + up_mm + 2.0
                     and math.dist(xyz, (*retreat.xy_mm, retreat.grasp_z_mm))
                     <= self.cfg.agent.relative.max_pick_offset_mm):
@@ -1340,24 +1797,40 @@ class PrimitiveSkills(Skills):
                 if not self._held_check():
                     return self._fail("move_relative", "Grasp lost during reverse approach", "grasp_lost")
                 reached = self.s.arm_position_mm()
-                if reached[2] < clear_z - 2.0:
-                    return self._fail("move_relative", "Reverse approach stopped below lateral clearance", "grasp_blocked")
+                if reached[2] + self.limits.lateral_clearance_tolerance_mm < first_retreat_z:
+                    if not self._recover_loaded_reverse_lift(
+                            first_retreat_z - self.limits.lateral_clearance_tolerance_mm,
+                            max_command_z_mm=first_retreat_z):
+                        actual_z = self.s.arm_position_mm()[2]
+                        return self._fail(
+                            "move_relative",
+                            f"Initial loaded retreat stayed below 30 mm clearance: "
+                            f"{actual_z:.1f}/{first_retreat_z:.1f}mm; "
+                            + self._loaded_lift_diagnostic,
+                            "grasp_blocked")
+                    reached = self.s.arm_position_mm()
                 self.s.held.over_xy_mm = reached[:2]
                 if xyz[2] + up_mm <= reached[2] + 1.0:
                     return self._result(True, "move_relative", "moved",
                                         measured_fk_mm=list(reached), reverse_pick_retreat=True,
-                                        lateral_clearance_ready=True,
-                                        next_required_action="move_to_placement_target")
-                result = self._move("move_relative", (*reached[:2], xyz[2] + up_mm))
+                                        lateral_clearance_ready=self._lateral_clearance_ready(reached[2]),
+                                        next_required_action=(
+                                            "move_to_placement_target"
+                                            if self._lateral_clearance_ready(reached[2])
+                                            else "raise_before_zone"))
+                result = self._move("move_relative", (*reached[:2], xyz[2] + up_mm),
+                                    vertical_only=True)
                 result.data["reverse_pick_retreat"] = True
-                result.data["lateral_clearance_ready"] = self.s.arm_position_mm()[2] >= clear_z - 2.0
+                result.data["lateral_clearance_ready"] = self._lateral_clearance_ready(
+                    self.s.arm_position_mm()[2])
                 result.data["next_required_action"] = (
                     "move_to_placement_target" if result.data["lateral_clearance_ready"]
                     else "lift_vertically_again"
                 )
                 return result
         xy = offset_xy(xyz[:2], forward_mm, left_mm, frame=self.cfg.agent.relative.frame, base_xy_mm=self.s.base_xy)
-        result = self._move("move_relative", (*xy, xyz[2]+up_mm))
+        result = self._move("move_relative", (*xy, xyz[2]+up_mm),
+                            vertical_only=(forward_mm == 0 and left_mm == 0))
         if self.s.held is not None and up_mm > 0:
             measured_z = self.s.arm_position_mm()[2]
             required_z = self.s.grasp_z_mm + self.limits.lateral_clearance_mm
@@ -1468,6 +1941,7 @@ class PrimitiveSkills(Skills):
         if self._place_yaw_deg is None:
             return self._fail(action, "Placement yaw was not aligned at hover")
         start = self.s.arm_position_mm()
+        retreat_joints = self.s.robot.read_joints()
         drop_z = self.s.drop_z_mm
         if start[2] < drop_z:
             return self._fail(action, "Arm is already below the zone drop height", "grasp_blocked")
@@ -1487,10 +1961,20 @@ class PrimitiveSkills(Skills):
         except ValueError as exc:
             return self._fail(action, str(exc), "ik_gate")
         self._zone_drop_ready = False
-        self.s.player.move_to(
-            pose.joints, max_step=self.cfg.motion.descent_step_per_tick,
-            tol=self.cfg.motion.arrival_tol,
-        )
+        def in_release_window(pose):
+            return (math.dist(pose[:2], start[:2]) <= self.limits.alignment_tolerance_mm
+                    and self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm
+                    <= pose[2] <= drop_z + 10)
+        try:
+            self.s.player.move_to(
+                pose.joints, max_step=self.cfg.motion.descent_step_per_tick,
+                tol=self.cfg.motion.transit_arrival_tol,
+            )
+        except TimeoutError:
+            # A loaded joint can stay outside angle tolerance after the
+            # block has reached the measured release column. Check the pose.
+            if not in_release_window(self.s.arm_position_mm()):
+                raise
         actual = self.s.arm_position_mm()
         first_release_fk = actual
         # The joint tolerance can accept several degrees of loaded shoulder
@@ -1518,15 +2002,15 @@ class PrimitiveSkills(Skills):
             except ValueError:
                 pass  # still allow a bounded release if the measured pose is safe
             else:
-                self.s.player.move_to(
-                    correction.joints, max_step=self.cfg.motion.descent_step_per_tick,
-                    tol=self.cfg.motion.arrival_tol,
-                )
+                try:
+                    self.s.player.move_to(
+                        correction.joints, max_step=self.cfg.motion.descent_step_per_tick,
+                        tol=self.cfg.motion.transit_arrival_tol,
+                    )
+                except TimeoutError:
+                    if not in_release_window(self.s.arm_position_mm()):
+                        raise
                 actual = self.s.arm_position_mm()
-        def in_release_window(pose):
-            return (math.dist(pose[:2], start[:2]) <= self.limits.alignment_tolerance_mm
-                    and self.s.grasp_z_mm + self.limits.zone_release_floor_margin_mm
-                    <= pose[2] <= drop_z + 10)
 
         if not in_release_window(actual):
             time.sleep(self.cfg.motion.descent_settle_s)
@@ -1541,6 +2025,7 @@ class PrimitiveSkills(Skills):
         if not self._held_check():
             return self._fail(action, "Grasp verification failed", "grasp_empty")
         self._zone_drop_xy = tuple(start[:2])
+        self._zone_retreat_joints = retreat_joints
         self._zone_drop_ready = True
         return self._result(True, action, "ok", release_mode="height_drop",
                             release_fk_mm=list(actual), drop_z_mm=drop_z,
@@ -1777,6 +2262,19 @@ class PrimitiveSkills(Skills):
         self._invalidate_pick()
         if self.s.held is not None:
             return self._fail("return_to_home", "Place held block before returning home")
+        if self._zone_retreat_joints is not None:
+            target = self._zone_retreat_joints
+            current = self.s.robot.read_joints()
+            start = self.s.ik.forward_position_mm(current)
+            trace = [self.s.ik.forward_position_mm({**current, **step})
+                     for step in interpolate(current, target,
+                                             self.cfg.motion.descent_step_per_tick)]
+            if not trace or min(point[2] for point in trace) < start[2] - 1.0:
+                return self._fail("return_to_home", "Release-column retreat is not clear",
+                                  "limit_exceeded")
+            self.s.player.move_to(target, max_step=self.cfg.motion.descent_step_per_tick,
+                                  tol=self.cfg.motion.transit_arrival_tol)
+            self._zone_retreat_joints = None
         self._target = None
         self._contact = False
         return super().return_to_home()

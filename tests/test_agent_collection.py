@@ -153,6 +153,37 @@ def test_preplanned_tool_sequence_records_and_returns_each_result(rig):
     assert rig.sink.saved[0][0]["task"] == "Move the yellow block as requested."
 
 
+def test_standalone_episode_still_rejects_composite_stack(rig):
+    begin(rig)
+    result = rig.call("stack_block_to_floor", color="yellow", floor=0)
+    assert not result["ok"]
+    assert result["detail"] == "Finish the recording episode before stacking"
+    assert rig.sink.save_count == 0
+
+
+def test_recorded_task2_stack_sequence_runs_and_saves(rig):
+    result = rig.call("record_tool_sequence", task="Place yellow at stack floor zero and return home.",
+                      color="yellow", steps=[
+                          {"name": "stack_block_to_floor", "arguments": {"color": "yellow", "floor": 0}},
+                          {"name": "return_to_home", "arguments": {}},
+                      ])
+    assert result["ok"], result
+    assert [item["tool"] for item in result["step_results"]] == [
+        "stack_block_to_floor", "return_to_home"]
+    assert result["collection"]["episodes_saved"] == 1
+    assert rig.sink.save_count == 1
+
+
+def test_recorded_task1_transfer_sequence_runs_and_saves(rig):
+    result = rig.call("record_tool_sequence", task="Move yellow to the top-left zone slot.",
+                      color="yellow", steps=[
+                          {"name": "move_block_to_slot", "arguments": {"color": "yellow", "slot": "top-left"}},
+                      ])
+    assert result["ok"], result
+    assert result["collection"]["episodes_saved"] == 1
+    assert rig.sink.save_count == 1
+
+
 def test_invalid_sequence_is_rejected_before_recording(rig):
     result = rig.call("record_tool_sequence", task="Unsafe plan", color="yellow",
                       steps=[{"name": "move_relative", "arguments": {"up_mm": 9999}}])
@@ -173,6 +204,29 @@ def test_recorded_sequence_stops_and_discards_on_first_failed_step(rig):
     assert [item["tool"] for item in result["step_results"]] == ["move_to_target"]
     assert rig.sink.save_count == 0
     assert not rig.sk.collection.recording
+
+
+def test_sequence_records_servo_tail_before_compressing_plan_gap(rig, monkeypatch):
+    rig.sk.collection.begin("yellow", task_text="Move yellow.", sequence_mode=True)
+    read = rig.robot.read_joints
+    samples = iter([0.0, 0.4, 0.8, 1.2, 1.6, 2.0])
+    last = [2.0]
+
+    def coasting_read():
+        joints = read()
+        last[0] = next(samples, last[0])
+        joints["gripper"] = last[0]
+        return joints
+
+    monkeypatch.setattr(rig.robot, "read_joints", coasting_read)
+    before = rig.sk.collection.recorder.frames
+    rig.sk.collection.settle_for_sequence_pause()
+    assert rig.sk.collection.recorder.frames > before + 5
+    rig.mono[0] += 1.0  # IK planning is safe only after the tail was recorded.
+    rig.sk.collection.io.send_joints(dict(rig.sk.collection.io.last_command))
+    assert rig.sk.collection.recording
+    assert rig.sk.collection.stationary_pauses[-1]["max_joint_drift"] == 0
+    rig.sk.collection.discard("operator_requested")
 
 
 def test_sequence_compresses_only_measured_stationary_pause(rig):

@@ -22,6 +22,14 @@
  --line:#e5e5e5; --accent:#171717; --ok:#404040; --bad:#b91c1c; --warn:#737373;
  --user:#171717; --bot:#f5f5f5; --tool:#fafafa;
 }
+:root.dark {
+ --background:#18181b; --foreground:#fafafa; --card:#18181b; --primary:#fafafa;
+ --primary-foreground:#18181b; --secondary:#27272a; --muted-foreground:#a1a1aa;
+ --destructive:#f87171; --border:#3f3f46; --ring:#a1a1aa;
+ --bg:#09090b; --panel:#18181b; --ink:#fafafa; --muted:#a1a1aa;
+ --line:#3f3f46; --accent:#fafafa; --ok:#4ade80; --bad:#f87171; --warn:#fbbf24;
+ --user:#27272a; --bot:#27272a; --tool:#27272a;
+}
 /* Robot UI layout stays in app.css. Component colours use the same tokens as shadcn. */
 body {background:var(--bg);color:var(--foreground);}
 .panel[data-slot=card] {display:block;gap:0;background:var(--card);border-color:var(--border);box-shadow:0 1px 3px #0000000a;}

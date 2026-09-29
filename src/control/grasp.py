@@ -319,7 +319,7 @@ def _plan_at_scale(
     # Search the hover at the aim point, not at the detection: that is where
     # the arm actually holds station, and the envelope shrinks fast with
     # reach, so a height found 12mm further in can be unreachable here.
-    tilted_clearance = (cfg.task1.tilted_pick_hover_clearance_mm
+    tilted_clearance = (cfg.task1.tilted_pick_pregrasp_clearance_mm
                          if abs(radial_tilt_deg) >= 5.0 else None)
     hover_z = highest_reachable_hover(
         ik, *base_xy, grasp_z, cfg, yaw_deg, radial_tilt_deg, axis_aligned=True,
@@ -436,12 +436,16 @@ def plan_grasp_attempts(
         # Once, outside the scale loop: this costs a probe solve.
         yaw_deg, jaw_rot_deg = ik.grasp_yaw_and_rotation_deg(x_mm, y_mm, grasp_z, block_angle_deg)
 
-    # Requested tilt is an upper bound. A far-side target can be unreachable
-    # at the maximum angle even where a smaller tilt remains feasible.
-    magnitudes = [abs(radial_tilt_deg)]
-    magnitudes += [min(abs(radial_tilt_deg), value)
-                   for value in (*cfg.task1.pick_tilt_fallback_deg, cfg.task1.pick_tilt_base_deg)]
-    tilts = list(dict.fromkeys(math.copysign(value, radial_tilt_deg) for value in magnitudes))
+    # Requested tilt is an upper bound. Try the least oblique reachable
+    # approach first. Midpoints of the configured coarse candidates avoid
+    # jumping a full 15 degrees past the first feasible approach.
+    maximum = abs(radial_tilt_deg)
+    coarse = sorted({maximum, *(min(maximum, value) for value in
+                               (cfg.task1.pick_tilt_base_deg,
+                                *cfg.task1.pick_tilt_fallback_deg))})
+    magnitudes = sorted({*coarse, *((low + high) / 2
+                                    for low, high in zip(coarse, coarse[1:]))})
+    tilts = [math.copysign(value, radial_tilt_deg) for value in magnitudes]
     plan = None
     for tilt in tilts:
         for scale in (1.0, 0.5, 0.0):
@@ -450,7 +454,7 @@ def plan_grasp_attempts(
             # permitted hover first; both poses must pass before planning.
             probe_xy = biased_grasp_xy(
                 cfg.motion, x_mm, y_mm, scale=scale, jaw_rot_deg=jaw_rot_deg)
-            probe_gap = (cfg.task1.tilted_pick_hover_clearance_mm
+            probe_gap = (cfg.task1.tilted_pick_pregrasp_clearance_mm
                          if abs(tilt) >= 5.0 else cfg.motion.hover_min_clearance_mm)
             probe_hover_xy = approach_hover_xy(
                 probe_xy, grasp_z, grasp_z + probe_gap, tilt,

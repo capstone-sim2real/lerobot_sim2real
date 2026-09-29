@@ -213,6 +213,31 @@ class Collection:
             self.s.cancel.set()
             self._summary()
 
+    def settle_for_sequence_pause(self):
+        """Record the servo tail before a composite tool enters a long IK plan.
+
+        IK runs on the robot thread and cannot capture frames concurrently. A
+        measured still interval makes the following gap safely compressible;
+        moving through that gap must still discard the episode.
+        """
+        if not self.recording or not self.sequence_mode:
+            return
+        cfg = self.cfg.agent.collection
+        reference = dict(self.writer.last_measured or self.s.robot.read_joints())
+        start = self.clock()
+        stable_since = start
+        command = dict(self.io.last_command or self.s.robot.read_joints())
+        while self.clock() - start < cfg.sequence_settle_timeout_s:
+            self.io.send_joints(command)
+            measured = self.writer.last_measured
+            if max(abs(measured[joint] - value) for joint, value in reference.items()) > cfg.sequence_settle_max_drift:
+                reference = dict(measured)
+                stable_since = self.clock()
+            elif self.clock() - stable_since >= cfg.sequence_settle_window_s:
+                return
+        self.discard("sequence_not_settled")
+        raise TimeoutError("Recorded sequence did not settle before IK planning")
+
     def _pause(self):
         self.recording = False
         if self._original_fps is not None:
