@@ -552,6 +552,22 @@ def test_task2_can_repick_fallen_block_inside_zone():
     assert world.held is None
 
 
+def test_zone_retreat_keeps_gripper_open_after_release(monkeypatch):
+    sk, _, robot = fixture()
+    sk._zone_retreat_joints = {
+        **robot.read_joints(),
+        "shoulder_pan": robot.joints["shoulder_pan"] + 1.0,
+        "gripper": 5.0,
+    }
+    monkeypatch.setattr(sk.s.ik, "forward_position_mm", lambda _joints: (0.0, 0.0, 50.0))
+    move = Mock()
+    monkeypatch.setattr(sk.s.player, "move_to", move)
+    monkeypatch.setattr(sk.s, "return_home_safely", lambda: (False, True))
+
+    assert sk.return_to_home().ok
+    assert "gripper" not in move.call_args.args[0]
+
+
 def test_home_does_not_sweep_low_when_vertical_lift_is_unreachable(monkeypatch):
     sk, _, robot = fixture()
     robot.joints.update(shoulder_pan=230.0, elbow_flex=15.0)

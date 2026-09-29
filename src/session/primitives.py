@@ -2263,7 +2263,10 @@ class PrimitiveSkills(Skills):
         if self.s.held is not None:
             return self._fail("return_to_home", "Place held block before returning home")
         if self._zone_retreat_joints is not None:
-            target = self._zone_retreat_joints
+            # The retreat was recorded while holding the block. Preserve the
+            # open jaws after release; only the arm should revisit that pose.
+            target = {joint: value for joint, value in self._zone_retreat_joints.items()
+                      if joint != "gripper"}
             current = self.s.robot.read_joints()
             start = self.s.ik.forward_position_mm(current)
             trace = [self.s.ik.forward_position_mm({**current, **step})
