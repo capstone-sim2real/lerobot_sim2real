@@ -40,7 +40,7 @@ panels = [
     ('(b) Task 2: 블록 탑쌓기', ['4블록 적층', '5블록 적층'],
      [100 * update['task2']['four_block_stack_success_rate'],
       100 * update['task2']['five_block_stack_success_rate']],
-     ['#4477AA', '#4477AA'], ['', '//'], '블록 수별 적층 성공률'),
+     ['#4477AA', '#4477AA'], ['', '//'], f"블록 수별 적층 성공률 (시행 {update['task2']['attempt_counts']}회)"),
     ('(c) 단일 블록 파지', ['단일 블록 파지'],
      [100 * grasp['successes'] / grasp['attempts']],
      ['#228877'], [''], 'Task 공통 (99/100회)'),
@@ -71,8 +71,8 @@ fig.text(0.075, 0.065, '자료: Task 1 — 최종보고서 집계 / Task 2 및 �
 fig.text(0.075, 0.018, '평가 정의와 원자료: docs/assets/README.md',
          fontsize=9, color='#555555')
 for extension in ('png', 'svg', 'pdf'):
-    fig.savefig(HERE / f'evaluation-results.{extension}', dpi=200,
+    fig.savefig(HERE / f'evaluation-bar-chart.{extension}', dpi=200,
                 facecolor='white', metadata={'Creator':'Matplotlib'})
 plt.close(fig)
-svg = HERE / 'evaluation-results.svg'
+svg = HERE / 'evaluation-bar-chart.svg'
 svg.write_text('\n'.join(line.rstrip() for line in svg.read_text().splitlines()) + '\n')

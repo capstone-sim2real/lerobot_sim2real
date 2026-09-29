@@ -130,15 +130,15 @@ Task 1의 완료는 배치 명령 횟수가 아니라 **홈 위치에서 다시 
 
 **실기 평가 결과**
 
-![Task 1 완료율 93.3%, Task 2 5블록 적층 성공률 67%, 4블록 적층 성공률 100%, 단일 블록 파지 성공률 99%](docs/assets/evaluation-results.png)
+![Task 1 완료율 93.3%, Task 2 5블록 적층 성공률 67%, 4블록 적층 성공률 100%, 단일 블록 파지 성공률 99%](docs/assets/evaluation-bar-chart.png)
 
-[그래프 PDF](docs/assets/evaluation-results.pdf) / [벡터 SVG](docs/assets/evaluation-results.svg)
+[그래프 PDF](docs/assets/evaluation-bar-chart.pdf) / [벡터 SVG](docs/assets/evaluation-bar-chart.svg)
 
 | 평가 항목 | 결과 | 집계 기준 |
 |---|---:|---|
 | Task 1 미션 완료율 | **93.3% (28/30회)** | 180초 안에 블록 5개를 지정 구역에 배치; 최종보고서 집계 |
-| Task 2: 5블록 적층 성공률 | **67%** | 팀 평가 집계 |
-| Task 2: 4블록 적층 성공률 | **100%** | 팀 평가 집계 |
+| Task 2: 5블록 적층 성공률 | **67%** | 30회 시행 |
+| Task 2: 4블록 적층 성공률 | **100%** | 30회 시행 |
 | 단일 블록 파지 성공률 | **99% (99/100회)** | Task 구분 없이 집계 |
 
 Task 1은 최종보고서의 30회 평가, Task 2와 단일 블록 파지는 최신 팀 집계를 기준으로 정리했습니다. 평가 항목별 정의와 출처는 [평가 자료 안내](docs/assets/README.md#평가-자료-안내)에서 확인할 수 있습니다.

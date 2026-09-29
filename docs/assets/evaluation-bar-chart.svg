@@ -6,7 +6,7 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-09-30T00:00:49.219260</dc:date>
+    <dc:date>2026-09-30T00:02:29.674316</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
@@ -1477,8 +1477,8 @@ z
     </g>
    </g>
    <g id="text_16">
-    <!-- 블록 수별 적층 성공률 -->
-    <g style="fill: #444444" transform="translate(403.403062 306.039375)scale(0.1 -0.1)">
+    <!-- 블록 수별 적층 성공률 (시행 30회) -->
+    <g style="fill: #444444" transform="translate(378.43275 306.039375)scale(0.1 -0.1)">
      <defs>
       <path id="NotoSansCJKjp-Regular-c218" d="M 2662 5088
 L 2662 4762
@@ -1548,6 +1548,73 @@ L 1363 1018
 L 1363 6
 z
 " transform="scale(0.015625)"/>
+      <path id="NotoSansCJKjp-Regular-c2dc" d="M 4525 5293
+L 4525 -506
+L 5056 -506
+L 5056 5293
+L 4525 5293
+z
+M 1843 4794
+L 1843 3757
+C 1843 2656 1152 1549 288 1146
+L 614 704
+C 1293 1043 1850 1773 2118 2643
+C 2387 1818 2944 1139 3597 819
+L 3917 1242
+C 3066 1632 2374 2701 2374 3757
+L 2374 4794
+L 1843 4794
+z
+" transform="scale(0.015625)"/>
+      <path id="NotoSansCJKjp-Regular-d589" d="M 1760 3878
+C 1037 3878 531 3488 531 2886
+C 531 2285 1037 1901 1760 1901
+C 2490 1901 2995 2285 2995 2886
+C 2995 3488 2490 3878 1760 3878
+z
+M 1760 3482
+C 2208 3482 2515 3245 2515 2886
+C 2515 2528 2208 2291 1760 2291
+C 1312 2291 1005 2528 1005 2886
+C 1005 3245 1312 3482 1760 3482
+z
+M 3296 1530
+C 2086 1530 1363 1165 1363 518
+C 1363 -122 2086 -486 3296 -486
+C 4506 -486 5229 -122 5229 518
+C 5229 1165 4506 1530 3296 1530
+z
+M 3296 1120
+C 4179 1120 4698 909 4698 518
+C 4698 141 4179 -77 3296 -77
+C 2413 -77 1888 141 1888 518
+C 1888 909 2413 1120 3296 1120
+z
+M 3450 5178
+L 3450 1837
+L 3949 1837
+L 3949 3283
+L 4691 3283
+L 4691 1632
+L 5197 1632
+L 5197 5293
+L 4691 5293
+L 4691 3718
+L 3949 3718
+L 3949 5178
+L 3450 5178
+z
+M 1498 5248
+L 1498 4602
+L 288 4602
+L 288 4179
+L 3219 4179
+L 3219 4602
+L 2022 4602
+L 2022 5248
+L 1498 5248
+z
+" transform="scale(0.015625)"/>
      </defs>
      <use xlink:href="#NotoSansCJKjp-Regular-be14"/>
      <use xlink:href="#NotoSansCJKjp-Regular-b85d" x="91.999985"/>
@@ -1561,6 +1628,15 @@ z
      <use xlink:href="#NotoSansCJKjp-Regular-c131" x="619.19989"/>
      <use xlink:href="#NotoSansCJKjp-Regular-acf5" x="711.199875"/>
      <use xlink:href="#NotoSansCJKjp-Regular-b960" x="803.19986"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-20" x="895.199844"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-28" x="917.599838"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-c2dc" x="951.399826"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-d589" x="1043.399811"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-20" x="1135.399796"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-33" x="1157.799789"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-30" x="1213.299774"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-d68c" x="1268.799759"/>
+     <use xlink:href="#NotoSansCJKjp-Regular-29" x="1360.799744"/>
     </g>
    </g>
    <g id="text_17">
