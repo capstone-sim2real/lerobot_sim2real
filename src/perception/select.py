@@ -1,5 +1,5 @@
 """Target selection: deterministic nearest-first, matching the teleop
-demonstration convention (EPISODE.md) so the policy and the FSM agree on
+demonstration convention so the policy and the FSM agree on
 which block is "next".
 
 Blocks inside (or within ``zone_margin_mm`` of) the target zone polygon are

@@ -271,8 +271,6 @@ class MotionConfig:
     gripper_action_wait_s: float = 0.6
     # pose name in poses.yaml
     home_pose: str = "home"
-    # ticks to reverse after contact before releasing (0 = release in place)
-    contact_backoff_ticks: int = 1
     place_settle_s: float = 0.5
 
     # --- grasp point bias, in the GRIPPER's own frame (control/ik.py
@@ -347,7 +345,7 @@ class MotionConfig:
 
 @dataclass
 class IkConfig:
-    """Cartesian IK for the CV+IK pick path (AGENTS.md §7).
+    """Cartesian IK for the CV+IK pick path.
 
     Placo's IK is seed-sensitive: a bad seed converges to hundreds of mm of
     error, so ``TopDownIK`` pre-builds a lookup table of top-down joint

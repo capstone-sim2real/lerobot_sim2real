@@ -1,6 +1,6 @@
 """Load/position sensing: grasp verification + contact detection.
 
-One utility, two callers (AGENTS.md §10):
+One utility, two callers:
   - VERIFY state calls ``check_grasp`` at the retreat pose,
   - the Task-2 stack descent polls ``ContactMonitor`` between steps.
 

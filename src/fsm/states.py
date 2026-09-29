@@ -1,6 +1,6 @@
 """FSM vocabulary: state names, run context, and the state handler base class.
 
-Task flow (AGENTS.md §3):
+Task flow:
 
     SELECT → PICK → VERIFY → TRANSPORT → PLACE → (blocks left && time left) → SELECT
                ↑______fail (retry / skip)____|

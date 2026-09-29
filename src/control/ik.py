@@ -1,4 +1,4 @@
-"""Cartesian top-down IK for the CV+IK pick path (AGENTS.md §7).
+"""Cartesian top-down IK for the CV+IK pick path.
 
 Placo's IK is seed-sensitive: seeded from the current/actual pose it can
 converge 200-350mm off target for a lateral move, because copying the
@@ -8,8 +8,7 @@ millimeter-level error (in the URDF model — AGENTS.md §6 documents the
 larger, position-dependent error the real arm's FK carries beyond that).
 
 ``lerobot``/``placo`` are imported lazily inside methods so that importing
-this module (and therefore ``pick_stack``) never requires them (AGENTS.md
-§2/§14) — only constructing a ``TopDownIK`` does.
+this module (and therefore ``pick_stack``) never requires them — only constructing a ``TopDownIK`` does.
 """
 
 from __future__ import annotations
@@ -92,8 +91,7 @@ def gripper_frame_offset(
     """Nudge a target in the gripper's own frame rather than the base frame.
 
     At the neutral yaw the jaw plane is carried entirely by ``shoulder_pan``
-    (``wrist_roll`` stays within +-3.7 deg across the workspace, AGENTS.md
-    §7), so "away from the base" is the radial direction and the gripper's
+    (``wrist_roll`` stays within +-3.7 deg across the workspace), so "away from the base" is the radial direction and the gripper's
     own left is the tangential one. Near the middle of the board these line
     up with the board axes; toward either side they rotate with the arm,
     which is why a fixed base-frame nudge drifts diagonally there.
@@ -363,7 +361,7 @@ class TopDownIK:
     ) -> IkResult:
         """Best-effort top-down IK solve. Check ``position_error_mm`` /
         ``tilt_error_deg`` against config thresholds before trusting the
-        result (AGENTS.md §6/§7 — this can fail gracefully out-of-reach).
+        result.
 
         ``yaw_deg=None`` picks the neutral (radial) yaw for this position —
         the sane default. Pass an explicit yaw only when the jaw plane must

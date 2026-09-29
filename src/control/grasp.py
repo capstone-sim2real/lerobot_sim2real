@@ -1,8 +1,7 @@
 """Grasp-point planning and multi-attempt execution for the CV+IK pick path.
 
 Kept out of ``tools/demo_pick_and_place.py`` so that ``fsm/ik_handler.py``
-can reuse it unchanged (AGENTS.md
-§14.1 — CV+IK work is additive).
+can reuse it unchanged.
 
 The accuracy this has to survive is measured, not assumed: RMS ~12mm and
 worst ~29mm, and the error is *random per point* rather than a smooth

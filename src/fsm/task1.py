@@ -101,7 +101,7 @@ def block_priority(
 class Task1SelectState(State):
     """HOME, then select an outside-zone block or prove 5 s of absence.
 
-    Task 2 stacks with this same state (AGENTS.md §3): the two class
+    Task 2 stacks with this same state: the two class
     attributes below name the plan keys it publishes, and
     ``_active_detections`` is where a subclass drops detections it must not
     target. The ``task1_*`` bookkeeping keys are shared with Task 2 on

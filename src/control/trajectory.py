@@ -4,7 +4,7 @@ Two safety nets stack here: interpolation caps the per-tick delta
 (``max_step_per_tick``), and the robot's own ``max_relative_target`` clamp
 inside lerobot's send_action stays on. A trajectory always starts from the
 *measured* current pose, so the NN-retreat -> scripted-motion handoff cannot
-jump even if the policy stopped slightly off-pose (AGENTS.md §11).
+jump even if the policy stopped slightly off-pose.
 """
 
 from __future__ import annotations
@@ -38,10 +38,6 @@ def interpolate(start: Pose, goal: Pose, max_step: float) -> list[Pose]:
 
 class TrajectoryPlayer:
     """Plays interpolated moves on the robot at a fixed tick rate."""
-
-    #: Whether the last ``descend`` stopped because the arm quit following,
-    #: as opposed to merely finishing short of tolerance.
-    last_descent_jammed: bool = False
 
     def __init__(self, robot: BaseRobotIO, cfg: MotionConfig):
         self._robot = robot
@@ -143,15 +139,7 @@ class TrajectoryPlayer:
             if check_progress is not None:
                 check_progress()
 
-    def descend(
-        self,
-        goal: Pose,
-        *,
-        max_step: float | None = None,
-        tol: float | None = None,
-        settle_s: float | None = None,
-        max_lag: float | None = None,
-    ) -> tuple[Pose, bool]:
+    def descend(self, goal: Pose) -> tuple[Pose, bool]:
         """Descend toward ``goal``, and stop the moment the arm stops following.
 
         Unlike ``move_to``, falling short is *returned* rather than raised: a
@@ -176,18 +164,11 @@ class TrajectoryPlayer:
         Returns ``(measured_pose, blocked)``. ``blocked`` is a hint for
         ordering retries — it is never a reason to skip closing the jaws,
         since only closing them establishes whether the block is holdable.
-
-        ``blocked`` folds two different events together: the arm stopped
-        following (a real obstruction) and the arm merely finished short of
-        tolerance (which a loaded arm does on every descent). Callers that
-        need to tell them apart read ``last_descent_jammed`` afterwards.
         """
-        max_step = max_step if max_step is not None else self._cfg.descent_step_per_tick
-        tol = tol if tol is not None else self._cfg.arrival_tol
-        settle_s = settle_s if settle_s is not None else self._cfg.descent_settle_s
-        # A loaded descent trails further than the empty-gripper default was
-        # tuned for, so the caller may raise the bar for what counts as jammed.
-        max_lag = max_lag if max_lag is not None else self._cfg.descent_max_lag
+        max_step = self._cfg.descent_step_per_tick
+        tol = self._cfg.arrival_tol
+        settle_s = self._cfg.descent_settle_s
+        max_lag = self._cfg.descent_max_lag
         start = self._robot.read_joints()
         deadline = time.monotonic() + self._cfg.move_timeout_s
         jammed = False
@@ -213,14 +194,7 @@ class TrajectoryPlayer:
                 self._tick_sleep()
         current = self._robot.read_joints()
         shortfall = max(abs(current[j] - goal[j]) for j in goal)
-        self.last_descent_jammed = jammed
         return current, jammed or shortfall > self._cfg.descent_blocked_tol
-
-    def follow(self, waypoints: list[Pose], *, max_step: float | None = None) -> Pose:
-        current: Pose = {}
-        for pose in waypoints:
-            current = self.move_to(pose, max_step=max_step)
-        return current
 
     def set_gripper(self, position: float, *, stall_ticks: int = 4, stall_eps: float = 0.3) -> float:
         """Drive the gripper to ``position``, stopping early if it stalls.
@@ -231,8 +205,7 @@ class TrajectoryPlayer:
           clamp, so a full open (2 -> 95) would only move 10 units;
         - ``move_to`` treats not reaching the goal as a TimeoutError, but a
           gripper closing onto a block *cannot* reach the goal — stopping
-          short is exactly how ``check_grasp`` recognises a held block
-          (AGENTS.md §10).
+          short is exactly how ``check_grasp`` recognises a held block.
 
         So: step toward the target like an interpolated move, and return as
         soon as the measured position stops changing. Returns the final

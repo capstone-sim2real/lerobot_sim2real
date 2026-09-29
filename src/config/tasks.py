@@ -89,8 +89,7 @@ class Task2Config:
     """Stack every block at one point; only PLACE differs from Task 1.
 
     SELECT/PICK/VERIFY and the pick corrections are read from ``task1`` --
-    Task 2 *is* Task 1's gather pipeline with a single destination
-    (AGENTS.md §3 §4). Tower geometry and release clearance live here.
+    Task 2 *is* Task 1's gather pipeline with a single destination. Tower geometry and release clearance live here.
     """
 
     # Tower location, same [u, v] convention as task1.slot_uv; v -> 1 is the
@@ -101,7 +100,7 @@ class Task2Config:
     # a tower only needs consistency -- but so the block physically lands
     # inside zone_polygon_mm, which is what makes the detector ignore it.
     stack_radial_offset_mm: float = 0.0
-    block_height_mm: float = 20.0  # AGENTS.md §1
+    block_height_mm: float = 20.0
     # Ceiling on the pre-solved ladder, not a promise: levels the IK cannot
     # reach are reported by the dry-run, never silently clipped.
     max_levels: int = 5
@@ -120,25 +119,6 @@ class Task2Config:
     upper_entry_level: int = 5
     upper_entry_clearance_mm: float = 30.0
     upper_entry_radial_tilt_deg: float = -15.0
-    # Task 2 does not use contact-seeking descent. Every level goes straight
-    # to the solved release height and opens. Keep this compatibility field
-    # fixed at zero so older CLI/config plumbing fails loudly if it tries to
-    # re-enable the removed mode.
-    contact_descent_levels: int = 0
-
-    # Assumption pending hardware measurement. Three numbers have to sit in
-    # one order for a landing to be detectable at all:
-    #
-    #   loaded trail  <  contact_shortfall  <  descent_max_lag  <  overshoot
-    #
-    # A block meeting the tower stops the arm ``place_overshoot_mm`` above the
-    # commanded goal. If that gap is smaller than the lag we tolerate, a
-    # perfect stack reads as "no contact" -- the descent stops in the right
-    # place either way, but the backoff never runs and the log lies. Overshoot
-    # is in mm and the other two in joint action units, so the ordering can
-    # only be confirmed on the arm: watch `shortfall` in stack_contacts.
-    place_overshoot_mm: float = 12.0
-
     # Hover search bounds above the nominal release height. motion.hover_*
     # assumes a table-height target; 120mm above level four is far outside
     # the envelope and only burns failing IK solves. The lower bound is also
@@ -155,39 +135,13 @@ class Task2Config:
     # level costs a whole block; approaching lower costs clearance we still
     # have. Only a release pose that itself misses stops the ladder now.
     hover_squeeze_clearance_mm: float = 8.0
-    # Below this, there is not enough travel between hover and floor for a
-    # descent to prove anything.
-    min_descent_travel_mm: float = 8.0
 
     # Tilt the approach axis outward as the target rises, releasing the
-    # wrist_flex saturation that caps top-down lift (AGENTS.md §7). Late and
+    # wrist_flex saturation that caps top-down lift. Late and
     # small: a tilted release lands the block on an edge.
     level_tilt_start_level: int = 2
     level_tilt_per_level_deg: float = 1.5
     level_tilt_max_deg: float = 5.0
-
-    # Assumption pending hardware measurement: motion.descent_max_lag (8.0)
-    # was tuned for an empty gripper; a carried block adds steady-state lag,
-    # and too small a value reads as a jam on the first tick.
-    descent_max_lag: float = 10.0
-    # How far short of the goal still counts as having landed. Must clear the
-    # loaded steady-state trail (motion.descent_blocked_tol = 4.0 was tuned
-    # empty-handed and is too tight) but stay under descent_max_lag. Assumption
-    # pending measurement; erring high is the safer mistake, because a missed
-    # landing skips the backoff that relieves servo pressure before the jaws
-    # open, while a false one only mislabels a release that happens anyway.
-    contact_shortfall: float = 6.0
-    # motion.descent_settle_s (5.0) would lean on the tower for five seconds
-    # after a soft landing that never tripped the lag watch.
-    descent_settle_s: float = 0.4
-    # Number of descend() calls the descent is split into, with one
-    # read_loads() between. Keep at 1: a per-tick read_loads once stranded
-    # the arm partway down (control/trajectory.py), and chunking also
-    # weakens the lag watch, which cannot accumulate across a call boundary.
-    descent_probe_segments: int = 1
-    # Contact in the top part of the descent is a mis-stack, not a landing.
-    min_descent_fraction: float = 0.5
-    max_descent_retries: int = 1
 
 
 @dataclass
@@ -195,7 +149,7 @@ class Task3Config:
     """Automated ACT dataset collection: Task 1's gather loop, recorded.
 
     Task 3 *is* Task 1 -- same SELECT/PICK/VERIFY/TRANSPORT and the same five
-    zone slots -- with three differences (AGENTS.md §3): every arm command is
+    zone slots -- with three differences: every arm command is
     recorded into a LeRobotDataset episode, only the centre grasp point is
     tried, and the empty-region proof prompts for a new block arrangement
     instead of finishing the run. Everything else is read from ``task1``.
@@ -226,7 +180,7 @@ class Task3Config:
     video_codec: str = "h264"
 
     # Dataset camera name -> camera.server MJPEG URL. camera.server is the
-    # single owner of /dev/video* (AGENTS.md §8), so recording reads its
+    # single owner of /dev/video*, so recording reads its
     # streams rather than opening either device a second time.
     cameras: dict[str, str] = field(
         default_factory=lambda: {

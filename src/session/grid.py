@@ -157,8 +157,7 @@ def in_base_keepout(xy_mm: XY, base_xy_mm: XY, cfg: BoardGridConfig) -> bool:
     """Whether a point falls in the unusable pocket around the robot itself.
 
     Not a radius: the arm cannot take a top-down pose in a narrow corridor
-    straight ahead of the base (the gripper sits ~27mm off the pan axis,
-    AGENTS.md §7), yet it reaches points the same distance away once they
+    straight ahead of the base (the gripper sits ~27mm off the pan axis), yet it reaches points the same distance away once they
     are off that axis. A single inner radius big enough to exclude the
     corridor would throw away every near cell to the left and right, which
     are perfectly pickable.

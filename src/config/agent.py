@@ -235,7 +235,7 @@ class BoardGridConfig:
     # measured 2026-09-19 with the place IK gate, every cell that failed sat
     # in a narrow corridor straight in front of the base (|y| <= 25mm,
     # x <= 72mm) -- the gripper's 27mm lateral offset from the pan axis
-    # (AGENTS.md §7) is what makes a top-down pose impossible there, while
+    # is what makes a top-down pose impossible there, while
     # 50mm off-axis solves from 55mm out. So the keep-out is that corridor
     # plus a small circle on the base itself, not one large radius.
     min_radius_mm: float = 45.0

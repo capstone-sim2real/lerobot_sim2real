@@ -10,7 +10,7 @@
     python -m tools.hardware.record_pose --list
 
 Record home/retreat BEFORE collecting episodes: the same numbers must anchor
-the teleop convention and the runtime FSM (EPISODE.md §1).
+the teleop convention and the runtime FSM.
 """
 
 from __future__ import annotations

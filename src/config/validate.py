@@ -162,20 +162,10 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError("task2.route_standoff_mm must be positive")
     if cfg.task2.tower_path_clearance_mm < 0:
         raise ValueError("task2.tower_path_clearance_mm must be non-negative")
-    if cfg.task2.contact_descent_levels != 0:
-        raise ValueError(
-            "task2.contact_descent_levels must be 0; Task 2 contact descent is disabled"
-        )
     if cfg.task2.release_clearance_mm < 0:
         raise ValueError("task2.release_clearance_mm must be non-negative")
     if not 0 < cfg.task2.drop_clearance_mm <= cfg.task2.block_height_mm:
         raise ValueError("task2.drop_clearance_mm must be above zero and at most one block height")
-    if cfg.task2.place_overshoot_mm <= cfg.task2.release_clearance_mm:
-        raise ValueError(
-            "task2.place_overshoot_mm must exceed release_clearance_mm so the "
-            "descent goal sits below the nominal landing surface and contact "
-            "always fires before the goal (AGENTS.md §5)"
-        )
     if not 0 < cfg.task2.hover_min_clearance_mm < cfg.task2.hover_clearance_mm:
         raise ValueError(
             "task2.hover_min_clearance_mm must be positive and below hover_clearance_mm"
@@ -187,8 +177,6 @@ def validate_task2(cfg: AppConfig) -> None:
             "task2.hover_squeeze_clearance_mm must be positive and at most "
             "hover_min_clearance_mm"
         )
-    if cfg.task2.min_descent_travel_mm <= 0:
-        raise ValueError("task2.min_descent_travel_mm must be positive")
     if cfg.task2.level_tilt_start_level < 1:
         raise ValueError("task2.level_tilt_start_level must be at least one")
     if cfg.task2.level_tilt_per_level_deg < 0:
@@ -197,21 +185,6 @@ def validate_task2(cfg: AppConfig) -> None:
         raise ValueError(
             "task2.level_tilt_max_deg must be between zero and ik.max_tilt_error_deg"
         )
-    if cfg.task2.descent_max_lag <= 0:
-        raise ValueError("task2.descent_max_lag must be positive")
-    if not 0 < cfg.task2.contact_shortfall < cfg.task2.descent_max_lag:
-        raise ValueError(
-            "task2.contact_shortfall must be positive and below descent_max_lag: "
-            "a landing has to register before the descent gives up on the arm"
-        )
-    if cfg.task2.descent_settle_s < 0:
-        raise ValueError("task2.descent_settle_s must be non-negative")
-    if cfg.task2.descent_probe_segments < 1:
-        raise ValueError("task2.descent_probe_segments must be at least one")
-    if not 0.0 <= cfg.task2.min_descent_fraction < 1.0:
-        raise ValueError("task2.min_descent_fraction must be in [0, 1)")
-    if cfg.task2.max_descent_retries < 0:
-        raise ValueError("task2.max_descent_retries must be non-negative")
 
 
 def validate_task3(cfg: AppConfig) -> None:

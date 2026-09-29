@@ -27,13 +27,10 @@ class Task2LevelPlan:
     level: int  # 1-based physical level
     xy_mm: tuple[float, float]  # identical for every level, by definition
     place_z_mm: float  # nominal gripper-frame release height
-    floor_z_mm: float  # commanded descent goal, below place_z on purpose
     hover_z_mm: float
     radial_tilt_deg: float
     hover: IkResult
     release: IkResult  # the nominal release pose, at place_z_mm
-    floor: IkResult  # commanded goal for a contact descent only
-    contact_descent: bool  # land by feel, or go straight to `release`
     # Advisory only. The dry-run reads these to predict the tower height, but
     # nothing refuses a level at runtime any more: a level called unreachable
     # is still flown, because the tower can collapse and the ladder's height
@@ -110,7 +107,7 @@ class Task2StackPlanner:
     def place_z_mm(self, level: int) -> float:
         """Gripper-frame height that puts a held block's top face at ``level``.
 
-        The calibration plane is a block's *top face* (AGENTS.md §6), so
+        The calibration plane is a block's *top face*, so
         ``grasp_z`` is already one block height above the table.
         """
         t2 = self._cfg.task2
@@ -137,7 +134,6 @@ class Task2StackPlanner:
                 clearance_mm=t2.hover_clearance_mm,
                 min_clearance_mm=t2.hover_min_clearance_mm,
             )
-            floor_z = place_z - t2.place_overshoot_mm
             hover = self._ik.solve(*self._xy, hover_z, radial_tilt_deg=tilt)
 
             # The preferred clearance band can sit entirely above the arm's
@@ -162,10 +158,6 @@ class Task2StackPlanner:
                     hover_z, hover, squeezed = squeeze_z, squeeze, True
 
             release = self._ik.solve(*self._xy, place_z, radial_tilt_deg=tilt)
-            floor = self._ik.solve(*self._xy, floor_z, radial_tilt_deg=tilt)
-            # Task 2 never probes downward for contact. Even level one is
-            # released directly at its solved height.
-            contact_descent = False
 
             # Re-gate. highest_reachable_hover returns its search floor when
             # nothing solves, so an unreachable hover comes back looking like
@@ -187,32 +179,21 @@ class Task2StackPlanner:
                     f"gate ({self._cfg.ik.max_tilt_error_deg:.1f}deg)"
                 )
             elif over_ik_gate(release, self._cfg):
-                # The pose the block is actually let go at. For a directly
-                # released level this is the only thing that has to be right.
+                # The pose the block is actually let go at.
                 reason = (
                     f"release z={place_z:.1f} misses by "
                     f"{release.position_error_mm:.1f}mm"
                 )
-            elif contact_descent and over_ik_gate(floor, self._cfg):
-                reason = (
-                    f"descent floor z={floor_z:.1f} misses by "
-                    f"{floor.position_error_mm:.1f}mm"
-                )
-            elif contact_descent and hover_z - floor_z < t2.min_descent_travel_mm:
-                reason = f"only {hover_z - floor_z:.1f}mm of descent travel"
 
             plans.append(
                 Task2LevelPlan(
                     level=level,
                     xy_mm=self._xy,
                     place_z_mm=place_z,
-                    floor_z_mm=floor_z,
                     hover_z_mm=hover_z,
                     radial_tilt_deg=tilt,
                     hover=hover,
                     release=release,
-                    floor=floor,
-                    contact_descent=contact_descent,
                     reachable=not reason,
                     reason=reason,
                     hover_squeezed=squeezed and not reason,
@@ -311,15 +292,14 @@ class Task2StackPlanner:
             f"grasp plane z={self._grasp_z:.1f}mm  block h={t2.block_height_mm:.1f}mm"
             f"  hover clearance {t2.hover_min_clearance_mm:.1f}..{t2.hover_clearance_mm:.1f}mm",
             "",
-            "lvl  place_z  hover_z   clear   tilt  hover_err  rel_err  land      reachable",
+            "lvl  place_z  hover_z   clear   tilt  hover_err  rel_err  reachable",
         ]
         for lv in self._levels:
             lines.append(
                 f"{lv.level:3d}  {lv.place_z_mm:7.1f}"
                 f"  {lv.hover_z_mm:7.1f}  {lv.hover_z_mm - lv.place_z_mm:6.1f}"
                 f"  {lv.radial_tilt_deg:5.1f}  {lv.hover.position_error_mm:9.2f}"
-                f"  {lv.release.position_error_mm:7.2f}"
-                f"  {'contact' if lv.contact_descent else 'direct ':8s}  "
+                f"  {lv.release.position_error_mm:7.2f}  "
                 + (
                     ("yes (squeezed)" if lv.hover_squeezed else "yes")
                     if lv.reachable

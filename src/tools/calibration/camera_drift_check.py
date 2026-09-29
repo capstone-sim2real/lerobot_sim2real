@@ -2,7 +2,7 @@
 
 The pixel->robot homography is baked at calibration time, so if the camera
 shifts, every block coordinate is silently wrong and nothing downstream can
-tell (AGENTS.md §8). This tool makes that failure visible and gives the
+tell. This tool makes that failure visible and gives the
 mount a pass/fail number.
 
     # 1) after bolting the camera down, store the baseline
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = json.loads(args.reference.read_text())
     reference = np.array(payload["corners_px"], dtype=np.float64)
     # half a square: past that, the nearest corner may be the wrong one, since
-    # a chessboard repeats every two squares (AGENTS.md §6).
+    # a chessboard repeats every two squares.
     max_match_px = 0.5 * float(payload.get("median_square_px") or square_px)
 
     def sample() -> dict:

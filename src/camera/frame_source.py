@@ -2,7 +2,7 @@
 
 Task 3 needs a camera image on *every* control tick while the CV detector is
 simultaneously polling the same physical camera. Only ``camera.server`` may
-open ``/dev/video*`` (AGENTS.md §8), so the frames have to come from it — but
+open ``/dev/video*``, so the frames have to come from it — but
 ``client.fetch_snapshot`` opens a fresh HTTP connection and decodes a
 1280x720 JPEG per call, which is far too slow to sit inside a 30 Hz loop.
 

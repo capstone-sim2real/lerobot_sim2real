@@ -3,8 +3,7 @@
 Runs on the homography-rectified metric view so every threshold is in mm —
 independent of where the camera sits. A red block and red tape share hue but
 not geometry: tape is thin/elongated/hollow at corners, a block is a filled
-~40x40 mm square. The aspect/solidity/fill filters encode exactly that
-(AGENTS.md §9), so red-on-red scenes resolve by form.
+~40x40 mm square. The aspect/solidity/fill filters encode exactly that, so red-on-red scenes resolve by form.
 """
 
 from __future__ import annotations

@@ -18,7 +18,7 @@ class GeminiProvider:
     name = "gemini"
 
     def __init__(self, model: str, *, max_tokens: int, client: Any = None):
-        from google.genai import types  # lazy: AGENTS.md §2
+        from google.genai import types  # lazy import
 
         if client is None:
             from google import genai

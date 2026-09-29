@@ -102,7 +102,7 @@ def build_task2_stack_states(
         StateName.PICK: pick_state,
         StateName.VERIFY: VerifyState(robot, cfg.sensing, motion, on_grasped=StateName.TRANSPORT),
         StateName.TRANSPORT: Task2TransportState(planner, player, cfg),
-        StateName.PLACE: Task2PlaceState(robot, motion, player, cfg),
+        StateName.PLACE: Task2PlaceState(motion),
     }
 
 

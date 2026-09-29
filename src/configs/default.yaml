@@ -141,7 +141,6 @@ motion:
   move_timeout_s: 10.0
   gripper_action_wait_s: 0.6
   home_pose: home
-  contact_backoff_ticks: 1
   place_settle_s: 0.5
   # 최신 9점 캘리브레이션 좌표를 그대로 사용한다. 과거 실기 보정은 비활성.
   grasp_radial_offset_mm: 0.0
@@ -231,7 +230,7 @@ task1:
   zone_path_clearance_mm: 15.0
 
 # 2차 미션: 한 좌표에 접촉 기반으로 적층한다. SELECT/PICK/VERIFY와 픽 보정은
-# task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다 (AGENTS.md §3 §4).
+# task1 값을 그대로 읽는다 — Task 2는 목적지 하나뿐인 Task 1이다.
 task2:
   # 타워 지점. task1.slot_uv 와 같은 [u, v] 규약이고 v→1 이 베이스에 가까운 변이다.
   # 1층은 Task 1 아래쪽 행(v=0.76)의 정중앙에 고정한다. 윗층도 같은 XY에 쌓는다.
@@ -255,15 +254,6 @@ task2:
   upper_entry_level: 5
   upper_entry_clearance_mm: 30.0
   upper_entry_radial_tilt_deg: -15.0
-  # Task 2에서 접촉 탐색 하강은 비활성화. FSM은 hover에서, primitive는 drop 높이에서 놓는다.
-  contact_descent_levels: 0
-  # 실기 확정 전 가정값. 착지를 감지하려면 세 값이 한 순서를 지켜야 한다:
-  #   적재 시 정상상태 오프셋 < contact_shortfall < descent_max_lag < overshoot
-  # 타워에 닿은 블록은 명령 목표보다 place_overshoot_mm 위에서 멈춘다. 그 간격이
-  # 허용 lag보다 작으면 완벽한 적층이 "접촉 없음"으로 기록된다 — 멈추는 위치는
-  # 같지만 백오프가 안 돌고 로그가 거짓말을 한다. overshoot은 mm, 나머지 둘은
-  # 관절 action 단위라 순서 확인은 실기에서만 가능하다 (stack_contacts의 shortfall).
-  place_overshoot_mm: 12.0
   # 명목 릴리스 높이 기준 hover 탐색 상/하한. motion.hover_* 는 테이블 높이 타깃
   # 가정이라 4층 위 120mm는 엔벨로프 밖이다. 하한은 곧 타워 상단 통과 여유다.
   hover_clearance_mm: 45.0
@@ -276,34 +266,16 @@ task2:
   # 여유가 천장 밖이면 이 바닥까지 짜내서라도 접근한다. 이제 사다리를 멈추는
   # 것은 릴리스 자세 자체가 IK 게이트를 못 넘을 때뿐이다.
   hover_squeeze_clearance_mm: 8.0
-  min_descent_travel_mm: 8.0
-  # 층이 올라갈수록 접근축을 바깥으로 기울여 wrist_flex 포화를 푼다 (AGENTS.md §7).
+  # 층이 올라갈수록 접근축을 바깥으로 기울여 wrist_flex 포화를 푼다.
   # 늦게, 조금씩 — 기울여 놓으면 블록이 모서리로 착지한다.
   level_tilt_start_level: 2
   level_tilt_per_level_deg: 1.5
   level_tilt_max_deg: 5.0
-  # 실기 확정 전 가정값. motion.descent_max_lag(8.0)은 빈 그리퍼 기준이고, 블록을
-  # 들면 정상상태 오프셋이 커져서 값이 작으면 첫 틱부터 잼으로 읽힌다.
-  descent_max_lag: 10.0
-  # 목표에서 이만큼 못 미쳐도 착지로 친다. 적재 시 정상상태 오프셋보다는 커야 하고
-  # (motion.descent_blocked_tol=4.0은 빈 그리퍼 기준이라 너무 빡빡하다)
-  # descent_max_lag보다는 작아야 한다. 실기 확정 전 가정값 — 높게 잡는 쪽이 안전한
-  # 실수다. 놓치면 턱을 벌리기 전 서보 압력을 푸는 백오프를 건너뛰지만, 잘못 잡으면
-  # 어차피 일어날 릴리스에 라벨만 틀리게 붙는다.
-  contact_shortfall: 6.0
-  # motion.descent_settle_s(5.0)이면 부드럽게 닿은 뒤 타워를 5초간 누른다.
-  descent_settle_s: 0.4
-  # descend() 를 몇 조각으로 나눌지. 1로 둔다 — 틱마다 read_loads 하면 팔이 중간에
-  # 멈춘 실측 사례가 있고(control/trajectory.py), 조각내면 lag 감시도 약해진다.
-  descent_probe_segments: 1
-  # 하강 상반부의 접촉은 착지가 아니라 오적층이다.
-  min_descent_fraction: 0.5
-  max_descent_retries: 1
 
 # 3차: ACT 모방학습 데이터셋 자동 수집. Task 1의 수집 루프를 그대로 돌리면서
 # 성공한 사이클 하나를 LeRobot 에피소드로 녹화한다. SELECT/PICK/VERIFY/TRANSPORT와
 # 슬롯 5개는 전부 task1 값을 읽는다 — 다른 건 녹화, 파지 1회 제한, 재배치
-# 프롬프트 세 가지뿐이다 (AGENTS.md §3).
+# 프롬프트 세 가지뿐이다.
 task3:
   # 데이터셋 fps. 희망값이 아니라 RecordingRobotIO가 매 틱을 여기에 맞춰
   # 페이싱한다. LeRobotDataset은 timestamp를 frame_index/fps로 합성하므로,
@@ -329,7 +301,7 @@ task3:
   video_codec: h264
 
   # 데이터셋 카메라 이름 -> camera.server MJPEG URL. /dev/video*의 단독 소유자는
-  # camera.server이므로(AGENTS.md §8) 디바이스를 두 번 열지 않고 스트림을 읽는다.
+  # camera.server이므로 디바이스를 두 번 열지 않고 스트림을 읽는다.
   # 헤드캠과 손목캠을 같은 녹화 틱에 저장한다.
   cameras:
     top: http://127.0.0.1:8090/video/shoulder.mjpg
@@ -343,7 +315,7 @@ task3:
   # 카메라가 늦은 게 아니라 끊긴 수준의 연속 스킵. 에피소드를 파기한다 —
   # 구멍은 정책에게 일어나지 않은 점프를 가르친다.
   max_stale_ticks: 10
-  # 실측 전 가정값 (AGENTS.md §14.3). 하한은 ACT 기본 chunk_size가 100프레임이라
+  # 실측 전 가정값. 하한은 ACT 기본 chunk_size가 100프레임이라
   # 두었고, 상한은 팔이 루프에 갇힌 경우를 잡는다.
   min_episode_frames: 60
   max_episode_frames: 3000

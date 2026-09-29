@@ -1,6 +1,6 @@
 """Click the block centre in each calibration image to fill points.csv.
 
-The calibration pairs a pixel with a robot-frame coordinate (AGENTS.md §6):
+The calibration pairs a pixel with a robot-frame coordinate:
 so101_record_calibration_point.py records the FK side (x_m, y_m, z_m), this
 tool records the pixel side (u_px, v_px).
 

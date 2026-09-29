@@ -2,7 +2,7 @@
 """Print live FK (x, y, z) at gripper_frame_link while you hand-position the
 arm. Read-only — sends no commands. Use this BEFORE running
 so101_calib_point.sh to check the grip height (z) looks consistent with
-previous points (keep the wrist vertical/top-down each time; AGENTS.md §6).
+previous points (keep the wrist vertical/top-down each time).
 
     so101-fk
 """
@@ -58,7 +58,7 @@ def main() -> int:
             # gripper_frame_link sits ~8mm off the roll axis, so a roll that
             # varies between points injects a different offset into each
             # recorded position, and runtime IK grasps at neutral roll
-            # anyway (AGENTS.md §6/§7).
+            # anyway.
             roll = float(q[4])
             mark = "OK " if abs(roll) <= ROLL_NEUTRAL_TOL_DEG else ">> TURN WRIST <<"
             print(

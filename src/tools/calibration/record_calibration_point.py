@@ -29,7 +29,7 @@ ARM_MOTORS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wris
 # alone cannot be re-analysed later: gripper_frame_link sits ~8mm off the
 # wrist_roll axis, so the same jaw placement yields different recorded xyz
 # depending on wrist_roll, and without the joints that offset cannot be
-# reconstructed or corrected for (AGENTS.md §6/§7).
+# reconstructed or corrected for.
 from tools.calibration.calibration_records import update_csv
 
 

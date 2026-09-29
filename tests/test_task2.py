@@ -1,4 +1,4 @@
-"""Task 2 tower ladder, level bookkeeping, and contact-descent contracts."""
+"""Task 2 tower ladder and level bookkeeping."""
 
 from __future__ import annotations
 
@@ -11,10 +11,7 @@ from control.grasp import GraspAttempt
 from control.ik import IkResult
 from control.motion import MotionController
 from control.robot_io import MockRobotIO
-from control.task2_stack import (
-    Task2StackPlan,
-    Task2StackPlanner,
-)
+from control.task2_stack import Task2StackPlanner
 from control.trajectory import TrajectoryPlayer
 from fsm.states import RunContext, StateName
 from fsm.task1 import Task1Perception
@@ -139,21 +136,14 @@ def test_task2_tower_starts_at_bottom_center_of_task1_row():
 
 
 def test_an_unreachable_hover_alone_blocks_a_level():
-    """Isolates the hover re-gate from the floor gate.
-
-    The ceiling here clears every level's descent floor, so if the planner
-    trusted the height highest_reachable_hover handed back, every level would
-    look reachable and the tower clearance would be fictional. It also sits
-    below level two's *squeeze* floor, so the level is refused on the hover
-    alone rather than rescued by a lower approach.
-    """
+    """The ceiling sits below level two's squeeze floor, so the level is
+    refused on the hover alone rather than rescued by a lower approach."""
     cfg = AppConfig()
     planner = _planner(cfg, _CeilingIk(ceiling_mm=39.0))
     level_two = planner.levels[1]
 
     assert planner.levels[0].reachable is True
-    assert level_two.floor.position_error_mm == 0.0  # the floor is fine...
-    assert level_two.reachable is False  # ...and the level is still refused
+    assert level_two.reachable is False
     assert "hover" in level_two.reason
 
 
@@ -221,93 +211,9 @@ def _select_state(cfg, detections):
 _ARM = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
 
 
-def _place_plan(
-    hover_offset: float = 100.0, *, contact_descent: bool = True, level: int = 1
-) -> Task2StackPlan:
-    cfg = AppConfig()
-    hover = IkResult({j: 0.0 for j in _ARM}, 0.0, 0.0)
-    floor = IkResult({j: -hover_offset for j in _ARM}, 0.0, 0.0)
-    release = IkResult(
-        {j: -hover_offset + cfg.task2.place_overshoot_mm for j in _ARM}, 0.0, 0.0
-    )
-    plan = type(
-        "Level",
-        (),
-        {
-            "level": level,
-            "hover": hover,
-            "release": release,
-            "floor": floor,
-            "contact_descent": contact_descent,
-            "hover_z_mm": 45.0,
-            "place_z_mm": 12.0,
-            "floor_z_mm": 6.0,
-            "radial_tilt_deg": 0.0,
-        },
-    )()
-    return Task2StackPlan(slot=plan, carry=())
-
-
-class _RecordingPlayer(TrajectoryPlayer):
-    def __init__(self, robot, cfg):
-        super().__init__(robot, cfg)
-        self.descend_kwargs = []
-
-    def descend(self, goal, **kwargs):
-        self.descend_kwargs.append(kwargs)
-        return super().descend(goal, **kwargs)
-
-
-def _place_harness(cfg, robot):
-    # Exercise the unreachable legacy helper explicitly. Validated runtime
-    # config is fixed at zero and bypasses all of this contact logic.
-    cfg.task2.contact_descent_levels = 1
-    cfg.motion.fps = 0
-    cfg.motion.place_settle_s = 0.0
-    cfg.motion.descent_settle_s = 0.0
-    cfg.sensing.gripper_action_wait_s = 0.0
-    player = _RecordingPlayer(robot, cfg.motion)
-    motion = MotionController(robot, _EmptyPoses(), cfg.motion, cfg.sensing)
-    state = Task2PlaceState(robot, motion, player, cfg)
-    ctx = RunContext(cfg.fsm)
-    ctx.extras["task2_stack_plan"] = _place_plan()
-    state.enter(ctx)
-    return state, ctx, player
-
-
 class _EmptyPoses:
     def get(self, name):
         raise KeyError(name)
-
-
-def _run_place(state, ctx, limit=10):
-    for _ in range(limit):
-        result = state.step(ctx)
-        if result is not None:
-            return result
-    raise AssertionError("PLACE never returned a next state")
-
-
-class _TrailingRobot(MockRobotIO):
-    """Lags a fixed distance behind a descending command, like a loaded arm.
-
-    Only on the way down: gravity leaves the steady-state offset in the
-    direction of travel, and a rising command has the block's weight helping
-    rather than resisting.
-    """
-
-    def __init__(self, trail: float):
-        super().__init__()
-        self.trail = trail
-
-    def send_joints(self, positions):
-        trailed = {}
-        for joint, value in positions.items():
-            current = self.joints[joint]
-            # min(): the lag builds up before the arm starts moving at all,
-            # instead of the servo jumping backwards on the first tick.
-            trailed[joint] = min(current, value + self.trail) if value < current else value
-        return super().send_joints(trailed)
 
 
 class _TowerRobot(MockRobotIO):
@@ -333,59 +239,6 @@ class _TowerRobot(MockRobotIO):
         if opening:
             self.tower_top += self.block_height
         return result
-
-
-class _JammingRobot(MockRobotIO):
-    """Stops following once a joint passes ``stop_at`` -- the lag signal."""
-
-    def __init__(self, stop_at: float):
-        super().__init__()
-        self.stop_at = stop_at
-
-    def send_joints(self, positions):
-        positions = dict(positions)
-        for joint in positions:
-            positions[joint] = max(positions[joint], self.stop_at)
-        return super().send_joints(positions)
-
-
-def test_place_stops_on_joint_lag_and_releases_above_the_floor():
-    cfg = AppConfig()
-    robot = _JammingRobot(stop_at=-75.0)  # three quarters down a 100-unit descent
-    state, ctx, _player = _place_harness(cfg, robot)
-
-    assert _run_place(state, ctx) is StateName.SELECT
-    record = ctx.extras["stack_contacts"][-1]
-    assert record["source"] == "lag"
-    assert record["contact"] is True
-    assert record["early"] is False
-    assert record["descent_fraction"] == pytest.approx(0.75)
-    assert record["shortfall"] == pytest.approx(25.0)
-    assert ctx.placed_count == 1
-    assert ctx.extras["task2_tower_height"] == 1
-
-    # The backoff must lift the arm before the jaws part, or they drag the
-    # tower sideways as they open. Anchor on the deepest commanded tick: the
-    # descent itself is full of poses "above" the contact depth on the way
-    # down, so only what happens after the bottom counts.
-    depths = [
-        (action["shoulder_lift"], i)
-        for i, action in enumerate(robot.sent_actions)
-        if "shoulder_lift" in action
-    ]
-    bottom = min(depths)[1]
-    after = robot.sent_actions[bottom + 1 :]
-    lift = next(
-        i
-        for i, action in enumerate(after)
-        if "shoulder_lift" in action and action["shoulder_lift"] > depths[bottom][0]
-    )
-    gripper_open = next(
-        i
-        for i, action in enumerate(after)
-        if action.get("gripper") == cfg.sensing.gripper_open_pos
-    )
-    assert lift < gripper_open
 
 
 # --------------------------------------------------------------------------
@@ -441,7 +294,7 @@ def test_a_whole_tower_cycles_through_the_real_state_machine(monkeypatch):
         open_pos=cfg.sensing.gripper_open_pos,
     )
     planner = _planner(cfg)
-    player = _RecordingPlayer(robot, cfg.motion)
+    player = TrajectoryPlayer(robot, cfg.motion)
     motion = MotionController(robot, _EmptyPoses(), cfg.motion, cfg.sensing)
 
     class _StubPick(State):
@@ -468,7 +321,7 @@ def test_a_whole_tower_cycles_through_the_real_state_machine(monkeypatch):
         StateName.PICK: _StubPick(),
         StateName.VERIFY: _StubVerify(),
         StateName.TRANSPORT: Task2TransportState(planner, player, cfg),
-        StateName.PLACE: Task2PlaceState(robot, motion, player, cfg),
+        StateName.PLACE: Task2PlaceState(motion),
     }
     ctx = RunContext(cfg.fsm)
     StateMachine(states, ctx, enforce_time_budget=False).run()

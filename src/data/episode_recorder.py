@@ -68,7 +68,7 @@ class LeRobotEpisodeSink:
     """:class:`EpisodeSink` backed by a real ``LeRobotDataset``.
 
     lerobot is imported inside ``__init__`` on purpose: importing this module
-    must not require lerobot, torch, or ffmpeg (AGENTS.md §13).
+    must not require lerobot, torch, or ffmpeg.
     """
 
     def __init__(self, dataset: Any):
@@ -96,7 +96,7 @@ def dataset_features(cameras: dict[str, str], width: int, height: int) -> dict[s
     """Build the LeRobot feature dict for the SO-101 plus recorded cameras.
 
     ``robot.observation_features`` cannot be used: ``robot.cameras`` is empty
-    because ``camera.server`` owns the devices (AGENTS.md §8), so the camera
+    because ``camera.server`` owns the devices, so the camera
     features are declared here from the configured streams instead.
     """
     from lerobot.utils.constants import ACTION, OBS_STR
