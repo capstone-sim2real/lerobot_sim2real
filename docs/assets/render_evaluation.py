@@ -34,16 +34,16 @@ fig.subplots_adjust(left=0.075, right=0.98, bottom=0.27, top=0.80, wspace=0.24)
 fig.suptitle('SO-101 실기 평가 결과', fontsize=17, y=0.96)
 
 panels = [
-    ('(a) Task 1 · 블록 모으기', ['5블록 구역 배치'],
+    ('(a) Task 1: 블록 모으기', ['5블록 구역 배치'],
      [100 * task1['mission_successes'] / task1['mission_attempts']],
-     ['#4477AA'], [''], '180초 이내 완료 · 28/30회'),
-    ('(b) Task 2 · 블록 탑쌓기', ['4블록 적층', '5블록 적층'],
+     ['#4477AA'], [''], '180초 이내 완료 (28/30회)'),
+    ('(b) Task 2: 블록 탑쌓기', ['4블록 적층', '5블록 적층'],
      [100 * update['task2']['four_block_stack_success_rate'],
       100 * update['task2']['five_block_stack_success_rate']],
-     ['#4477AA', '#4477AA'], ['', '//'], '블록 수별 성공률 · 시행 횟수 미제공'),
+     ['#4477AA', '#4477AA'], ['', '//'], '블록 수별 적층 성공률'),
     ('(c) 단일 블록 파지', ['단일 블록 파지'],
      [100 * grasp['successes'] / grasp['attempts']],
-     ['#228877'], [''], 'Task 구분 없이 집계 · 99/100회'),
+     ['#228877'], [''], 'Task 공통 (99/100회)'),
 ]
 for ax, (title, labels, rates, colors, hatches, note) in zip(axes, panels):
     positions = list(range(len(labels)))
@@ -66,9 +66,9 @@ for ax, (title, labels, rates, colors, hatches, note) in zip(axes, panels):
     ax.text(0.5, -0.25, note, transform=ax.transAxes, ha='center',
             va='top', fontsize=10, color='#444444')
 axes[0].set_ylabel('성공률 (%)', labelpad=10)
-fig.text(0.075, 0.065, '자료: Task 1 — 최종보고서 집계 / Task 2·단일 파지 — 최신 팀 제공 집계',
+fig.text(0.075, 0.065, '자료: Task 1 — 최종보고서 집계 / Task 2 및 단일 파지 — 최신 팀 제공 집계',
          fontsize=9, color='#555555')
-fig.text(0.075, 0.018, '평가 항목별 기준은 서로 다름. Task 2의 5초 유지 조건과 파지 재시도 포함 여부는 미제공.',
+fig.text(0.075, 0.018, '평가 정의와 원자료: docs/assets/README.md',
          fontsize=9, color='#555555')
 for extension in ('png', 'svg', 'pdf'):
     fig.savefig(HERE / f'evaluation-results.{extension}', dpi=200,
