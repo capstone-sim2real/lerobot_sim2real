@@ -11,8 +11,13 @@ from agent.tools import ToolDef, _obj, _mm
 from agent.provider.types import ToolSpec
 from agent.provider import build_provider
 from session.cancel import CancelToken
-from session.grasp_calibration import CalibrationSkills
+from session.calibration_motion import CalibrationMotion
+from session.primitives import PrimitiveSkills
 
+
+
+class CalibrationSkills(CalibrationMotion, PrimitiveSkills):
+    pass
 
 def definitions(cfg):
     return [
