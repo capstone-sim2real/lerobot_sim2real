@@ -68,8 +68,6 @@ for ax, (title, labels, rates, colors, hatches, note) in zip(axes, panels):
 axes[0].set_ylabel('성공률 (%)', labelpad=10)
 fig.text(0.075, 0.065, '자료: Task 1 — 최종보고서 집계 / Task 2 및 단일 파지 — 최신 팀 제공 집계',
          fontsize=9, color='#555555')
-fig.text(0.075, 0.018, '평가 정의와 원자료: docs/assets/README.md',
-         fontsize=9, color='#555555')
 for extension in ('png', 'svg', 'pdf'):
     fig.savefig(HERE / f'evaluation-bar-chart.{extension}', dpi=200,
                 facecolor='white', metadata={'Creator':'Matplotlib'})
