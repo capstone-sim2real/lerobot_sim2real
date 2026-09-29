@@ -1,6 +1,6 @@
 """Task 3 contracts: episode boundaries, discard rules, pacing, and rounds.
 
-Everything here runs without lerobot, torch, or hardware (AGENTS.md §13):
+Everything here runs without lerobot, torch, or hardware (docs/design.md §9):
 the dataset is an ``EpisodeSink`` double and the arm is ``MockRobotIO``.
 """
 

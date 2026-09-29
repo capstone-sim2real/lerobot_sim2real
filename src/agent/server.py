@@ -532,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
             fallback = build_provider(cfg.agent, provider=fallback_name)
             provider = FallbackProvider(provider, fallback)
     except ImportError as exc:
-        logger.error("provider %s needs its SDK (%s); see docs/guide/SO101_LLM_에이전트.md", provider_name, exc)
+        logger.error("provider %s needs its SDK (%s); see docs/guide/web-agent.md", provider_name, exc)
         return 1
     except Exception as exc:  # noqa: BLE001 - e.g. the SDK rejecting its credentials
         logger.error("could not create the %s client: %s", provider_name, exc)
